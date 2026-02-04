@@ -2241,23 +2241,23 @@ tests/fixtures/
 - Complete CLI help for beads commands
 
 **Tasks:**
-- [ ] Update README.md with beads integration documentation
-- [ ] Add beads workflow examples to documentation
-  - [ ] Document sync command (create/update beads)
-  - [ ] Document pull command (update checkboxes from bead completion)
-  - [ ] Document two-way sync workflow
-- [ ] Document beads CLI dependency and `.beads/` requirement
-- [ ] Document network requirements (beads commands require connectivity)
-- [ ] Review and improve beads command --help text
+- [x] Update README.md with beads integration documentation
+- [x] Add beads workflow examples to documentation
+  - [x] Document sync command (create/update beads)
+  - [x] Document pull command (update checkboxes from bead completion)
+  - [x] Document two-way sync workflow
+- [x] Document beads CLI dependency and `.beads/` requirement
+- [x] Document network requirements (beads commands require connectivity)
+- [x] Review and improve beads command --help text
 
 **Tests:**
-- [ ] Documentation review: all beads commands covered (sync, link, status, pull)
-- [ ] Integration test: Full workflow including beads sync and pull
+- [x] Documentation review: all beads commands covered (sync, link, status, pull)
+- [x] Integration test: Full workflow including beads sync and pull
 
 **Checkpoint:**
-- [ ] README documents beads integration including two-way sync
-- [ ] `specks beads --help` is clear and complete
-- [ ] Example workflow with beads sync and pull works end-to-end
+- [x] README documents beads integration including two-way sync
+- [x] `specks beads --help` is clear and complete
+- [x] Example workflow with beads sync and pull works end-to-end
 
 **Rollback:**
 - Revert to Step 6 commit

@@ -614,3 +614,109 @@ fn test_beads_pull_updates_checkboxes() {
         "checkpoint checkbox should be checked after pull"
     );
 }
+
+// =============================================================================
+// Full workflow integration test (as documented in README)
+// =============================================================================
+
+#[test]
+fn test_full_beads_workflow_sync_work_pull() {
+    // This test exercises the complete workflow documented in README:
+    // 1. specks beads sync (Plan → Beads)
+    // 2. bd close (Work in Beads)
+    // 3. specks beads status (Check readiness)
+    // 4. specks beads pull (Beads → Plan)
+
+    let temp = setup_test_project();
+    let temp_state = tempfile::tempdir().expect("failed to create temp state dir");
+    create_test_speck(&temp, "workflow", MULTI_STEP_SPECK);
+
+    // Step 1: Sync speck to beads
+    let sync_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "sync", "specks-workflow.md", "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run sync");
+
+    assert!(sync_output.status.success(), "sync should succeed");
+    let sync_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&sync_output.stdout)).unwrap();
+    assert_eq!(sync_json["data"]["steps_synced"], 3, "should sync 3 steps");
+
+    // Verify bead IDs were written to speck
+    let speck_after_sync = fs::read_to_string(temp.path().join(".specks/specks-workflow.md"))
+        .expect("failed to read speck");
+    assert!(
+        speck_after_sync.contains("**Bead:**"),
+        "speck should have Bead IDs after sync"
+    );
+
+    // Step 2: Check initial status - Step 0 should be ready, others blocked
+    let status_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "status", "specks-workflow.md", "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run status");
+
+    let status_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&status_output.stdout)).unwrap();
+    let steps = status_json["data"]["files"][0]["steps"].as_array().unwrap();
+    let step_0 = steps.iter().find(|s| s["anchor"] == "step-0").unwrap();
+    assert_eq!(step_0["status"], "ready", "Step 0 should be ready initially");
+
+    // Step 3: Simulate work completion - close Step 0's bead
+    let step_0_bead_id = step_0["bead_id"].as_str().unwrap();
+    Command::new(bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["close", step_0_bead_id])
+        .output()
+        .expect("failed to close step 0 bead");
+
+    // Step 4: Check status again - Step 0 complete, Step 1 now ready
+    let status_after_work = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "status", "specks-workflow.md", "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run status after work");
+
+    let status_after_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&status_after_work.stdout)).unwrap();
+    let steps_after = status_after_json["data"]["files"][0]["steps"].as_array().unwrap();
+
+    let step_0_after = steps_after.iter().find(|s| s["anchor"] == "step-0").unwrap();
+    let step_1_after = steps_after.iter().find(|s| s["anchor"] == "step-1").unwrap();
+
+    assert_eq!(step_0_after["status"], "complete", "Step 0 should be complete after closing bead");
+    assert_eq!(step_1_after["status"], "ready", "Step 1 should be ready after Step 0 complete");
+
+    // Step 5: Pull completion back to checkboxes
+    let pull_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "pull", "specks-workflow.md", "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run pull");
+
+    assert!(pull_output.status.success(), "pull should succeed");
+    let pull_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&pull_output.stdout)).unwrap();
+    assert!(
+        pull_json["data"]["total_updated"].as_u64().unwrap() >= 1,
+        "should update checkboxes from completed bead"
+    );
+
+    // Verify checkboxes were updated in speck file
+    let speck_after_pull = fs::read_to_string(temp.path().join(".specks/specks-workflow.md"))
+        .expect("failed to read speck after pull");
+    assert!(
+        speck_after_pull.contains("[x] Base works") || speck_after_pull.contains("[X] Base works"),
+        "Step 0 checkpoint should be checked after pull"
+    );
+}

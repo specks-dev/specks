@@ -81,7 +81,7 @@ pub enum Commands {
     /// Beads integration commands
     ///
     /// Sync steps to beads, link beads, show status, pull completion.
-    #[command(subcommand, long_about = "Beads integration commands (Specs S06-S09).\n\nSubcommands:\n  sync   Create/update beads from speck steps\n  link   Manually link a step to an existing bead\n  status Show execution status from beads\n  pull   Update checkboxes from bead completion")]
+    #[command(subcommand, long_about = "Beads integration for two-way sync between specks and work tracking.\n\nRequires:\n  - Beads CLI (bd) installed and in PATH\n  - Beads initialized (bd init creates .beads/)\n  - Network connectivity\n\nSubcommands:\n  sync   Create beads from speck steps, write IDs back\n  link   Manually link a step to an existing bead\n  status Show execution status (complete/ready/blocked)\n  pull   Update speck checkboxes from bead completion\n\nTypical workflow:\n  1. specks beads sync specks-1.md    # Create beads\n  2. bd close <bead-id>               # Complete work\n  3. specks beads pull specks-1.md    # Update checkboxes")]
     Beads(BeadsCommands),
 }
 

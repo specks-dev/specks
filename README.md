@@ -147,6 +147,123 @@ Specks follow a structured markdown format. See `.specks/specks-skeleton.md` for
 - Reference anchors: `**Depends on:** #step-0, #step-1`
 - Reference decisions: `**References:** [D01] Decision name`
 
+## Beads Integration
+
+Specks integrates with [Beads](https://github.com/yourorg/beads) for issue/task tracking. This enables two-way synchronization between speck steps and external work items.
+
+### Requirements
+
+- **Beads CLI** (`bd`) must be installed and available in PATH
+- **Beads initialized** in your project (`bd init` creates `.beads/` directory)
+- **Network connectivity** for beads commands (they communicate with the beads backend)
+
+### Commands
+
+#### `specks beads sync`
+
+Sync speck steps to beads—creates beads for steps and writes IDs back to the speck.
+
+```bash
+specks beads sync specks-1.md           # Sync a specific speck
+specks beads sync specks-1.md --dry-run # Preview without making changes
+specks beads sync specks-1.md --prune-deps  # Remove stale dependency edges
+```
+
+This creates:
+- A **root bead** (epic) for the entire speck
+- **Child beads** for each execution step
+- **Dependency edges** matching the `**Depends on:**` lines
+
+Bead IDs are written back to the speck file:
+- `**Beads Root:** \`bd-xxx\`` in Plan Metadata
+- `**Bead:** \`bd-xxx.1\`` in each step
+
+#### `specks beads status`
+
+Show execution status for each step based on linked beads.
+
+```bash
+specks beads status specks-1.md    # Show status for one speck
+specks beads status                # Show status for all specks
+specks beads status --pull         # Also update checkboxes
+```
+
+Status values:
+- **complete**: Bead is closed
+- **ready**: Bead is open, all dependencies are complete
+- **blocked**: Waiting on dependencies
+- **pending**: No bead linked yet
+
+#### `specks beads pull`
+
+Update speck checkboxes from bead completion status.
+
+```bash
+specks beads pull specks-1.md      # Pull completion for one speck
+specks beads pull                  # Pull for all specks
+specks beads pull --no-overwrite   # Don't change manually checked items
+```
+
+When a step's bead is closed, `pull` marks the checkpoint items as complete.
+
+#### `specks beads link`
+
+Manually link an existing bead to a step.
+
+```bash
+specks beads link specks-1.md step-3 bd-abc123
+```
+
+### Two-Way Sync Workflow
+
+Beads integration supports a bidirectional workflow:
+
+1. **Plan → Beads** (sync): Create beads from your speck
+   ```bash
+   specks beads sync specks-feature.md
+   ```
+
+2. **Work in Beads**: Team members work on beads, closing them when complete
+
+3. **Beads → Plan** (pull): Update speck checkboxes from bead status
+   ```bash
+   specks beads pull specks-feature.md
+   ```
+
+4. **Check Status**: See what's ready to work on
+   ```bash
+   specks beads status specks-feature.md
+   ```
+
+5. **Iterate**: Re-sync after adding new steps, pull after completing work
+
+### Example Session
+
+```bash
+# Initialize beads (one-time setup)
+bd init
+
+# Create beads from your speck
+specks beads sync specks-1.md
+# Output: Synced specks-1.md to beads:
+#   Root bead: bd-abc123
+#   Steps synced: 5
+#   Dependencies added: 3
+
+# Check what's ready to work on
+specks beads status specks-1.md
+# Output: Step 0: Setup     [x] complete  (bd-abc123.1)
+#         Step 1: Core      [ ] ready     (bd-abc123.2)
+#         Step 2: Tests     [ ] blocked   (bd-abc123.3) <- waiting on bd-abc123.2
+
+# After completing work, close the bead
+bd close bd-abc123.2
+
+# Pull completion back to speck checkboxes
+specks beads pull specks-1.md
+# Output: specks-1: 3 checkboxes updated
+```
+
 ## Configuration
 
 Project configuration lives in `.specks/config.toml`:
@@ -157,9 +274,12 @@ skeleton_file = "specks-skeleton.md"
 default_status = "draft"
 naming_pattern = "specks-*.md"
 
-[beads]
-enabled = false
-root_issue_type = "epic"
+[specks.beads]
+enabled = true
+bd_path = "bd"              # Path to beads CLI
+root_issue_type = "epic"    # Issue type for root bead
+substeps = "none"           # Substep handling: "none" or "children"
+pull_checkbox_mode = "checkpoints"  # What to check: "checkpoints" or "all"
 ```
 
 ## Exit Codes
