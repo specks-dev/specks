@@ -6,6 +6,82 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-1.md] Step 3: CLI Framework and Commands | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- [D01] Rust/clap - Using clap derive macros for CLI structure
+- [D02] .specks directory structure
+- [D03] Speck file naming and reserved files (specks-skeleton.md, specks-implementation-log.md)
+- [D07] Project root resolution - upward search for `.specks/` directory
+- [D08] JSON output schema - shared envelope with schema_version, command, status, data, issues
+- Spec S01 - `specks init` command specification
+- Spec S02 - `specks validate` command specification
+- Spec S03 - `specks list` command specification
+- Spec S04 - `specks status` command specification
+- Spec S05 - JSON output schema with shared response envelope
+- Diag01 - Command hierarchy diagram
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Implement `Cli` struct with clap derive | Done |
+| Implement `Commands` enum with all subcommands | Done |
+| Add global options (--verbose, --quiet, --json, --version) | Done |
+| Implement project root discovery (upward search for `.specks/`) | Done |
+| Implement `specks init` command (Spec S01) | Done |
+| Implement `specks validate` command (Spec S02) | Done |
+| Implement `specks list` command (Spec S03) | Done |
+| Implement `specks status` command (Spec S04) | Done |
+| Implement JSON output formatting (Spec S05) | Done |
+| Implement configuration loading | Done |
+
+**Files Created:**
+- `crates/specks/src/output.rs` - JSON output formatting with shared envelope (JsonResponse, JsonIssue, InitData, ValidateData, ListData, StatusData)
+- `crates/specks/src/commands/mod.rs` - Command module with re-exports
+- `crates/specks/src/commands/init.rs` - Init command: creates .specks/, skeleton, config.toml, implementation log
+- `crates/specks/src/commands/validate.rs` - Validate command: single file or all specks validation
+- `crates/specks/src/commands/list.rs` - List command: shows all specks with status/progress/updated
+- `crates/specks/src/commands/status.rs` - Status command: step-by-step breakdown with verbose mode
+- `crates/specks/tests/cli_integration_tests.rs` - 11 integration tests for all commands
+
+**Files Modified:**
+- `crates/specks/src/cli.rs` - Complete CLI definition with clap derive, Commands enum, global options, parse() function
+- `crates/specks/src/main.rs` - Main entry point using commands module, proper exit code handling
+- `crates/specks/Cargo.toml` - Added tempfile dev dependency for integration tests
+- `crates/specks-core/src/config.rs` - Added find_project_root(), find_project_root_from(), find_specks(), is_reserved_file(), speck_name_from_path(), RESERVED_FILES constant, full Config/NamingConfig/BeadsConfig structs with defaults
+- `crates/specks-core/src/lib.rs` - Added exports for new config functions and types
+- `.specks/specks-1.md` - Checked off all Step 3 tasks and checkpoints
+
+**Test Results:**
+- `cargo test`: 56 tests passed
+  - 2 CLI unit tests (verify_cli in cli.rs and main.rs)
+  - 11 CLI integration tests (test_init_creates_expected_files, test_init_fails_without_force, test_init_with_force_succeeds, test_validate_valid_speck, test_validate_invalid_speck, test_list_shows_specks, test_status_shows_step_breakdown, test_json_output_init, test_json_output_list, test_json_output_validate, test_json_output_status)
+  - 38 specks-core unit tests
+  - 5 specks-core integration tests
+- `cargo clippy`: No warnings
+
+**Checkpoints Verified:**
+- `specks --help` lists all commands: PASS
+- `specks init` creates .specks/ directory: PASS
+- `specks validate` catches known errors in test fixtures: PASS
+- `specks list` shows all specks with accurate progress: PASS
+- `specks status <file>` shows per-step breakdown: PASS
+- All commands support --json output: PASS
+
+**Key Decisions/Notes:**
+- Embedded skeleton content in init.rs using include_str! for simplicity
+- Project root discovery searches upward from cwd, matching git-like behavior per [D07]
+- Reserved files (specks-skeleton.md, specks-implementation-log.md) excluded from speck discovery per [D03]
+- JSON output uses shared envelope with schema_version "1" per Spec S05
+- File path resolution handles multiple input formats: full path, .specks/filename, just filename, or just name (adds specks- prefix and .md extension)
+- Status command supports both --verbose flag from subcommand and -v global flag
+- Fixed clippy warning in config.rs: redundant closure for map_err
+
+---
+
 ## [specks-1.md] Step 2: Validation Engine | COMPLETE | 2026-02-04
 
 **Completed:** 2026-02-04

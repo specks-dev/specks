@@ -1366,31 +1366,31 @@ tests/fixtures/
 - JSON output formatting
 
 **Tasks:**
-- [ ] Implement `Cli` struct with clap derive
-- [ ] Implement `Commands` enum with all subcommands
-- [ ] Add global options (--verbose, --quiet, --json, --version)
-- [ ] Implement project root discovery (upward search for `.specks/`)
-- [ ] Implement `specks init` command (Spec S01)
-- [ ] Implement `specks validate` command (Spec S02)
-- [ ] Implement `specks list` command (Spec S03)
-- [ ] Implement `specks status` command (Spec S04)
-- [ ] Implement JSON output formatting (Spec S05)
-- [ ] Implement configuration loading
+- [x] Implement `Cli` struct with clap derive
+- [x] Implement `Commands` enum with all subcommands
+- [x] Add global options (--verbose, --quiet, --json, --version)
+- [x] Implement project root discovery (upward search for `.specks/`)
+- [x] Implement `specks init` command (Spec S01)
+- [x] Implement `specks validate` command (Spec S02)
+- [x] Implement `specks list` command (Spec S03)
+- [x] Implement `specks status` command (Spec S04)
+- [x] Implement JSON output formatting (Spec S05)
+- [x] Implement configuration loading
 
 **Tests:**
-- [ ] Integration test: `specks init` creates expected files
-- [ ] Integration test: `specks validate` on valid/invalid files
-- [ ] Integration test: `specks list` shows all specks
-- [ ] Integration test: `specks status` shows step breakdown
-- [ ] Integration test: JSON output format for all commands
+- [x] Integration test: `specks init` creates expected files
+- [x] Integration test: `specks validate` on valid/invalid files
+- [x] Integration test: `specks list` shows all specks
+- [x] Integration test: `specks status` shows step breakdown
+- [x] Integration test: JSON output format for all commands
 
 **Checkpoint:**
-- [ ] `specks --help` lists all commands
-- [ ] `specks init` creates .specks/ directory
-- [ ] `specks validate` catches known errors in test fixtures
-- [ ] `specks list` shows all specks with accurate progress
-- [ ] `specks status <file>` shows per-step breakdown
-- [ ] All commands support --json output
+- [x] `specks --help` lists all commands
+- [x] `specks init` creates .specks/ directory
+- [x] `specks validate` catches known errors in test fixtures
+- [x] `specks list` shows all specks with accurate progress
+- [x] `specks status <file>` shows per-step breakdown
+- [x] All commands support --json output
 
 **Rollback:**
 - Revert to Step 2 commit

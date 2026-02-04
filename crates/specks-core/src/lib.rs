@@ -18,6 +18,10 @@ pub mod parser;
 pub mod validator;
 
 // Re-exports for convenience
+pub use config::{
+    find_project_root, find_project_root_from, find_specks, is_reserved_file, speck_name_from_path,
+    BeadsConfig, Config, NamingConfig, SpecksConfig, RESERVED_FILES,
+};
 pub use error::SpecksError;
 pub use parser::parse_speck;
 pub use types::{

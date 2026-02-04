@@ -1,88 +1,56 @@
-use clap::Parser;
+//! specks CLI - Agent-centric technical specifications
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+mod cli;
+mod commands;
+mod output;
 
-#[derive(Parser)]
-#[command(name = "specks")]
-#[command(version = VERSION)]
-#[command(about = "Agent-centric technical specifications CLI")]
-#[command(long_about = "Specks is a system for turning ideas into actionable technical specifications via LLM agents.")]
-struct Cli {
-    /// Increase output verbosity
-    #[arg(short, long, global = true)]
-    verbose: bool,
+use std::process::ExitCode;
 
-    /// Suppress non-error output
-    #[arg(short, long, global = true)]
-    quiet: bool,
+use cli::Commands;
 
-    /// Output in JSON format
-    #[arg(long, global = true)]
-    json: bool,
+fn main() -> ExitCode {
+    let cli = cli::parse();
 
-    #[command(subcommand)]
-    command: Option<Commands>,
-}
-
-#[derive(clap::Subcommand)]
-enum Commands {
-    /// Initialize a specks project in current directory
-    Init {
-        /// Overwrite existing .specks directory
-        #[arg(long)]
-        force: bool,
-    },
-    /// Validate speck structure against format conventions
-    Validate {
-        /// Speck file to validate (validates all if not specified)
-        file: Option<String>,
-        /// Enable strict validation mode
-        #[arg(long)]
-        strict: bool,
-    },
-    /// List all specks with summary information
-    List {
-        /// Filter by status (draft, active, done)
-        #[arg(long)]
-        status: Option<String>,
-    },
-    /// Show detailed completion status for a speck
-    Status {
-        /// Speck file to show status for
-        file: String,
-    },
-}
-
-fn main() {
-    let cli = Cli::parse();
-
-    match cli.command {
-        Some(Commands::Init { force: _ }) => {
-            println!("specks init: not yet implemented");
+    let result = match cli.command {
+        Some(Commands::Init { force }) => {
+            commands::run_init(force, cli.json, cli.quiet)
         }
-        Some(Commands::Validate { file: _, strict: _ }) => {
-            println!("specks validate: not yet implemented");
+        Some(Commands::Validate { file, strict }) => {
+            commands::run_validate(file, strict, cli.json, cli.quiet)
         }
-        Some(Commands::List { status: _ }) => {
-            println!("specks list: not yet implemented");
+        Some(Commands::List { status }) => {
+            commands::run_list(status, cli.json, cli.quiet)
         }
-        Some(Commands::Status { file: _ }) => {
-            println!("specks status: not yet implemented");
+        Some(Commands::Status { file, verbose }) => {
+            // Use verbose flag from subcommand, or global verbose
+            let verbose = verbose || cli.verbose;
+            commands::run_status(file, verbose, cli.json, cli.quiet)
         }
         None => {
-            println!("specks v{VERSION}");
-            println!("Use --help for usage information");
+            // No subcommand - print version info
+            if !cli.quiet {
+                println!("specks v{}", env!("CARGO_PKG_VERSION"));
+                println!("Use --help for usage information");
+            }
+            Ok(0)
+        }
+    };
+
+    match result {
+        Ok(code) => ExitCode::from(code as u8),
+        Err(e) => {
+            eprintln!("error: {}", e);
+            ExitCode::from(1)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use clap::CommandFactory;
 
     #[test]
     fn verify_cli() {
-        use clap::CommandFactory;
-        Cli::command().debug_assert();
+        crate::cli::Cli::command().debug_assert();
     }
 }
