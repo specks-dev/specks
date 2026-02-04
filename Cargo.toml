@@ -21,5 +21,8 @@ toml = "0.8"
 thiserror = "2"
 anyhow = "1"
 
+# Regex for parsing
+regex = "1"
+
 # Internal crates
 specks-core = { path = "crates/specks-core" }

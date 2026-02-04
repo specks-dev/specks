@@ -19,3 +19,9 @@ pub mod validator;
 
 // Re-exports for convenience
 pub use error::SpecksError;
+pub use parser::parse_speck;
+pub use types::{
+    Anchor, BeadsHints, Checkpoint, CheckpointKind, Decision, Question, Speck, SpeckMetadata,
+    SpeckStatus, Step, Substep,
+};
+pub use validator::{Severity, ValidationIssue, ValidationResult};

@@ -6,6 +6,77 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-1.md] Step 1: Core Types and Parser | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- [D04] Anchor format - Step anchors `{#step-N}`, decision anchors `{#dNN-slug}`, question anchors `{#qNN-slug}`
+- [D05] Checkbox tracking - Track completion via `- [ ]` / `- [x]` checkboxes
+- Table T01 error codes - E001-E015, W001-W008, I001-I002
+- #symbols - Symbol inventory for types and functions
+- #terminology - Speck, Skeleton, Anchor, Step, Substep, Checkpoint definitions
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Implement `Speck`, `SpeckMetadata`, `Step`, `Substep`, `Checkpoint` structs | Done |
+| Implement `SpecksError` enum with all error variants | Done |
+| Implement `parse_speck()` function | Done |
+| Parse Plan Metadata table (including optional `Beads Root` row) | Done |
+| Parse section headings with anchors | Done |
+| Extract execution steps and substeps | Done |
+| Parse `**Depends on:**` lines from steps (anchor references) | Done |
+| Parse `**Bead:**` lines from steps (bead ID if present) | Done |
+| Parse optional `**Beads:**` hints block (type, priority, labels, estimate_minutes) | Done |
+| Parse checkbox items (Tasks, Tests, Checkpoints) | Done |
+| Extract References lines from steps | Done |
+
+**Files Created:**
+- None (all modifications to existing files)
+
+**Files Modified:**
+- `Cargo.toml` - Added regex dependency to workspace
+- `crates/specks-core/Cargo.toml` - Added regex dependency
+- `crates/specks-core/src/lib.rs` - Added re-exports for new types (Anchor, BeadsHints, Decision, Question, SpeckStatus)
+- `crates/specks-core/src/types.rs` - Enhanced with full Speck struct, SpeckMetadata validation, Step/Substep with all fields, BeadsHints, Anchor, Decision, Question structs, SpeckStatus enum, completion counting methods
+- `crates/specks-core/src/error.rs` - Added all error variants E001-E015 with codes, line numbers, exit codes
+- `crates/specks-core/src/parser.rs` - Full parser implementation with regex patterns, metadata parsing, anchor extraction, step/substep parsing, dependency/bead/hints/checkbox parsing
+
+**Test Results:**
+- `cargo test -p specks-core`: 15 tests passed
+  - test_parse_minimal_speck
+  - test_parse_depends_on
+  - test_parse_bead_line
+  - test_parse_beads_hints
+  - test_parse_substeps
+  - test_parse_decisions
+  - test_parse_questions
+  - test_parse_anchors
+  - test_checkbox_states
+  - test_malformed_markdown_graceful
+  - test_error_codes
+  - test_error_display
+  - test_valid_status
+  - test_step_counts
+  - test_speck_completion
+
+**Checkpoints Verified:**
+- `cargo build -p specks-core` succeeds: PASS
+- `cargo test -p specks-core` passes: PASS (15 tests)
+- Parser handles all fixture files without panic: PASS (test_malformed_markdown_graceful)
+
+**Key Decisions/Notes:**
+- Used `std::sync::LazyLock` for regex pattern compilation (Rust 1.80+ feature)
+- Parser handles malformed markdown gracefully without panicking
+- Beads hints parsing handles comma-separated labels correctly by detecting key=value boundaries
+- Checkbox parsing supports both lowercase `[x]` and uppercase `[X]` for checked state
+- Parser tracks current section (Tasks/Tests/Checkpoints) to correctly classify checkbox items
+- Added line numbers to all parsed elements for validation error reporting
+
+---
+
 ## [specks-1.md] Step 0: Project Bootstrap | COMPLETE | 2026-02-03
 
 **Completed:** 2026-02-03

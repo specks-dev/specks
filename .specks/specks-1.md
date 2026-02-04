@@ -1269,33 +1269,33 @@ tests/fixtures/
 - Error type definitions
 
 **Tasks:**
-- [ ] Implement `Speck`, `SpeckMetadata`, `Step`, `Substep`, `Checkpoint` structs
-- [ ] Implement `SpecksError` enum with all error variants
-- [ ] Implement `parse_speck()` function
-- [ ] Parse Plan Metadata table (including optional `Beads Root` row)
-- [ ] Parse section headings with anchors
-- [ ] Extract execution steps and substeps
-- [ ] Parse `**Depends on:**` lines from steps (anchor references)
-- [ ] Parse `**Bead:**` lines from steps (bead ID if present)
-- [ ] Parse optional `**Beads:**` hints block (type, priority, labels, estimate_minutes)
-- [ ] Parse checkbox items (Tasks, Tests, Checkpoints)
-- [ ] Extract References lines from steps
+- [x] Implement `Speck`, `SpeckMetadata`, `Step`, `Substep`, `Checkpoint` structs
+- [x] Implement `SpecksError` enum with all error variants
+- [x] Implement `parse_speck()` function
+- [x] Parse Plan Metadata table (including optional `Beads Root` row)
+- [x] Parse section headings with anchors
+- [x] Extract execution steps and substeps
+- [x] Parse `**Depends on:**` lines from steps (anchor references)
+- [x] Parse `**Bead:**` lines from steps (bead ID if present)
+- [x] Parse optional `**Beads:**` hints block (type, priority, labels, estimate_minutes)
+- [x] Parse checkbox items (Tasks, Tests, Checkpoints)
+- [x] Extract References lines from steps
 
 **Tests:**
-- [ ] Unit test: Parse minimal valid speck
-- [ ] Unit test: Parse complete speck with all sections
-- [ ] Unit test: Extract anchors correctly
-- [ ] Unit test: Parse checkbox states
-- [ ] Unit test: Parse `**Depends on:**` lines correctly
-- [ ] Unit test: Parse `**Bead:**` line (extracts bead ID)
-- [ ] Unit test: Parse `**Beads:**` hints block (type, priority, labels, estimate)
-- [ ] Unit test: Parse `Beads Root` from Plan Metadata table
-- [ ] Unit test: Handle malformed markdown gracefully
+- [x] Unit test: Parse minimal valid speck
+- [x] Unit test: Parse complete speck with all sections
+- [x] Unit test: Extract anchors correctly
+- [x] Unit test: Parse checkbox states
+- [x] Unit test: Parse `**Depends on:**` lines correctly
+- [x] Unit test: Parse `**Bead:**` line (extracts bead ID)
+- [x] Unit test: Parse `**Beads:**` hints block (type, priority, labels, estimate)
+- [x] Unit test: Parse `Beads Root` from Plan Metadata table
+- [x] Unit test: Handle malformed markdown gracefully
 
 **Checkpoint:**
-- [ ] `cargo build -p specks-core` succeeds
-- [ ] `cargo test -p specks-core` passes
-- [ ] Parser handles all fixture files without panic
+- [x] `cargo build -p specks-core` succeeds
+- [x] `cargo test -p specks-core` passes
+- [x] Parser handles all fixture files without panic
 
 **Rollback:**
 - Revert to Step 0 commit
