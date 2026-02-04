@@ -1,0 +1,20 @@
+[package]
+name = "specks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Agent-centric technical specifications CLI"
+
+[[bin]]
+name = "specks"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+specks-core.workspace = true

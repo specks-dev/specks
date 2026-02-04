@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# Deterministic fake `bd` for Specks integration tests.
+# Conforms to docs/beads-json-contract.md. State in SPECKS_BD_STATE (default: tests/.bd-fake-state).
+
+set -e
+STATE_DIR="${SPECKS_BD_STATE:-$(dirname "$0")/../.bd-fake-state}"
+ISSUES_JSON="$STATE_DIR/issues.json"
+DEPS_JSON="$STATE_DIR/deps.json"
+
+need_jq() {
+  if ! command -v jq &>/dev/null; then
+    echo "bd-fake requires jq" >&2
+    exit 1
+  fi
+}
+
+init_state() {
+  mkdir -p "$STATE_DIR"
+  if [[ ! -f "$ISSUES_JSON" ]]; then
+    echo '{}' > "$ISSUES_JSON"
+  fi
+  if [[ ! -f "$DEPS_JSON" ]]; then
+    echo '[]' > "$DEPS_JSON"
+  fi
+}
+
+next_id() {
+  local parent="$1"
+  need_jq
+  init_state
+  if [[ -z "$parent" ]]; then
+    local n
+    n=$(jq -r 'to_entries | map(select(.key | test("\\.") | not)) | length' "$ISSUES_JSON" 2>/dev/null || echo 0)
+    echo "bd-fake-$(( n + 1 ))"
+  else
+    local count
+    count=$(jq -r --arg p "$parent" '[. | keys[] | select(startswith($p + "."))] | length' "$ISSUES_JSON" 2>/dev/null || echo 0)
+    echo "${parent}.$(( count + 1 ))"
+  fi
+}
+
+cmd_create() {
+  need_jq
+  init_state
+  local title="" description="" parent="" type="task" priority=2
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) shift ;;
+      --parent) parent="$2"; shift 2 ;;
+      --type|-t) type="$2"; shift 2 ;;
+      --description) description="$2"; shift 2 ;;
+      -p*) priority="${1#-p}"; shift ;;
+      *) title="$1"; shift ;;
+    esac
+  done
+  [[ -z "$title" ]] && title="(no title)"
+  local id
+  id=$(next_id "$parent")
+  local issue
+  issue=$(jq -n \
+    --arg id "$id" \
+    --arg title "$title" \
+    --arg desc "$description" \
+    --arg type "$type" \
+    --argjson priority "$priority" \
+    '{id: $id, title: $title, description: $desc, status: "open", priority: $priority, issue_type: $type}')
+  local issues
+  issues=$(jq -r --arg id "$id" --argjson obj "$issue" '. + {($id): ($obj | . + {id: $id})}' "$ISSUES_JSON")
+  echo "$issues" > "$ISSUES_JSON"
+  # Output single Issue object (contract)
+  jq -n -c --arg id "$id" --arg title "$title" --arg desc "$description" --arg type "$type" --argjson priority "$priority" \
+    '{id: $id, title: $title, description: $desc, status: "open", priority: $priority, issue_type: $type}'
+}
+
+cmd_show() {
+  need_jq
+  init_state
+  local id="$1"
+  [[ -z "$id" ]] && { echo "bd-fake: show requires id" >&2; exit 1; }
+  local issue
+  issue=$(jq -r --arg id "$id" '.[$id] // empty' "$ISSUES_JSON")
+  if [[ -z "$issue" || "$issue" == "null" ]]; then
+    echo "bd-fake: issue $id not found" >&2
+    exit 1
+  fi
+  local deps
+  deps=$(jq -r -c --arg id "$id" '[.[] | select(.issue_id == $id) | {id: .depends_on_id, dependency_type: .type}]' "$DEPS_JSON")
+  local details
+  details=$(echo "$issue" | jq -c --argjson deps "$deps" '. + {dependencies: $deps}')
+  # Output as single-object (contract allows array or object)
+  echo "$details"
+}
+
+cmd_dep_add() {
+  need_jq
+  init_state
+  local from_id to_id dep_type="blocks"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json) shift ;;
+      --type|-t) dep_type="$2"; shift 2 ;;
+      *) from_id="${from_id:-$1}"; to_id="${to_id:-$2}"; shift; [[ -n "$from_id" && -n "$to_id" ]] && break ;;
+    esac
+  done
+  [[ -z "$from_id" || -z "$to_id" ]] && { echo "bd-fake: dep add requires <from> <to>" >&2; exit 1; }
+  local new_dep
+  new_dep=$(jq -n -c --arg from "$from_id" --arg to "$to_id" --arg type "$dep_type" \
+    '{issue_id: $from, depends_on_id: $to, type: $type}')
+  local deps
+  deps=$(jq -r -c --argjson new "$new_dep" '. + [$new]' "$DEPS_JSON")
+  echo "$deps" > "$DEPS_JSON"
+  if [[ " ${*:1} " == *" --json "* ]]; then
+    jq -n -c --arg from "$from_id" --arg to "$to_id" --arg type "$dep_type" \
+      '{status: "added", issue_id: $from, depends_on_id: $to, type: $type}'
+  fi
+}
+
+cmd_dep_remove() {
+  need_jq
+  init_state
+  local from_id="$1" to_id="$2"
+  shift 2
+  [[ -z "$from_id" || -z "$to_id" ]] && { echo "bd-fake: dep remove requires <from> <to>" >&2; exit 1; }
+  local deps
+  deps=$(jq -r -c --arg from "$from_id" --arg to "$to_id" \
+    '[.[] | select(.issue_id != $from or .depends_on_id != $to)]' "$DEPS_JSON")
+  echo "$deps" > "$DEPS_JSON"
+  if [[ " $* " == *" --json "* ]]; then
+    jq -n -c --arg from "$from_id" --arg to "$to_id" '{status: "removed", issue_id: $from, depends_on_id: $to}'
+  fi
+}
+
+cmd_dep_list() {
+  need_jq
+  init_state
+  local id="$1"
+  shift
+  [[ -z "$id" ]] && { echo "bd-fake: dep list requires id" >&2; exit 1; }
+  local direction="down"
+  for arg in "$@"; do
+    [[ "$arg" == "--direction" ]] && direction="$2" && shift 2
+  done
+  if [[ "$direction" == "down" ]]; then
+    jq -r -c --arg id "$id" '[.[] | select(.issue_id == $id) | {id: .depends_on_id, dependency_type: .type, title: "", status: "open", priority: 2, issue_type: "task"}]' "$DEPS_JSON"
+  else
+    jq -r -c --arg id "$id" '[.[] | select(.depends_on_id == $id) | {id: .issue_id, dependency_type: .type, title: "", status: "open", priority: 2, issue_type: "task"}]' "$DEPS_JSON"
+  fi
+}
+
+cmd_init() {
+  init_state
+  echo "Initialized bd-fake state at $STATE_DIR"
+}
+
+# Parse global --json for create/show/dep
+SUBCMD="${1:-}"
+shift || true
+case "$SUBCMD" in
+  create)   cmd_create "$@" ;;
+  show)     cmd_show "$@" ;;
+  dep)
+    SUB="$1"
+    shift || true
+    case "$SUB" in
+      add)    cmd_dep_add "$@" ;;
+      remove|rm) cmd_dep_remove "$@" ;;
+      list)   cmd_dep_list "$@" ;;
+      *)      echo "bd-fake: dep $SUB not implemented" >&2; exit 1 ;;
+    esac
+    ;;
+  init)     cmd_init "$@" ;;
+  *)
+    echo "bd-fake: unknown command $SUBCMD (create|show|dep|init)" >&2
+    exit 1
+    ;;
+esac
