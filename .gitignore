@@ -19,3 +19,6 @@ Cargo.lock
 # project files
 git-commit-message.txt
 aside
+
+# Specks run artifacts (never commit)
+.specks/runs/

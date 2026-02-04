@@ -1,6 +1,7 @@
 //! Implementation of the `specks init` command (Spec S01)
 
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::Path;
 
 use crate::output::{InitData, JsonIssue, JsonResponse};
@@ -121,10 +122,49 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
     fs::write(&log_path, IMPLEMENTATION_LOG_CONTENT)
         .map_err(|e| format!("failed to write specks-implementation-log.md: {}", e))?;
 
+    // Create runs directory for agent reports (D15)
+    let runs_dir = specks_dir.join("runs");
+    fs::create_dir_all(&runs_dir)
+        .map_err(|e| format!("failed to create runs directory: {}", e))?;
+
+    // Ensure .specks/runs/ is in .gitignore
+    let gitignore_path = Path::new(".gitignore");
+    let gitignore_entry = ".specks/runs/";
+
+    let should_add_entry = if gitignore_path.exists() {
+        let content = fs::read_to_string(gitignore_path)
+            .map_err(|e| format!("failed to read .gitignore: {}", e))?;
+        !content.lines().any(|line| line.trim() == gitignore_entry)
+    } else {
+        true
+    };
+
+    if should_add_entry {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(gitignore_path)
+            .map_err(|e| format!("failed to open .gitignore: {}", e))?;
+
+        // Add newline before entry if file exists and doesn't end with newline
+        if gitignore_path.exists() {
+            let content = fs::read_to_string(gitignore_path).unwrap_or_default();
+            if !content.is_empty() && !content.ends_with('\n') {
+                writeln!(file).map_err(|e| format!("failed to write to .gitignore: {}", e))?;
+            }
+        }
+
+        writeln!(file, "\n# Specks run artifacts (never commit)")
+            .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
+        writeln!(file, "{}", gitignore_entry)
+            .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
+    }
+
     let files_created = vec![
         "specks-skeleton.md".to_string(),
         "config.toml".to_string(),
         "specks-implementation-log.md".to_string(),
+        "runs/".to_string(),
     ];
 
     if json_output {
@@ -141,6 +181,10 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
         println!("  Created: specks-skeleton.md");
         println!("  Created: config.toml");
         println!("  Created: specks-implementation-log.md");
+        println!("  Created: runs/");
+        if should_add_entry {
+            println!("  Updated: .gitignore (added .specks/runs/)");
+        }
     }
 
     Ok(0)

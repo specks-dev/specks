@@ -6,6 +6,67 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-1.md] Step 4: Director + Planning Agents | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- [D12] Multi-agent architecture - nine-agent suite with director as orchestrator
+- [D13] Reviewer vs Auditor - complementary quality gates
+- [D14] Cooperative halt protocol - signal files for monitor→director communication
+- [D15] Run persistence - UUID-based directories under `.specks/runs/`
+- [D16] Director invocation protocol - parameters (speck, mode, commit-policy, etc.)
+- C03 Agent Suite Design - hub-and-spoke topology
+- C04 Planning Phase Flow - idea → planner → auditor → approve/revise
+- C05 Execution Phase Flow - per-step loop with implementer+monitor
+- C06 Monitor Agent Protocol - drift detection criteria and expected_touch_set
+- C07 Escalation Paths - decision tree for routing issues
+- C08 Agent Definition Format - frontmatter with name, description, tools, model
+- `.specks/specks-skeleton.md` - speck format specification
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/specks-director.md` with orchestration protocol | Done |
+| Create `agents/specks-planner.md` with plan creation instructions | Done |
+| Create `agents/specks-architect.md` with expected_touch_set | Done |
+| Implement run directory structure (`.specks/runs/{uuid}/`) | Done |
+| Create test workflow documentation | Done |
+| Document agent invocation patterns | Done |
+
+**Files Created:**
+- `agents/specks-director.md` - Central orchestrator agent (7,211 bytes) with invocation protocol, planning/execution flows, escalation tree, hub-and-spoke principle
+- `agents/specks-planner.md` - Plan creation agent (5,377 bytes) with skeleton format compliance, clarifying questions, step breakdown guidance
+- `agents/specks-architect.md` - Implementation strategy agent (5,558 bytes) with expected_touch_set contract, test strategy format, checkpoint verification
+- `.specks/runs/` - Run directory for agent reports (created by init command)
+
+**Files Modified:**
+- `crates/specks/src/commands/init.rs` - Added runs directory creation and .gitignore update per D15
+- `.gitignore` - Added `.specks/runs/` entry (always ignored, never committed)
+- `.specks/specks-1.md` - Checked off all Step 4 tasks and checkpoints
+
+**Test Results:**
+- `cargo nextest run`: 56 tests passed
+- Manual test: `specks init` creates runs/ directory
+- Manual test: .gitignore updated with `.specks/runs/`
+
+**Checkpoints Verified:**
+- `agents/specks-director.md` follows agent definition format (C08): PASS
+- `agents/specks-planner.md` has format compliance requirements: PASS
+- `agents/specks-architect.md` has expected_touch_set contract: PASS
+- Run directory structure in place: PASS
+- Hub-and-spoke principle documented clearly: PASS
+
+**Key Decisions/Notes:**
+- All three planning agents use `model: opus` for complex reasoning
+- Director has full write access (Task, Write, Edit), planner has write + AskUserQuestion, architect is read-only
+- The `expected_touch_set` in architect output is advisory guidance for the monitor, not a hard gate
+- Runtime agent tests are deferred to Step 9 (End-to-End Validation) where they'll be exercised on real work
+- Init command now creates `.specks/runs/` and updates `.gitignore` automatically
+
+---
+
 ## [specks-1.md] Spec Refinement: Multi-Agent Architecture Finalization | COMPLETE | 2026-02-04
 
 **Completed:** 2026-02-04

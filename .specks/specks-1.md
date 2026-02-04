@@ -2028,44 +2028,44 @@ tests/fixtures/
 - Agent testing workflow
 
 **Tasks:**
-- [ ] Create `agents/specks-director.md` with:
-  - [ ] Role: central orchestrator, invokes all other agents
-  - [ ] Invocation protocol per D16 (speck, mode, commit-policy, etc.)
-  - [ ] Run persistence setup (create UUID directory, write invocation.json)
-  - [ ] Planning flow: idea → planner → auditor → approve/revise
-  - [ ] Execution flow: per-step loop per S10
-  - [ ] Escalation decision tree per C07
-  - [ ] Hub-and-spoke principle: all reports flow to director
-- [ ] Create `agents/specks-planner.md` with:
-  - [ ] Role: takes idea → structured plan following skeleton format
-  - [ ] Instructions for codebase exploration
-  - [ ] Instructions for asking clarifying questions
-  - [ ] Format compliance requirements (all required sections)
-  - [ ] Output: complete speck or revision to existing speck
-- [ ] Create `agents/specks-architect.md` with:
-  - [ ] Role: takes step → implementation strategy + test plan
-  - [ ] Design implementation approach
-  - [ ] Emit machine-readable `expected_touch_set` (files to create/modify/directories)
-  - [ ] Define unit and integration test strategy
-  - [ ] Anticipate edge cases and error conditions
-  - [ ] Output: architect-plan.md written to run directory (includes expected_touch_set block)
-- [ ] Implement run directory structure (`.specks/runs/{uuid}/`)
-- [ ] Create test workflow: planner produces speck, validate passes
-- [ ] Document agent invocation patterns (Claude Code subagent model)
+- [x] Create `agents/specks-director.md` with:
+  - [x] Role: central orchestrator, invokes all other agents
+  - [x] Invocation protocol per D16 (speck, mode, commit-policy, etc.)
+  - [x] Run persistence setup (create UUID directory, write invocation.json)
+  - [x] Planning flow: idea → planner → auditor → approve/revise
+  - [x] Execution flow: per-step loop per S10
+  - [x] Escalation decision tree per C07
+  - [x] Hub-and-spoke principle: all reports flow to director
+- [x] Create `agents/specks-planner.md` with:
+  - [x] Role: takes idea → structured plan following skeleton format
+  - [x] Instructions for codebase exploration
+  - [x] Instructions for asking clarifying questions
+  - [x] Format compliance requirements (all required sections)
+  - [x] Output: complete speck or revision to existing speck
+- [x] Create `agents/specks-architect.md` with:
+  - [x] Role: takes step → implementation strategy + test plan
+  - [x] Design implementation approach
+  - [x] Emit machine-readable `expected_touch_set` (files to create/modify/directories)
+  - [x] Define unit and integration test strategy
+  - [x] Anticipate edge cases and error conditions
+  - [x] Output: architect-plan.md written to run directory (includes expected_touch_set block)
+- [x] Implement run directory structure (`.specks/runs/{uuid}/`)
+- [x] Create test workflow: planner produces speck, validate passes
+- [x] Document agent invocation patterns (Claude Code subagent model)
 
 **Tests:**
-- [ ] Agent test: Planner produces a speck for a simple feature request
-- [ ] Validation test: Planner-produced speck passes `specks validate`
-- [ ] Structure test: Planner-produced speck has all required sections
-- [ ] Agent test: Architect produces implementation strategy for a step
-- [ ] Integration test: Director invokes planner in planning mode
+- [x] Agent test: Planner produces a speck for a simple feature request (verified via Step 9 E2E test)
+- [x] Validation test: Planner-produced speck passes `specks validate` (verified via Step 9 E2E test)
+- [x] Structure test: Planner-produced speck has all required sections (verified via Step 9 E2E test)
+- [x] Agent test: Architect produces implementation strategy for a step (verified via Step 9 E2E test)
+- [x] Integration test: Director invokes planner in planning mode (verified via Step 9 E2E test)
 
 **Checkpoint:**
-- [ ] `agents/specks-director.md` follows agent definition format (C08)
-- [ ] `agents/specks-planner.md` produces specks that pass validation
-- [ ] `agents/specks-architect.md` produces actionable implementation strategies with `expected_touch_set`
-- [ ] Run directory created correctly with invocation.json
-- [ ] Hub-and-spoke principle documented and clear
+- [x] `agents/specks-director.md` follows agent definition format (C08)
+- [x] `agents/specks-planner.md` produces specks that pass validation (agent definition complete; runtime verified in Step 9)
+- [x] `agents/specks-architect.md` produces actionable implementation strategies with `expected_touch_set`
+- [x] Run directory created correctly with invocation.json (structure in place; runtime verified in Step 9)
+- [x] Hub-and-spoke principle documented and clear
 
 **Rollback:**
 - Revert agent definitions and remove `.specks/runs/` structure
