@@ -14,7 +14,8 @@
       "Bash(do echo \"=== $f ===\")",
       "Bash(done)",
       "Bash(grep:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(chmod:*)"
     ]
   }
 }

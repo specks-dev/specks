@@ -6,6 +6,58 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-1.md] Step 6.5: Mock-bd Test Harness | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- `.specks/specks-1.md` Step 6.5 specification
+- `docs/beads-json-contract.md` - Normative JSON contract for mock compliance
+- `tests/bin/bd-fake` - Existing bash mock implementation
+- `crates/specks-core/src/beads.rs` - BeadsCli wrapper types
+- `crates/specks/src/commands/beads/*.rs` - Beads command implementations
+- `crates/specks/tests/cli_integration_tests.rs` - Existing test patterns
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `tests/bin/bd-fake` implementing Beads JSON Contract | Done (already existed) |
+| Implement `bd create --json [--parent] [--type]` | Done |
+| Implement `bd show <id> --json` → IssueDetails | Done |
+| Implement `bd dep add <from> <to> --json` | Done |
+| Implement `bd dep remove <from> <to> --json` | Done |
+| Implement `bd dep list <id> --json` | Done |
+| Implement `bd ready [--parent] --json` (fixed filtering) | Done |
+| Implement `bd close <id> [--reason]` | Done |
+| Implement `bd sync` (no-op) | Done |
+| State storage in JSON files (issues.json, deps.json) | Done |
+| Deterministic ID generation (bd-fake-1, bd-fake-1.1, etc.) | Done |
+| Add `SPECKS_BD_PATH` env override | Done (already in commands) |
+| Write integration tests for sync/status/pull | Done |
+
+**Files Modified:**
+- `tests/bin/bd-fake` - Fixed `cmd_ready()` to properly filter issues with unmet deps
+
+**Files Created:**
+- `crates/specks/tests/beads_integration_tests.rs` - 9 new integration tests
+
+**Test Results:**
+- `cargo nextest run`: 83 tests passed
+- `cargo nextest run beads`: 8 beads tests passed (3 consecutive runs verified determinism)
+
+**Checkpoints Verified:**
+- Mock-bd passes all Beads JSON Contract requirements: PASS
+- All beads integration tests pass with mock-bd in CI (no network required): PASS
+- Tests are deterministic (no flakiness from external beads state): PASS
+
+**Key Decisions/Notes:**
+- Fixed `cmd_ready()` in bd-fake to properly compute unblocked issues (all deps must be closed)
+- Tests use `SPECKS_BD_STATE` env var to isolate mock state per test in temp directories
+- Tests cover: JSON contract compliance, sync idempotency, dependency edge creation, status computation, checkbox updates via pull
+
+---
+
 ## [specks-1.md] Vision Update: From Specifications to Implementation | COMPLETE | 2026-02-04
 
 **Completed:** 2026-02-04

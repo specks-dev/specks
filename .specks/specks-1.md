@@ -2192,34 +2192,34 @@ tests/fixtures/
 - CI-friendly beads integration tests
 
 **Tasks:**
-- [ ] Create `tests/bin/bd-fake` (or Rust binary) that implements the Beads JSON Contract subset
-- [ ] Implement `bd create --json [--parent <id>] [--type <type>]` → returns `Issue` JSON object
-- [ ] Implement `bd show <id> --json` → returns `[IssueDetails]` array (match real bd behavior)
-- [ ] Implement `bd dep add <child> <parent> --json` → returns status object
-- [ ] Implement `bd dep remove <child> <parent> --json` → returns status object
-- [ ] Implement `bd dep list <id> --json` → returns `[IssueWithDependencyMetadata]` array
-- [ ] Implement `bd ready [--parent <id>] --json` → returns array of open issues with no unmet deps
-- [ ] Implement `bd close <id> [--reason "..."]` → sets issue status to closed
-- [ ] Implement `bd sync` → no-op in mock (state already persisted), returns success
-- [ ] State storage: JSON file in temp dir (issues + edges), or in-memory per test
-- [ ] Deterministic ID generation: counter-based with `--parent` producing `.1`, `.2` suffixes
-- [ ] Add config/env override: `SPECKS_BD_PATH` or `bd_path` in config.toml to point to fake
-- [ ] Write integration tests using mock-bd that exercise sync/status/pull without network
+- [x] Create `tests/bin/bd-fake` (or Rust binary) that implements the Beads JSON Contract subset
+- [x] Implement `bd create --json [--parent <id>] [--type <type>]` → returns `Issue` JSON object
+- [x] Implement `bd show <id> --json` → returns `[IssueDetails]` array (match real bd behavior)
+- [x] Implement `bd dep add <child> <parent> --json` → returns status object
+- [x] Implement `bd dep remove <child> <parent> --json` → returns status object
+- [x] Implement `bd dep list <id> --json` → returns `[IssueWithDependencyMetadata]` array
+- [x] Implement `bd ready [--parent <id>] --json` → returns array of open issues with no unmet deps
+- [x] Implement `bd close <id> [--reason "..."]` → sets issue status to closed
+- [x] Implement `bd sync` → no-op in mock (state already persisted), returns success
+- [x] State storage: JSON file in temp dir (issues + edges), or in-memory per test
+- [x] Deterministic ID generation: counter-based with `--parent` producing `.1`, `.2` suffixes
+- [x] Add config/env override: `SPECKS_BD_PATH` or `bd_path` in config.toml to point to fake
+- [x] Write integration tests using mock-bd that exercise sync/status/pull without network
 
 **Tests:**
-- [ ] Mock-bd test: `bd create` returns valid Issue JSON
-- [ ] Mock-bd test: `bd show` returns array of IssueDetails
-- [ ] Mock-bd test: `bd dep add/list` track dependencies correctly
-- [ ] Integration test: sync with mock-bd creates root + step beads, writes IDs back
-- [ ] Integration test: re-running sync with mock-bd converges (idempotent)
-- [ ] Integration test: dependency edges in mock-bd match speck `**Depends on:**`
-- [ ] Integration test: status with mock-bd computes readiness correctly
-- [ ] Integration test: pull with mock-bd updates checkboxes
+- [x] Mock-bd test: `bd create` returns valid Issue JSON
+- [x] Mock-bd test: `bd show` returns array of IssueDetails
+- [x] Mock-bd test: `bd dep add/list` track dependencies correctly
+- [x] Integration test: sync with mock-bd creates root + step beads, writes IDs back
+- [x] Integration test: re-running sync with mock-bd converges (idempotent)
+- [x] Integration test: dependency edges in mock-bd match speck `**Depends on:**`
+- [x] Integration test: status with mock-bd computes readiness correctly
+- [x] Integration test: pull with mock-bd updates checkboxes
 
 **Checkpoint:**
-- [ ] Mock-bd passes all Beads JSON Contract requirements
-- [ ] All beads integration tests pass with mock-bd in CI (no network required)
-- [ ] Tests are deterministic (no flakiness from external beads state)
+- [x] Mock-bd passes all Beads JSON Contract requirements
+- [x] All beads integration tests pass with mock-bd in CI (no network required)
+- [x] Tests are deterministic (no flakiness from external beads state)
 
 **Rollback:**
 - Revert to Step 6 commit; remove mock-bd binary and related tests

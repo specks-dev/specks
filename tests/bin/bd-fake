@@ -184,13 +184,45 @@ cmd_ready() {
       *) shift ;;
     esac
   done
-  # Return open issues with no unmet deps (simplified)
-  # For now, return all open issues under the parent
+  # Return open issues with no unmet deps (all deps closed)
+  # Build list of issues with all deps met
+  local issues_json deps_json
+  issues_json=$(cat "$ISSUES_JSON")
+  deps_json=$(cat "$DEPS_JSON")
+
+  # Get all open issues (optionally filtered by parent)
+  local candidates
   if [[ -n "$parent" ]]; then
-    jq -c --arg p "$parent" '[to_entries[] | select(.key | startswith($p + ".")) | select(.value.status == "open") | .value]' "$ISSUES_JSON"
+    candidates=$(echo "$issues_json" | jq -c --arg p "$parent" '[to_entries[] | select(.key | startswith($p + ".")) | select(.value.status == "open") | .key]')
   else
-    jq -c '[to_entries[] | select(.value.status == "open") | .value]' "$ISSUES_JSON"
+    candidates=$(echo "$issues_json" | jq -c '[to_entries[] | select(.value.status == "open") | .key]')
   fi
+
+  # For each candidate, check if all dependencies are closed
+  local ready_ids="[]"
+  for issue_id in $(echo "$candidates" | jq -r '.[]'); do
+    # Get deps for this issue
+    local issue_deps
+    issue_deps=$(echo "$deps_json" | jq -r --arg id "$issue_id" '[.[] | select(.issue_id == $id) | .depends_on_id]')
+
+    # Check if all deps are closed
+    local all_closed="true"
+    for dep_id in $(echo "$issue_deps" | jq -r '.[]'); do
+      local dep_status
+      dep_status=$(echo "$issues_json" | jq -r --arg id "$dep_id" '.[$id].status // "open"')
+      if [[ "$dep_status" != "closed" ]]; then
+        all_closed="false"
+        break
+      fi
+    done
+
+    if [[ "$all_closed" == "true" ]]; then
+      ready_ids=$(echo "$ready_ids" | jq -c --arg id "$issue_id" '. + [$id]')
+    fi
+  done
+
+  # Output the ready issues
+  echo "$ready_ids" | jq -c --argjson issues "$issues_json" '[.[] as $id | $issues[$id]]'
 }
 
 cmd_sync() {
