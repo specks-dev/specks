@@ -211,20 +211,15 @@ pub struct Checkpoint {
 }
 
 /// Kind of checkpoint item
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum CheckpointKind {
     /// Task item
+    #[default]
     Task,
     /// Test item
     Test,
     /// Checkpoint/verification item
     Checkpoint,
-}
-
-impl Default for CheckpointKind {
-    fn default() -> Self {
-        Self::Task
-    }
 }
 
 /// Status of a speck based on metadata and completion

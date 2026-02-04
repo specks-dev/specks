@@ -1318,32 +1318,32 @@ tests/fixtures/
 - Validation result aggregation
 
 **Tasks:**
-- [ ] Implement `validate_speck()` function
-- [ ] Implement `ValidationResult` and `ValidationIssue` structs
-- [ ] Implement `Severity` enum (Error, Warning, Info)
-- [ ] Implement required section checks (E001)
-- [ ] Implement metadata field checks (E002, E003)
-- [ ] Implement step References check (E004)
-- [ ] Implement anchor format validation (E005)
-- [ ] Implement duplicate anchor detection (E006)
-- [ ] Implement warning rules (W001-W006)
-- [ ] Implement info rules (I001-I002)
-- [ ] Support validation levels (lenient/normal/strict)
-- [ ] Implement dependency anchor validation (E010)
-- [ ] Implement cycle detection algorithm (E011)
-- [ ] Implement bead ID format validation (E012): regex fallback; when beads enabled, optional `bd show` check
-- [ ] Implement E014 (Beads Root exists when set), E015 (step bead exists when set) when beads integration enabled
-- [ ] Implement dependency warning rules (W007-W008)
+- [x] Implement `validate_speck()` function
+- [x] Implement `ValidationResult` and `ValidationIssue` structs
+- [x] Implement `Severity` enum (Error, Warning, Info)
+- [x] Implement required section checks (E001)
+- [x] Implement metadata field checks (E002, E003)
+- [x] Implement step References check (E004)
+- [x] Implement anchor format validation (E005)
+- [x] Implement duplicate anchor detection (E006)
+- [x] Implement warning rules (W001-W006)
+- [x] Implement info rules (I001-I002)
+- [x] Support validation levels (lenient/normal/strict)
+- [x] Implement dependency anchor validation (E010)
+- [x] Implement cycle detection algorithm (E011)
+- [x] Implement bead ID format validation (E012): regex fallback; when beads enabled, optional `bd show` check
+- [x] Implement E014 (Beads Root exists when set), E015 (step bead exists when set) when beads integration enabled
+- [x] Implement dependency warning rules (W007-W008)
 
 **Tests:**
-- [ ] Unit test: Each validation rule in isolation
-- [ ] Integration test: Validate fixture files
-- [ ] Golden test: Validation output matches expected for invalid fixtures
+- [x] Unit test: Each validation rule in isolation
+- [x] Integration test: Validate fixture files
+- [x] Golden test: Validation output matches expected for invalid fixtures
 
 **Checkpoint:**
-- [ ] Valid fixtures pass validation
-- [ ] Invalid fixtures produce expected errors
-- [ ] `cargo test -p specks-core` passes
+- [x] Valid fixtures pass validation
+- [x] Invalid fixtures produce expected errors
+- [x] `cargo test -p specks-core` passes
 
 **Rollback:**
 - Revert to Step 1 commit

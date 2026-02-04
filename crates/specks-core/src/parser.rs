@@ -495,17 +495,16 @@ enum CurrentSection {
     Other,
 }
 
-/// Convert a value to Option, returning None if empty or placeholder
+/// Convert a value to Option, returning None only if empty
+/// Per spec: TBD is considered "present" for Owner and Tracking fields
+/// Per spec: <...> placeholders are stored but generate a warning
 fn non_empty_value(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed == "TBD" || trimmed.starts_with('<') && trimmed.ends_with('>')
-    {
-        // Note: TBD is considered "present" per the spec, but we store the actual value
-        if trimmed == "TBD" {
-            return Some("TBD".to_string());
-        }
+    if trimmed.is_empty() {
         None
     } else {
+        // Store all non-empty values including TBD and placeholders
+        // Validation will handle warnings for placeholders
         Some(trimmed.to_string())
     }
 }

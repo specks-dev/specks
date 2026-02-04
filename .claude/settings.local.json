@@ -5,7 +5,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(cargo build:*)",
       "Bash(cargo test:*)",
-      "Bash(./target/debug/specks:*)"
+      "Bash(./target/debug/specks:*)",
+      "Bash(cargo clippy:*)"
     ]
   }
 }

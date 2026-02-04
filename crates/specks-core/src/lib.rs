@@ -24,4 +24,7 @@ pub use types::{
     Anchor, BeadsHints, Checkpoint, CheckpointKind, Decision, Question, Speck, SpeckMetadata,
     SpeckStatus, Step, Substep,
 };
-pub use validator::{Severity, ValidationIssue, ValidationResult};
+pub use validator::{
+    validate_speck, validate_speck_with_config, Severity, ValidationConfig, ValidationIssue,
+    ValidationLevel, ValidationResult,
+};
