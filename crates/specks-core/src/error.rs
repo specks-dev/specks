@@ -93,9 +93,17 @@ pub enum SpecksError {
     #[error("feature not implemented: {0}")]
     NotImplemented(String),
 
-    /// Beads CLI not installed
+    /// Beads CLI not installed (exit code 5)
     #[error("beads CLI not installed or not found")]
-    BeadsCliNotFound,
+    BeadsNotInstalled,
+
+    /// Beads command failed
+    #[error("beads command failed: {0}")]
+    BeadsCommand(String),
+
+    /// Step anchor not found
+    #[error("step anchor not found: {0}")]
+    StepAnchorNotFound(String),
 }
 
 impl SpecksError {
@@ -120,7 +128,9 @@ impl SpecksError {
             SpecksError::Config(_) => "E004", // Config errors
             SpecksError::Parse { .. } => "E001",
             SpecksError::NotImplemented(_) => "E003", // Feature not implemented
-            SpecksError::BeadsCliNotFound => "E005",  // Beads CLI error
+            SpecksError::BeadsNotInstalled => "E005", // Beads CLI error
+            SpecksError::BeadsCommand(_) => "E016",   // Beads command error
+            SpecksError::StepAnchorNotFound(_) => "E017", // Step anchor not found
         }
     }
 
@@ -159,7 +169,11 @@ impl SpecksError {
 
             SpecksError::Config(_) => 4, // Configuration error
 
-            SpecksError::BeadsCliNotFound => 5, // Beads CLI not installed
+            SpecksError::BeadsNotInstalled => 5, // Beads CLI not installed
+
+            SpecksError::BeadsCommand(_) => 1, // Beads command error
+
+            SpecksError::StepAnchorNotFound(_) => 2, // Step anchor not found
 
             SpecksError::NotInitialized => 9, // .specks not initialized
 

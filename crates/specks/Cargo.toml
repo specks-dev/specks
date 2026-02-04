@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Agent-centric technical specifications CLI"
+description = "From ideas to implementation via multi-agent orchestration"
 
 [[bin]]
 name = "specks"
@@ -17,6 +17,7 @@ serde_json.workspace = true
 toml.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+regex.workspace = true
 specks-core.workspace = true
 
 [dev-dependencies]

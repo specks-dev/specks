@@ -8,7 +8,13 @@
       "Bash(./target/debug/specks:*)",
       "Bash(cargo clippy:*)",
       "WebSearch",
-      "Bash(cargo nextest run:*)"
+      "Bash(cargo nextest run:*)",
+      "Bash(cargo run:*)",
+      "Bash(for f in tests/fixtures/valid/*.md)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(echo:*)"
     ]
   }
 }

@@ -6,6 +6,187 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-1.md] Vision Update: From Specifications to Implementation | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- All files containing old "technical specifications" messaging
+- CLI help text and Cargo.toml descriptions
+- README.md and CLAUDE.md project descriptions
+- Agent definitions (planner, director, architect)
+- specks-1.md Phase title, Purpose, Context, Strategy, Deliverables
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update CLI about/long_about with new vision | Done |
+| Update Cargo.toml description | Done |
+| Update README.md tagline and description | Done |
+| Update CLAUDE.md project overview | Done |
+| Update parser.rs module doc comment | Done |
+| Update specks-planner.md description | Done |
+| Update specks-1.md Phase title and Purpose | Done |
+| Update specks-1.md Context and Strategy sections | Done |
+| Update specks-1.md Stakeholders and Deliverables | Done |
+
+**Files Modified:**
+- `crates/specks/src/cli.rs` - New vision in CLI help text
+- `crates/specks/src/main.rs` - Updated module doc comment
+- `crates/specks/Cargo.toml` - Updated package description
+- `README.md` - New tagline: "From ideas to implementation via multi-agent orchestration"
+- `CLAUDE.md` - Updated project overview
+- `crates/specks-core/src/parser.rs` - Updated module doc comment
+- `agents/specks-planner.md` - Updated agent description
+- `.specks/specks-1.md` - Updated Phase title, Purpose, Context, Strategy, Stakeholders, Deliverables
+
+**Test Results:**
+- `cargo nextest run`: 74 tests passed
+
+**Checkpoints Verified:**
+- No remaining "technical specifications" references: PASS
+- CLI --help shows new vision: PASS
+- All tests pass after changes: PASS
+
+**Key Decisions/Notes:**
+- Old vision: "Agent-centric technical specifications CLI"
+- New vision: "From ideas to implementation via multi-agent orchestration"
+- Key message shift: specks doesn't just create specifications—it transforms ideas into working software through the full multi-agent lifecycle
+
+---
+
+## [specks-1.md] Step 6: Beads Integration Commands | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- [D10] Beads-compatible step dependencies
+- Specs S06-S09 (beads sync, link, status, pull)
+- #cli-structure - Command hierarchy
+- #beads-json-contract-normative - JSON parsing rules
+- Existing CLI command patterns in crates/specks/src/commands/
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Implement BeadsCommands enum and subcommand routing | Done |
+| Implement beads context discovery (.beads/ check) | Done |
+| Implement specks beads sync (Spec S06) | Done |
+| - Create/verify root bead with Beads Root writeback | Done |
+| - Create step beads as children of root | Done |
+| - Optional substep beads with --substeps children | Done |
+| - Converge existing beads, recreate if deleted | Done |
+| - Parse JSON per Beads JSON Contract | Done |
+| Implement dependency edge creation via bd dep add | Done |
+| Implement bead ID writeback to speck files | Done |
+| Implement specks beads link (Spec S07) | Done |
+| Implement specks beads status (Spec S08) | Done |
+| Implement specks beads pull (Spec S09) | Done |
+| Handle beads CLI not installed (exit code 5) | Done |
+| Handle beads not initialized (exit code 13, E013) | Done |
+
+**Files Created:**
+- `crates/specks/src/commands/beads/mod.rs` - BeadsCommands enum and routing
+- `crates/specks/src/commands/beads/sync.rs` - Sync command (Spec S06)
+- `crates/specks/src/commands/beads/link.rs` - Link command (Spec S07)
+- `crates/specks/src/commands/beads/status.rs` - Status command (Spec S08)
+- `crates/specks/src/commands/beads/pull.rs` - Pull command (Spec S09)
+- `crates/specks-core/src/beads.rs` - BeadsCli wrapper, types, JSON contract
+- `crates/specks-core/tests/beads_tests.rs` - Beads unit tests
+
+**Files Modified:**
+- `crates/specks/src/cli.rs` - Added Beads subcommand variant
+- `crates/specks/src/main.rs` - Added beads command handling
+- `crates/specks/src/commands/mod.rs` - Added beads module exports
+- `crates/specks/Cargo.toml` - Added regex dependency
+- `crates/specks-core/src/lib.rs` - Added beads module export
+- `crates/specks-core/src/error.rs` - Added BeadsNotInstalled, BeadsCommand, StepAnchorNotFound errors
+- `tests/bin/bd-fake` - Added close, ready, sync, --version commands
+- `.specks/specks-1.md` - Checked off all Step 6 tasks and checkpoints
+
+**Test Results:**
+- `cargo nextest run`: 74 tests passed (6 new beads tests)
+- E013 error test: exit code 13 when .beads/ not found
+
+**Checkpoints Verified:**
+- specks beads sync creates root and step beads: PASS
+- Bead IDs written to correct positions in speck: PASS
+- Re-running sync converges (idempotent): PASS
+- specks beads status parses JSON array or object: PASS
+- specks beads pull updates checkboxes: PASS
+- E013 validation when beads not initialized: PASS
+
+**Key Decisions/Notes:**
+- BeadsCli wrapper in specks-core handles all bd CLI interactions
+- JSON parsing handles both array and object responses per Beads JSON Contract
+- Sync is idempotent—recreates beads if deleted, skips if already exists
+- Pull defaults to updating only Checkpoint items, configurable via config.toml
+
+---
+
+## [specks-1.md] Step 5: Test Fixtures and Documentation | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- #documentation-plan - README, help text, agent suite docs, CLAUDE.md section
+- #test-fixtures - Fixture directory structure with valid/, invalid/, golden/
+- `.specks/specks-skeleton.md` - Speck format specification for fixture compliance
+- `crates/specks/src/cli.rs` - CLI help text structure
+- `crates/specks-core/tests/integration_tests.rs` - Existing test patterns
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create tests/fixtures/valid/ directory with valid specks | Done |
+| Create tests/fixtures/invalid/ directory with invalid specks | Done |
+| Create golden output files for validation | Done |
+| Write README.md with installation, usage, agent workflow | Done |
+| Review and improve all --help text | Done |
+| Add CLAUDE.md section for specks conventions | Done |
+| Create example speck demonstrating agent output | Done |
+
+**Files Created:**
+- `tests/fixtures/valid/complete.md` - Comprehensive speck with all sections populated
+- `tests/fixtures/valid/with-substeps.md` - Demonstrates substep pattern (Step 2.1, 2.2, 2.3)
+- `tests/fixtures/valid/agent-output-example.md` - Shows bead IDs and checked checkboxes
+- `tests/fixtures/invalid/duplicate-anchors.md` - Dedicated E006 duplicate anchor test
+- `tests/fixtures/invalid/missing-references.md` - Tests broken references (E010)
+- `tests/fixtures/invalid/bad-anchors.md` - Copy of invalid-anchors for spec compliance
+- `tests/fixtures/golden/minimal.validated.json` - Golden output for minimal fixture
+- `tests/fixtures/golden/complete.validated.json` - Golden output for complete fixture
+- `tests/fixtures/golden/missing-metadata.validated.json` - Golden output for missing-metadata
+- `tests/fixtures/golden/duplicate-anchors.validated.json` - Golden output for duplicate-anchors
+- `README.md` - Installation, usage, agent workflow documentation
+- `CLAUDE.md` - Claude Code guidelines and specks conventions
+
+**Files Modified:**
+- `crates/specks/src/cli.rs` - Updated help text to mention multi-agent suite; added detailed long_about for each subcommand
+- `crates/specks-core/tests/integration_tests.rs` - Added golden tests module, tests for new fixtures, full workflow integration test
+- `.specks/specks-1.md` - Checked off all Step 5 tasks and checkpoints
+
+**Test Results:**
+- `cargo nextest run`: 66 tests passed (10 new tests added)
+- All valid fixtures validate with no errors
+- All invalid fixtures produce expected errors
+
+**Checkpoints Verified:**
+- All fixtures validate as expected: PASS
+- README covers all commands and agent workflow: PASS
+- `specks --help` is clear and complete: PASS
+- Example speck validates successfully: PASS (with expected beads warnings)
+
+**Key Decisions/Notes:**
+- "Step 2 Summary" pattern in with-substeps.md required renaming to "Substeps 2.1–2.3 Summary" to avoid being parsed as a step header
+- Agent-output-example.md shows bead IDs which generate warnings when beads not enabled (expected behavior)
+- Golden tests compare validation results against expected JSON snapshots
+- Full workflow integration test validates all fixtures in both valid/ and invalid/ directories
+
+---
+
 ## [specks-1.md] Step 4: Director + Planning Agents | COMPLETE | 2026-02-04
 
 **Completed:** 2026-02-04

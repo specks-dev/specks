@@ -1,6 +1,6 @@
 //! Speck file parsing
 //!
-//! Parses speck files (structured technical specifications) from Markdown content.
+//! Parses speck files (structured plans for multi-agent implementation) from Markdown content.
 //! The parser extracts:
 //! - Plan metadata (owner, status, target branch, etc.)
 //! - Anchors for cross-referencing

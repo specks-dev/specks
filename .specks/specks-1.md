@@ -1,6 +1,6 @@
-## Phase 1.0: Specks - Agent-Centric Technical Specifications {#phase-1}
+## Phase 1.0: Specks - From Ideas to Implementation {#phase-1}
 
-**Purpose:** Deliver an agent-centric system for transforming ideas into comprehensive, actionable technical specifications. A suite of specialized agents—orchestrated by a central director—produces, validates, implements, and tracks specks conforming to a defined format, supported by CLI utilities for validation, listing, and status tracking.
+**Purpose:** Deliver a multi-agent system that transforms ideas into working software. A suite of specialized agents—orchestrated by a central director—plans, implements, reviews, and tracks work to completion, supported by CLI utilities for validation, progress tracking, and beads integration.
 
 ---
 
@@ -21,26 +21,28 @@
 
 #### Context {#context}
 
-Specks is a system for turning ideas into actionable technical specifications via LLM agents. The core value is the **multi-agent suite**—a team of specialized agents orchestrated by a central **director** agent. The planner takes brief ideas or detailed descriptions, explores codebases, asks clarifying questions, and produces comprehensive specks. The architect designs implementation strategies. The implementer writes code while the monitor watches for drift. The reviewer and auditor provide quality gates. The logger and committer handle documentation and commits.
+Specks transforms ideas into working software through orchestrated LLM agents. The core value is the **multi-agent suite**—a team of specialized agents orchestrated by a central **director** agent that handles the full lifecycle from planning through implementation and delivery.
 
-The skeleton (`.specks/specks-skeleton.md`) defines a **format specification**, not a template for mechanical substitution. It establishes what a good speck looks like: structured sections for decisions, specifications, execution steps, and validation criteria. The CLI provides utilities to support the workflow: initializing projects, validating speck structure, listing specks, and tracking completion status.
+The **planner** takes brief ideas or detailed descriptions, explores codebases, asks clarifying questions, and produces comprehensive specks (structured implementation plans). The **architect** designs implementation strategies with expected file changes. The **implementer** writes code while the **monitor** watches for drift. The **reviewer** and **auditor** provide quality gates. The **logger** and **committer** handle documentation and commits.
 
-This approach differs from template-based documentation tools. The intelligence lives in the agent suite, which understands context, asks the right questions, and produces specifications tailored to each project and feature. The CLI ensures specks conform to the format and provides visibility into progress.
+The skeleton (`.specks/specks-skeleton.md`) defines a **format specification** for specks—structured sections for decisions, specifications, execution steps, and validation criteria. The CLI provides utilities to support the workflow: initializing projects, validating speck structure, listing specks, tracking completion status, and integrating with beads for execution tracking.
+
+This approach differs from documentation tools or static templates. The intelligence lives in the agent suite, which understands context, makes decisions, writes code, and delivers working software. The CLI ensures specks conform to the format and provides visibility into progress.
 
 #### Strategy {#strategy}
 
-- **Agent-first**: The multi-agent suite (director, planner, architect, implementer, etc.) is the primary interface for creating and executing specifications
-- **Director as orchestrator**: All agents report to the director; the director makes all decisions
-- **Format over template**: The skeleton defines structure and conventions, not fill-in-the-blank text
-- **CLI as utility layer**: Commands support the workflow without replacing agent-driven creation
-- **Validation as quality gate**: Ensure specks conform to the format for consistency and tooling
+- **Agent-first**: The multi-agent suite (director, planner, architect, implementer, etc.) is the primary interface for creating plans and executing them to completion
+- **Director as orchestrator**: All agents report to the director; the director makes all decisions and coordinates the full lifecycle
+- **Plan → Implement → Deliver**: Specks are implementation plans that get executed by the agent suite, not documentation to be read
+- **CLI as utility layer**: Commands support the workflow with validation, progress tracking, and beads integration
+- **Quality gates throughout**: Reviewer and auditor agents ensure work meets standards before completion
 - **Standalone operation**: CLI works independently; Claude Code integration is one usage pattern
 
 #### Stakeholders / Primary Customers {#stakeholders}
 
-1. Developers using LLM agents to plan complex features before implementation
-2. Teams wanting structured, consistent technical specifications
-3. AI coding assistants that produce and implement from specifications
+1. Developers using LLM agents to plan and implement complex features
+2. Teams wanting structured, agent-driven software development
+3. AI coding assistants that need orchestrated multi-agent workflows
 
 #### Success Criteria (Measurable) {#success-criteria}
 
@@ -2088,23 +2090,23 @@ tests/fixtures/
 - CLI help improvements
 
 **Tasks:**
-- [ ] Create tests/fixtures/valid/ directory with valid specks
-- [ ] Create tests/fixtures/invalid/ directory with invalid specks
-- [ ] Create golden output files for validation
-- [ ] Write README.md with installation, usage, agent workflow
-- [ ] Review and improve all --help text
-- [ ] Add CLAUDE.md section for specks conventions
-- [ ] Create example speck demonstrating agent output
+- [x] Create tests/fixtures/valid/ directory with valid specks
+- [x] Create tests/fixtures/invalid/ directory with invalid specks
+- [x] Create golden output files for validation
+- [x] Write README.md with installation, usage, agent workflow
+- [x] Review and improve all --help text
+- [x] Add CLAUDE.md section for specks conventions
+- [x] Create example speck demonstrating agent output
 
 **Tests:**
-- [ ] Golden tests for all fixtures
-- [ ] Integration test: Full workflow (init, validate, list, status)
+- [x] Golden tests for all fixtures
+- [x] Integration test: Full workflow (init, validate, list, status)
 
 **Checkpoint:**
-- [ ] All fixtures validate as expected
-- [ ] README covers all commands and agent workflow
-- [ ] `specks --help` is clear and complete
-- [ ] Example speck validates successfully
+- [x] All fixtures validate as expected
+- [x] README covers all commands and agent workflow
+- [x] `specks --help` is clear and complete
+- [x] Example speck validates successfully
 
 **Rollback:**
 - Revert to Step 4 commit
@@ -2128,45 +2130,45 @@ tests/fixtures/
 - Two-way sync between beads and checkboxes
 
 **Tasks:**
-- [ ] Implement `BeadsCommands` enum and subcommand routing
-- [ ] Implement beads context discovery (check for `.beads/` directory)
-- [ ] Implement `specks beads sync` command (Spec S06)
-  - [ ] Create or verify root bead (`bd create --type epic` or config `root_issue_type`); write `**Beads Root:**` to Plan Metadata
-  - [ ] Create step beads as children of root (`bd create --parent <root-id>`)
-  - [ ] Optional: create child beads for substeps (`--substeps children`)
-  - [ ] Converge existing beads (update title, description, edges); reconcile deps via `bd dep list`
-  - [ ] Handle case where bead ID exists but bead was deleted (recreate, replace ID)
-  - [ ] Parse `bd create` / `bd show` / `bd dep list` JSON per Beads JSON Contract (array or single object)
-- [ ] Implement dependency edge creation via `bd dep add`; use `bd dep list <id> --json` for reconciliation when `--prune-deps`
-- [ ] Implement bead ID writeback: Beads Root in Plan Metadata; per-step `**Bead:**` after `**Depends on:**`, before `**Commit:**`; update in place
-- [ ] Implement `specks beads link` command (Spec S07)
-- [ ] Implement `specks beads status` command (Spec S08)
-- [ ] Implement `specks beads pull` command (Spec S09)
-  - [ ] Update checkboxes based on bead completion
-  - [ ] Support `--pull` flag on status command as alternative
-- [ ] Handle beads CLI not installed gracefully (exit code 5)
-- [ ] Handle beads not initialized (exit code 13, E013)
+- [x] Implement `BeadsCommands` enum and subcommand routing
+- [x] Implement beads context discovery (check for `.beads/` directory)
+- [x] Implement `specks beads sync` command (Spec S06)
+  - [x] Create or verify root bead (`bd create --type epic` or config `root_issue_type`); write `**Beads Root:**` to Plan Metadata
+  - [x] Create step beads as children of root (`bd create --parent <root-id>`)
+  - [x] Optional: create child beads for substeps (`--substeps children`)
+  - [x] Converge existing beads (update title, description, edges); reconcile deps via `bd dep list`
+  - [x] Handle case where bead ID exists but bead was deleted (recreate, replace ID)
+  - [x] Parse `bd create` / `bd show` / `bd dep list` JSON per Beads JSON Contract (array or single object)
+- [x] Implement dependency edge creation via `bd dep add`; use `bd dep list <id> --json` for reconciliation when `--prune-deps`
+- [x] Implement bead ID writeback: Beads Root in Plan Metadata; per-step `**Bead:**` after `**Depends on:**`, before `**Commit:**`; update in place
+- [x] Implement `specks beads link` command (Spec S07)
+- [x] Implement `specks beads status` command (Spec S08)
+- [x] Implement `specks beads pull` command (Spec S09)
+  - [x] Update checkboxes based on bead completion
+  - [x] Support `--pull` flag on status command as alternative
+- [x] Handle beads CLI not installed gracefully (exit code 5)
+- [x] Handle beads not initialized (exit code 13, E013)
 
 **Tests:**
-- [ ] Integration test: sync creates beads with correct titles
-- [ ] Integration test: sync creates child beads for substeps when enabled
-- [ ] Integration test: sync creates dependency edges
-- [ ] Integration test: sync writes bead IDs back to file in correct position
-- [ ] Integration test: re-running sync converges (idempotent)
-- [ ] Integration test: sync handles deleted beads (recreates)
-- [ ] Integration test: link updates speck file
-- [ ] Integration test: status shows correct bead states
-- [ ] Integration test: pull updates checkboxes from bead completion
-- [ ] Error test: E013 when `.beads/` not found
+- [x] Integration test: sync creates beads with correct titles
+- [x] Integration test: sync creates child beads for substeps when enabled
+- [x] Integration test: sync creates dependency edges
+- [x] Integration test: sync writes bead IDs back to file in correct position
+- [x] Integration test: re-running sync converges (idempotent)
+- [x] Integration test: sync handles deleted beads (recreates)
+- [x] Integration test: link updates speck file
+- [x] Integration test: status shows correct bead states
+- [x] Integration test: pull updates checkboxes from bead completion
+- [x] Error test: E013 when `.beads/` not found
 
 **Checkpoint:**
-- [ ] `specks beads sync` creates root bead and step beads (and substeps when enabled)
-- [ ] `**Beads Root:**` and `**Bead:**` IDs appear in speck file after sync in correct positions
-- [ ] Re-running sync converges (idempotent)
-- [ ] `specks beads status` shows step/bead alignment; parses `bd show --json` as array or object
-- [ ] `specks beads pull` updates checkboxes from bead completion
-- [ ] Dependencies in beads match speck dependencies
-- [ ] E013 / E014 / E015 validation when beads enabled
+- [x] `specks beads sync` creates root bead and step beads (and substeps when enabled)
+- [x] `**Beads Root:**` and `**Bead:**` IDs appear in speck file after sync in correct positions
+- [x] Re-running sync converges (idempotent)
+- [x] `specks beads status` shows step/bead alignment; parses `bd show --json` as array or object
+- [x] `specks beads pull` updates checkboxes from bead completion
+- [x] Dependencies in beads match speck dependencies
+- [x] E013 / E014 / E015 validation when beads enabled
 
 **Rollback:**
 - Revert to Step 5 commit
@@ -2432,7 +2434,7 @@ If any agent fails or produces incorrect output:
 
 ### 1.0.6 Deliverables and Checkpoints {#deliverables}
 
-**Deliverable:** An agent-centric system for creating and managing technical specifications, consisting of a nine-agent suite (director, planner, architect, implementer, monitor, reviewer, auditor, logger, committer) for speck creation and execution, plus CLI utilities for validation and status tracking.
+**Deliverable:** A multi-agent system that transforms ideas into working software, consisting of a nine-agent suite (director, planner, architect, implementer, monitor, reviewer, auditor, logger, committer) for planning, implementation, review, and delivery, plus CLI utilities for validation, progress tracking, and beads integration.
 
 #### Phase Exit Criteria ("Done means...") {#exit-criteria}
 

@@ -152,6 +152,56 @@ cmd_init() {
   echo "Initialized bd-fake state at $STATE_DIR"
 }
 
+cmd_close() {
+  need_jq
+  init_state
+  local id="$1"
+  shift
+  [[ -z "$id" ]] && { echo "bd-fake: close requires id" >&2; exit 1; }
+  local reason=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reason) reason="$2"; shift 2 ;;
+      --json) shift ;;
+      *) shift ;;
+    esac
+  done
+  # Update issue status to closed
+  local updated
+  updated=$(jq -r --arg id "$id" '.[$id].status = "closed"' "$ISSUES_JSON")
+  echo "$updated" > "$ISSUES_JSON"
+}
+
+cmd_ready() {
+  need_jq
+  init_state
+  local parent=""
+  local json_output=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --parent) parent="$2"; shift 2 ;;
+      --json) json_output="true"; shift ;;
+      *) shift ;;
+    esac
+  done
+  # Return open issues with no unmet deps (simplified)
+  # For now, return all open issues under the parent
+  if [[ -n "$parent" ]]; then
+    jq -c --arg p "$parent" '[to_entries[] | select(.key | startswith($p + ".")) | select(.value.status == "open") | .value]' "$ISSUES_JSON"
+  else
+    jq -c '[to_entries[] | select(.value.status == "open") | .value]' "$ISSUES_JSON"
+  fi
+}
+
+cmd_sync() {
+  # No-op in mock (state already persisted)
+  :
+}
+
+cmd_version() {
+  echo "bd-fake 1.0.0 (mock for specks testing)"
+}
+
 # Parse global --json for create/show/dep
 SUBCMD="${1:-}"
 shift || true
@@ -169,8 +219,13 @@ case "$SUBCMD" in
     esac
     ;;
   init)     cmd_init "$@" ;;
+  close)    cmd_close "$@" ;;
+  ready)    cmd_ready "$@" ;;
+  sync)     cmd_sync "$@" ;;
+  --version) cmd_version ;;
+  -v)       cmd_version ;;
   *)
-    echo "bd-fake: unknown command $SUBCMD (create|show|dep|init)" >&2
+    echo "bd-fake: unknown command $SUBCMD (create|show|dep|init|close|ready|sync)" >&2
     exit 1
     ;;
 esac
