@@ -6,6 +6,55 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-1.md] Spec Refinement: Multi-Agent Architecture Finalization | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- [D11] Commit policy - clarified auto vs manual behavior
+- [D12] Multi-agent architecture - nine-agent suite design
+- [D13] Reviewer vs Auditor - complementary quality gates
+- [D14] Cooperative halt protocol - signal files + interactive cancellation
+- [D15] Run persistence - UUID-based directories
+- [D16] Director invocation protocol
+- [C03-C08] Deep dives on agent suite, planning flow, execution flow, monitor protocol, escalation paths, agent definition format
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Hard pivot to multi-agent suite (remove specks-author/specks-builder legacy) | Done |
+| Clarify commit-policy=auto is commit-only (no push/PR) | Done |
+| Update D15 run retention: .specks/runs/ always gitignored | Done |
+| Add architect expected_touch_set contract for objective drift detection | Done |
+| Update C06 monitor drift detection with expected_touch_set | Done |
+| Update S01 init to create runs/ and add to .gitignore | Done |
+| Add Step 9: End-to-End Validation | Done |
+| Add Milestone M07: End-to-End Validation as phase gate | Done |
+| Update exit criteria to require Step 9 completion | Done |
+
+**Files Modified:**
+- `.specks/specks-1.md` - Major spec refinements:
+  - D11: Added Phase 1 constraint (commit only, never push)
+  - D15: Changed runs/ to MUST be gitignored, no retention policy
+  - C04: Added architect expected_touch_set contract with YAML example
+  - C06: Added Detection Method column referencing expected_touch_set
+  - S01: Init now creates runs/ and appends to .gitignore
+  - Step 4: Added expected_touch_set to architect tasks/checkpoints
+  - Step 8: Added expected_touch_set comparison to monitor tasks
+  - Added Step 9: End-to-End Validation (full pipeline test on real feature)
+  - Added Milestone M07 as phase completion gate
+  - Updated exit criteria and acceptance tests
+
+**Key Decisions/Notes:**
+- **Commit-policy=auto**: Phase 1 commits only, never pushes or opens PRs. Push/PR automation deferred to Phase 2+.
+- **Run retention**: .specks/runs/ is always gitignored, never committed. Runs accumulate until user deletes manually.
+- **Architect expected_touch_set**: Machine-readable YAML block (create/modify/directories) enables objective drift detection by monitor. Eliminates subjective pattern-matching.
+- **Step 9**: Added as mandatory phase gate. Can't declare Phase 1 complete without proving the full pipeline works on a real feature (`specks version --verbose`).
+- **Cooperative halt remains the baseline**: Claude Code doesn't expose programmatic subagent cancellation, so signal files + implementer discipline is the reliable mechanism. Interactive cancellation is best-effort accelerator.
+
+---
+
 ## [specks-1.md] Step 3: CLI Framework and Commands | COMPLETE | 2026-02-04
 
 **Completed:** 2026-02-04

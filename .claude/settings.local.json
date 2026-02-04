@@ -6,7 +6,8 @@
       "Bash(cargo build:*)",
       "Bash(cargo test:*)",
       "Bash(./target/debug/specks:*)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "WebSearch"
     ]
   }
 }
