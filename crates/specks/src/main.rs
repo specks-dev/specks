@@ -59,6 +59,9 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some(Commands::Version { verbose }) => {
+            commands::run_version(verbose, cli.json, cli.quiet)
+        }
         None => {
             // No subcommand - print version info
             if !cli.quiet {

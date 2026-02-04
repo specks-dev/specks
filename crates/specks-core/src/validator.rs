@@ -24,6 +24,20 @@ static VALID_BEAD_ID: LazyLock<Regex> =
 static PLACEHOLDER_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^<[^>]+>$").unwrap());
 
+/// Regex to detect prose-style dependencies (e.g., "Step 0" instead of "#step-0")
+static PROSE_DEPENDENCY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\bstep\s+\d+").unwrap());
+
+/// Regex for valid **References:** format - must contain [DNN] decision citations
+/// Valid: "[D01] Decision name, [D02] Another"
+/// Also valid: "Spec S01", "Table T01", "(#anchor)"
+static DECISION_CITATION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[D\d{2}\]").unwrap());
+
+/// Regex for anchor citations in References (must be in parentheses with # prefix)
+static ANCHOR_CITATION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\(#[a-z0-9-]+(,\s*#[a-z0-9-]+)*\)").unwrap());
+
 /// Result of validating a speck
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResult {
@@ -210,6 +224,12 @@ pub fn validate_speck_with_config(speck: &Speck, config: &ValidationConfig) -> V
 
     // E011: Check for circular dependencies
     check_circular_dependencies(speck, &mut result);
+
+    // E017: Check **Depends on:** format (must use anchor refs like #step-N)
+    check_depends_on_format(speck, &mut result);
+
+    // E018: Check **References:** format (must have [DNN] decision citations)
+    check_references_format(speck, &mut result);
 
     // E012: Check bead ID format (when beads enabled)
     if config.beads_enabled && config.validate_bead_ids {
@@ -546,6 +566,135 @@ fn detect_cycle<'a>(
     path.pop();
     rec_stack.remove(node);
     None
+}
+
+/// E017: Check **Depends on:** format
+/// Must use anchor references like #step-0, not prose like "Step 0"
+fn check_depends_on_format(speck: &Speck, result: &mut ValidationResult) {
+    for step in &speck.steps {
+        // Check if step has dependencies declared but in wrong format
+        if !step.depends_on.is_empty() {
+            // Dependencies should be anchor refs - check if any look like prose
+            for dep in &step.depends_on {
+                // Valid: "step-0", "step-1-2"
+                // Invalid: "Step 0", "step 0", etc.
+                if !dep.starts_with("step-") && !dep.contains('-') {
+                    result.add_issue(
+                        ValidationIssue::new(
+                            "E017",
+                            Severity::Error,
+                            format!(
+                                "Invalid dependency format: '{}' (must be anchor ref like 'step-0', not prose)",
+                                dep
+                            ),
+                        )
+                        .at_line(step.line)
+                        .with_anchor(&step.anchor),
+                    );
+                }
+            }
+        }
+
+        // Also check substeps
+        for substep in &step.substeps {
+            for dep in &substep.depends_on {
+                if !dep.starts_with("step-") && !dep.contains('-') {
+                    result.add_issue(
+                        ValidationIssue::new(
+                            "E017",
+                            Severity::Error,
+                            format!(
+                                "Invalid dependency format: '{}' (must be anchor ref like 'step-0', not prose)",
+                                dep
+                            ),
+                        )
+                        .at_line(substep.line)
+                        .with_anchor(&substep.anchor),
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// E018: Check **References:** format
+/// Must contain decision citations in [DNN] format (e.g., [D01], [D02])
+fn check_references_format(speck: &Speck, result: &mut ValidationResult) {
+    for step in &speck.steps {
+        if let Some(refs) = &step.references {
+            // Check for decision citations [DNN]
+            let has_decision_citation = DECISION_CITATION.is_match(refs);
+
+            // Check for anchor citations (#anchor) in parentheses
+            let has_anchor_citation = ANCHOR_CITATION.is_match(refs);
+
+            // Check for vague references
+            let is_vague = refs.to_lowercase().contains("see above")
+                || refs.to_lowercase().contains("n/a")
+                || refs.to_lowercase().contains("see below")
+                || refs.to_lowercase().contains("see design")
+                || refs.trim().is_empty();
+
+            // References should have decision citations OR anchor citations, not be vague
+            if is_vague && !has_decision_citation && !has_anchor_citation {
+                result.add_issue(
+                    ValidationIssue::new(
+                        "E018",
+                        Severity::Error,
+                        format!(
+                            "Step {} has vague References '{}' (must cite [DNN] decisions or (#anchor) refs)",
+                            step.number, refs
+                        ),
+                    )
+                    .at_line(step.line)
+                    .with_anchor(&step.anchor),
+                );
+            }
+
+            // Check for prose-style dependency mentions in References (should be in Depends on)
+            if PROSE_DEPENDENCY.is_match(refs) && !has_decision_citation {
+                result.add_issue(
+                    ValidationIssue::new(
+                        "E018",
+                        Severity::Error,
+                        format!(
+                            "Step {} References contains prose step reference '{}' (use [DNN] format for decisions, (#anchor) for section refs)",
+                            step.number, refs
+                        ),
+                    )
+                    .at_line(step.line)
+                    .with_anchor(&step.anchor),
+                );
+            }
+        }
+
+        // Also check substeps
+        for substep in &step.substeps {
+            if let Some(refs) = &substep.references {
+                let has_decision_citation = DECISION_CITATION.is_match(refs);
+                let has_anchor_citation = ANCHOR_CITATION.is_match(refs);
+                let is_vague = refs.to_lowercase().contains("see above")
+                    || refs.to_lowercase().contains("n/a")
+                    || refs.to_lowercase().contains("see below")
+                    || refs.trim().is_empty();
+
+                if is_vague && !has_decision_citation && !has_anchor_citation {
+                    result.add_issue(
+                        ValidationIssue::new(
+                            "E018",
+                            Severity::Error,
+                            format!(
+                                "Step {} has vague References '{}' (must cite [DNN] decisions or (#anchor) refs)",
+                                substep.number, refs
+                            ),
+                        )
+                        .at_line(substep.line)
+                        .with_anchor(&substep.anchor),
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// E012: Check bead ID format
@@ -1356,5 +1505,87 @@ Question without resolution.
         assert_eq!(result.warning_count(), 1);
         assert_eq!(result.info_count(), 1);
         assert!(!result.valid);
+    }
+
+    #[test]
+    fn test_e018_vague_references() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | draft |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**References:** See above
+
+**Tasks:**
+- [ ] Task
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let e018_issues: Vec<_> = result.issues.iter().filter(|i| i.code == "E018").collect();
+        assert_eq!(e018_issues.len(), 1, "Expected E018 error for vague reference");
+        assert!(e018_issues[0].message.contains("vague"));
+    }
+
+    #[test]
+    fn test_e018_valid_references() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | draft |
+| Last updated | 2026-02-03 |
+
+### Design Decisions {#design-decisions}
+
+#### [D01] Test Decision (DECIDED) {#d01-test}
+
+Decision text.
+
+#### Step 0: Test {#step-0}
+
+**References:** [D01] Test Decision, (#context, #strategy)
+
+**Tasks:**
+- [ ] Task
+
+**Checkpoint:**
+- [ ] Check
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let e018_issues: Vec<_> = result.issues.iter().filter(|i| i.code == "E018").collect();
+        assert!(e018_issues.is_empty(), "Expected no E018 errors for valid references: {:?}", e018_issues);
+    }
+
+    #[test]
+    fn test_decision_citation_regex() {
+        assert!(DECISION_CITATION.is_match("[D01] Test"));
+        assert!(DECISION_CITATION.is_match("[D99] Another"));
+        assert!(DECISION_CITATION.is_match("Some text [D01] more text"));
+        assert!(!DECISION_CITATION.is_match("D01 Test")); // Missing brackets
+        assert!(!DECISION_CITATION.is_match("[D1] Test")); // Single digit
+    }
+
+    #[test]
+    fn test_anchor_citation_regex() {
+        assert!(ANCHOR_CITATION.is_match("(#context)"));
+        assert!(ANCHOR_CITATION.is_match("(#context, #strategy)"));
+        assert!(ANCHOR_CITATION.is_match("(#step-0, #step-1, #step-2)"));
+        assert!(!ANCHOR_CITATION.is_match("#context")); // Missing parens
+        assert!(!ANCHOR_CITATION.is_match("(context)")); // Missing #
     }
 }

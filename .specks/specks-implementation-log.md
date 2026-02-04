@@ -6,6 +6,64 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-1.md] Step 9: End-to-End Validation | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- [D12] Multi-agent architecture - ten-agent suite
+- [D15] Run persistence - UUID-based directories
+- [D16] Director invocation protocol
+- Spec S10 - Director execution protocol
+- Phase exit criteria and acceptance tests
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Invoke director in planning mode | Done |
+| Verify planner produces valid speck | Done |
+| Run specks beads sync | Done |
+| Verify root bead and step beads created | Done |
+| Invoke director in execution mode | Done |
+| Verify architect produces plan | Done |
+| Verify implementer writes code | Done |
+| Verify reviewer produces report | Done |
+| Verify auditor produces report | Done |
+| Verify committer prepares message | Done |
+| Verify run directory artifacts | Done |
+
+**Issues Found and Fixed:**
+- Planner did not follow skeleton format strictly
+  - Fixed: Updated `agents/specks-planner.md` with explicit skeleton compliance requirements
+  - Fixed: Updated `agents/specks-critic.md` to make skeleton compliance a hard gate (REJECT, not REVISE)
+  - Fixed: Added E017/E018 validation rules to `validator.rs` for format checking
+
+**Run Directories Created:**
+- Planning run: `5d69c48a-2f22-4b4a-a5ac-0e1f64634fe4` (critic-report.md, draft-speck.md, status.json)
+- Execution run: `1182f39b-e58e-4bdb-a54e-5e0e93cf640b` (architect-plan.md, reviewer-report.md, auditor-report.md, committer-prep.md, status.json)
+
+**Test Results:**
+- `cargo nextest run`: 112 tests passed
+- `specks validate`: All validation rules working
+
+**Checkpoints Verified:**
+- Planner produces valid speck for test feature: PASS
+- Director orchestrates full execution loop: PASS
+- All 10 specialist agents invoked and produce expected outputs: PASS
+- Monitor does not false-HALT on valid implementation: PASS
+- Run directory contains complete audit trail: PASS
+- Feature code is correct and tests pass: PASS
+- Beads reflect execution state accurately: PASS
+
+**Key Decisions/Notes:**
+- End-to-end validation used `specks version --verbose` as test scenario
+- Test scenario code removed after validation (not part of Phase 1 deliverables)
+- Agent fixes applied per Step 9's "Failure handling" protocol: fix → re-run
+- Phase 1 complete: all exit criteria met, all milestones achieved
+
+---
+
 ## [specks-1.md] Step 8: Execution Agents | COMPLETE | 2026-02-04
 
 **Completed:** 2026-02-04

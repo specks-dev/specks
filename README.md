@@ -1,6 +1,6 @@
 # Specks
 
-From ideas to implementation via multi-agent orchestration. Specks transforms ideas into working software through a suite of specialized LLM agents that plan, implement, review, and track progress to completion.
+Go from ideas to implementation via multi-agent orchestration. Specks transforms ideas into working software through a suite of specialized LLM agents that plan, implement, review, and track progress to completion.
 
 ## Installation
 

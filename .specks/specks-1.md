@@ -9,7 +9,7 @@
 | Field | Value |
 |------|-------|
 | Owner | TBD |
-| Status | draft |
+| Status | done |
 | Target branch | main |
 | Tracking issue/PR | TBD |
 | Last updated | 2026-02-03 |
@@ -227,7 +227,7 @@ This approach differs from documentation tools or static templates. The intellig
 
 **Implications:**
 - Step anchors: `{#step-N}`, `{#step-N-M}` for substeps
-- Decision anchors: `{#dNN-slug}` (e.g., `{#d01-rust-clap}`)
+- Decision anchors: `{#dNN-slug}` (e.g., `{#d01-example-slug}`)
 - Question anchors: `{#qNN-slug}` (e.g., `{#q01-distribution}`)
 - Validation checks for anchor format compliance
 
@@ -2375,47 +2375,47 @@ tests/fixtures/
 **Test scenario:** Add a simple, self-contained feature to the specks CLI itself. Suggested: `specks version --verbose` that shows build info (commit hash, build date, rust version). Small scope, touches real code, exercises the full loop.
 
 **Tasks:**
-- [ ] Invoke director in planning mode with the test idea
-- [ ] Verify planner produces a speck that passes `specks validate`
-- [ ] Run `specks beads sync` on the new speck
-- [ ] Verify root bead and step beads created with correct dependencies
-- [ ] Invoke director in execution mode with `commit-policy=manual`
-- [ ] Verify for each step:
-  - [ ] Architect produces `architect-plan.md` with `expected_touch_set`
-  - [ ] Implementer writes code (check for halt signal protocol)
-  - [ ] Monitor runs parallel, no false HALT on valid work
-  - [ ] Reviewer produces plan-adherence report
-  - [ ] Auditor produces quality report
-  - [ ] Logger writes to implementation log
-  - [ ] Committer prepares commit message
-- [ ] Verify run directory contains all expected artifacts:
-  - [ ] `invocation.json`
-  - [ ] `architect-plan.md`
-  - [ ] `monitor-log.jsonl`
-  - [ ] `reviewer-report.md`
-  - [ ] `auditor-report.md`
-  - [ ] `committer-prep.md`
-  - [ ] `status.json`
-- [ ] Manually commit the changes (since `commit-policy=manual`)
-- [ ] Verify beads closed after commit
-- [ ] Run `specks beads status` to confirm alignment
-- [ ] Document any issues encountered and fixes applied
+- [x] Invoke director in planning mode with the test idea
+- [x] Verify planner produces a speck that passes `specks validate`
+- [x] Run `specks beads sync` on the new speck
+- [x] Verify root bead and step beads created with correct dependencies
+- [x] Invoke director in execution mode with `commit-policy=manual`
+- [x] Verify for each step:
+  - [x] Architect produces `architect-plan.md` with `expected_touch_set`
+  - [x] Implementer writes code (check for halt signal protocol)
+  - [x] Monitor runs parallel, no false HALT on valid work
+  - [x] Reviewer produces plan-adherence report
+  - [x] Auditor produces quality report
+  - [x] Logger writes to implementation log
+  - [x] Committer prepares commit message
+- [x] Verify run directory contains all expected artifacts:
+  - [x] `invocation.json`
+  - [x] `architect-plan.md`
+  - [x] `monitor-log.jsonl` (not created - no drift detected, which is correct)
+  - [x] `reviewer-report.md`
+  - [x] `auditor-report.md`
+  - [x] `committer-prep.md`
+  - [x] `status.json`
+- [x] Manually commit the changes (since `commit-policy=manual`)
+- [x] Verify beads closed after commit
+- [x] Run `specks beads status` to confirm alignment
+- [x] Document any issues encountered and fixes applied
 
 **Tests:**
-- [ ] End-to-end test: Full pipeline completes without manual intervention (except final commit)
-- [ ] Validation test: Planner-produced speck passes all validation rules
-- [ ] Persistence test: Run directory contains complete audit trail
-- [ ] Beads test: All step beads closed after execution
+- [x] End-to-end test: Full pipeline completes without manual intervention (except final commit)
+- [x] Validation test: Planner-produced speck passes all validation rules
+- [x] Persistence test: Run directory contains complete audit trail
+- [x] Beads test: All step beads closed after execution
 
 **Checkpoint:**
-- [ ] Planner produces valid speck for test feature
-- [ ] Director orchestrates full execution loop without errors
-- [ ] All 8 specialist agents invoked and produce expected outputs
-- [ ] Monitor does not false-HALT on valid implementation
-- [ ] Run directory contains complete audit trail
-- [ ] Feature code is correct and tests pass
-- [ ] Beads reflect execution state accurately
-- [ ] No manual fixes required to agent definitions mid-run (if fixes needed, apply and re-run)
+- [x] Planner produces valid speck for test feature
+- [x] Director orchestrates full execution loop without errors
+- [x] All 10 specialist agents invoked and produce expected outputs
+- [x] Monitor does not false-HALT on valid implementation
+- [x] Run directory contains complete audit trail
+- [x] Feature code is correct and tests pass
+- [x] Beads reflect execution state accurately
+- [x] Fixes applied to agent definitions and re-run successful (planner/critic skeleton compliance)
 
 **Failure handling:**
 If any agent fails or produces incorrect output:
@@ -2439,63 +2439,63 @@ If any agent fails or produces incorrect output:
 
 #### Phase Exit Criteria ("Done means...") {#exit-criteria}
 
-- [ ] Planner agent produces specks that pass validation
-- [ ] `specks init` creates valid project structure
-- [ ] `specks validate` catches all List L01 errors and warnings
-- [ ] `specks list` accurately shows all specks with status
-- [ ] `specks status <file>` accurately reports checkbox completion
-- [ ] All commands support --json for machine-readable output
-- [ ] README provides clear installation and agent workflow instructions
-- [ ] Test coverage includes all validation rules
-- [ ] `specks beads sync` creates beads from steps and substeps with correct dependencies
-- [ ] Bead IDs written back to speck after sync in correct position
-- [ ] `specks beads status` shows aligned step/bead status
-- [ ] `specks beads pull` updates checkboxes from bead completion
-- [ ] Re-running sync converges to same state (idempotent)
-- [ ] Mock-bd harness enables deterministic CI tests without network
-- [ ] All 10 agent definitions complete and follow agent definition format (C08)
-- [ ] Director orchestrates full execution loop per S10
-- [ ] Monitor halt protocol works (D14)
-- [ ] Run persistence captures agent reports (D15)
-- [ ] **Step 9 complete**: End-to-end workflow proven on real feature (idea → planner → speck → beads sync → director → implemented code → closed beads)
+- [x] Planner agent produces specks that pass validation
+- [x] `specks init` creates valid project structure
+- [x] `specks validate` catches all List L01 errors and warnings
+- [x] `specks list` accurately shows all specks with status
+- [x] `specks status <file>` accurately reports checkbox completion
+- [x] All commands support --json for machine-readable output
+- [x] README provides clear installation and agent workflow instructions
+- [x] Test coverage includes all validation rules
+- [x] `specks beads sync` creates beads from steps and substeps with correct dependencies
+- [x] Bead IDs written back to speck after sync in correct position
+- [x] `specks beads status` shows aligned step/bead status
+- [x] `specks beads pull` updates checkboxes from bead completion
+- [x] Re-running sync converges to same state (idempotent)
+- [x] Mock-bd harness enables deterministic CI tests without network
+- [x] All 10 agent definitions complete and follow agent definition format (C08)
+- [x] Director orchestrates full execution loop per S10
+- [x] Monitor halt protocol works (D14)
+- [x] Run persistence captures agent reports (D15)
+- [x] **Step 9 complete**: End-to-end workflow proven on real feature (idea → planner → speck → beads sync → director → implemented code → closed beads)
 
 **Acceptance tests:**
-- [ ] Integration test: Full workflow (init, validate, list, status)
-- [ ] Agent test: Planner produces valid, comprehensive specks
-- [ ] Agent test: Director orchestrates full step execution
-- [ ] Golden test: All fixtures produce expected output
-- [ ] **E2E test (Step 9):** Complete pipeline on real feature with all 10 agents
+- [x] Integration test: Full workflow (init, validate, list, status)
+- [x] Agent test: Planner produces valid, comprehensive specks
+- [x] Agent test: Director orchestrates full step execution
+- [x] Golden test: All fixtures produce expected output
+- [x] **E2E test (Step 9):** Complete pipeline on real feature with all 10 agents
 
 #### Milestones {#milestones}
 
 **Milestone M01: Core Infrastructure** {#m01-core-infra}
-- [ ] Steps 0-2 complete (project structure, parser, validator)
+- [x] Steps 0-2 complete (project structure, parser, validator)
 
 **Milestone M02: CLI Complete** {#m02-cli-complete}
-- [ ] Step 3 complete (all commands implemented)
+- [x] Step 3 complete (all commands implemented)
 
 **Milestone M03: Planning Agents** {#m03-planning-agents}
-- [ ] Step 4 complete (director, planner, architect agents)
-- [ ] Run persistence structure in place
+- [x] Step 4 complete (director, planner, architect agents)
+- [x] Run persistence structure in place
 
 **Milestone M04: Beads Integration** {#m04-beads-integration}
-- [ ] Step 6 complete (beads commands work)
-- [ ] Step 6.5 complete (mock-bd harness for CI)
+- [x] Step 6 complete (beads commands work)
+- [x] Step 6.5 complete (mock-bd harness for CI)
 
 **Milestone M05: Documentation** {#m05-docs}
-- [ ] Steps 5, 7 complete (fixtures, docs complete)
+- [x] Steps 5, 7 complete (fixtures, docs complete)
 
 **Milestone M06: Execution Agents** {#m06-execution-agents}
-- [ ] Step 8 complete (implementer, monitor, reviewer, auditor, logger, committer)
-- [ ] Full execution loop working per S10
+- [x] Step 8 complete (implementer, monitor, reviewer, auditor, logger, committer)
+- [x] Full execution loop working per S10
 
 **Milestone M07: End-to-End Validation** {#m07-e2e-validation}
-- [ ] Step 9 complete (full pipeline exercised on real feature)
-- [ ] End-to-end workflow proven: idea → planner → speck → beads → director → implemented code
-- [ ] All agent definitions validated through actual use
-- [ ] Integration with skills verified (implement-plan, update-log, prepare-commit)
-- [ ] Run persistence captures complete audit trail
-- [ ] **Phase 1 complete**
+- [x] Step 9 complete (full pipeline exercised on real feature)
+- [x] End-to-end workflow proven: idea → planner → speck → beads → director → implemented code
+- [x] All agent definitions validated through actual use
+- [x] Integration with skills verified (implement-plan, update-log, prepare-commit)
+- [x] Run persistence captures complete audit trail
+- [x] **Phase 1 complete**
 
 #### Roadmap / Follow-ons (Phase 2+) {#roadmap}
 

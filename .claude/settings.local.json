@@ -16,7 +16,13 @@
       "Bash(grep:*)",
       "Bash(echo:*)",
       "Bash(chmod:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(bd init:*)",
+      "Bash(bd list:*)",
+      "Bash(bd ready:*)",
+      "Bash(uuidgen:*)",
+      "Bash(git -C /Users/kocienda/Mounts/u/src/specks status)",
+      "Bash(git -C /Users/kocienda/Mounts/u/src/specks diff --stat)"
     ]
   }
 }

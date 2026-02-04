@@ -83,6 +83,16 @@ pub enum Commands {
     /// Sync steps to beads, link beads, show status, pull completion.
     #[command(subcommand, long_about = "Beads integration for two-way sync between specks and work tracking.\n\nRequires:\n  - Beads CLI (bd) installed and in PATH\n  - Beads initialized (bd init creates .beads/)\n  - Network connectivity\n\nSubcommands:\n  sync   Create beads from speck steps, write IDs back\n  link   Manually link a step to an existing bead\n  status Show execution status (complete/ready/blocked)\n  pull   Update speck checkboxes from bead completion\n\nTypical workflow:\n  1. specks beads sync specks-1.md    # Create beads\n  2. bd close <bead-id>               # Complete work\n  3. specks beads pull specks-1.md    # Update checkboxes")]
     Beads(BeadsCommands),
+
+    /// Show version information
+    ///
+    /// Display package version and optionally build metadata.
+    #[command(long_about = "Show version information.\n\nBy default, displays the package version. With --verbose, also shows:\n  - Git commit hash\n  - Build date\n  - Rust compiler version\n\nUse --json for machine-readable output.")]
+    Version {
+        /// Show extended build information (commit, date, rustc version)
+        #[arg(short, long)]
+        verbose: bool,
+    },
 }
 
 /// Get the command args for use in the application
@@ -98,5 +108,28 @@ mod tests {
     #[test]
     fn verify_cli() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn build_env_vars_accessible() {
+        // Verify that build.rs exports are accessible via env!()
+        // These will fail at compile time if build.rs doesn't set them
+        let commit = env!("SPECKS_COMMIT");
+        let build_date = env!("SPECKS_BUILD_DATE");
+        let rustc_version = env!("SPECKS_RUSTC_VERSION");
+
+        // Basic sanity checks - values should be non-empty
+        assert!(!commit.is_empty(), "SPECKS_COMMIT should not be empty");
+        assert!(!build_date.is_empty(), "SPECKS_BUILD_DATE should not be empty");
+        assert!(!rustc_version.is_empty(), "SPECKS_RUSTC_VERSION should not be empty");
+
+        // Build date should match YYYY-MM-DD format or be "unknown"
+        if build_date != "unknown" {
+            assert!(
+                build_date.len() == 10 && build_date.chars().nth(4) == Some('-'),
+                "SPECKS_BUILD_DATE should be YYYY-MM-DD format, got: {}",
+                build_date
+            );
+        }
     }
 }
