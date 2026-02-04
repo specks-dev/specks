@@ -15,7 +15,8 @@
       "Bash(done)",
       "Bash(grep:*)",
       "Bash(echo:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -156,3 +156,19 @@ The implementation log serves as a historical record of all implementation work:
 ## Note on Git Commit Hashes
 
 The implementation log is written **before** the git commit is created, so we cannot include commit hashes. This is an intentional limitation. If you need to correlate log entries with commits, use the completion date and step title to find the relevant commit in git history.
+
+## Integration with Specks Agent Suite
+
+This skill is invoked by the **specks-logger** agent during execution. When running under the agent suite:
+
+- The **director** orchestrates the overall workflow
+- After the **reviewer** and **auditor** approve the implementation
+- The **logger** agent invokes this skill to document what was done
+- Then the **committer** agent prepares/executes the commit
+
+### Timing in the Workflow
+
+The logger runs AFTER review/audit approval but BEFORE commit. This ensures:
+1. Only approved work gets logged
+2. The log is updated before the commit message is prepared
+3. The committer can reference the log entry in the commit message if needed

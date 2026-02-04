@@ -105,13 +105,14 @@ The implementation log at `.specks/specks-implementation-log.md` tracks complete
 
 ## Agent Suite
 
-Nine agents work together:
+Ten agents work together:
 1. **Director** - Orchestrates workflow (hub)
 2. **Planner** - Creates specks from ideas
-3. **Architect** - Creates implementation strategies
-4. **Implementer** - Executes strategies, writes code
-5. **Monitor** - Tracks progress, detects drift
-6. **Reviewer** - Reviews completed work
-7. **Auditor** - Verifies compliance
-8. **Logger** - Records activity
-9. **Committer** - Handles git operations
+3. **Critic** - Reviews plan quality
+4. **Architect** - Creates implementation strategies
+5. **Implementer** - Executes strategies, writes code
+6. **Monitor** - Tracks progress, detects drift
+7. **Reviewer** - Reviews completed work
+8. **Auditor** - Verifies code quality
+9. **Logger** - Records activity
+10. **Committer** - Handles git operations

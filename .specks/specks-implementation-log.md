@@ -6,6 +6,79 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-1.md] Step 8: Execution Agents | COMPLETE | 2026-02-04
+
+**Completed:** 2026-02-04
+
+**References Reviewed:**
+- [D11] Commit policy - manual vs auto behavior
+- [D12] Multi-agent architecture - ten-agent suite with director as orchestrator
+- [D13] Reviewer vs auditor - complementary quality gates
+- [D14] Cooperative halt protocol - signal files and worktree isolation
+- [D15] Run persistence - UUID-based directories
+- Spec S10 - Director execution protocol
+- C05 Execution flow, C06 Monitor protocol, C07 Escalation paths
+- C08 Agent definition format
+- C02 Agent-skill mapping
+- Existing agents: specks-director.md, specks-planner.md, specks-architect.md
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create agents/specks-implementer.md | Done |
+| Create agents/specks-monitor.md | Done |
+| Create agents/specks-reviewer.md | Done |
+| Create agents/specks-auditor.md | Done |
+| Create agents/specks-logger.md | Done |
+| Create agents/specks-committer.md | Done |
+| Create agents/specks-critic.md (plan quality reviewer) | Done |
+| Update director with full S10 execution loop | Done |
+| Implement halt signal file protocol per D14 | Done |
+| Add integration notes to skill documentation | Done |
+| Update all agent counts from 9 to 10 | Done |
+
+**Files Created:**
+- `agents/specks-implementer.md` - Writes code, invokes implement-plan skill, checks for halt
+- `agents/specks-monitor.md` - Runs parallel, detects drift, writes halt signal
+- `agents/specks-reviewer.md` - Checks plan adherence, writes reviewer-report.md
+- `agents/specks-auditor.md` - Checks code quality, writes auditor-report.md
+- `agents/specks-logger.md` - Writes to implementation log via skill
+- `agents/specks-committer.md` - Prepares commits, respects commit-policy
+- `agents/specks-critic.md` - Reviews plan quality before implementation (planning phase)
+- `crates/specks/tests/agent_integration_tests.rs` - 23 tests for agent definitions
+
+**Files Modified:**
+- `agents/specks-director.md` - Enhanced with full S10 execution loop, halt protocol, run directory structure, critic in planning mode
+- `.claude/skills/implement-plan/SKILL.md` - Added agent suite integration notes
+- `.claude/skills/update-plan-implementation-log/SKILL.md` - Added agent suite integration notes
+- `.claude/skills/prepare-git-commit-message/SKILL.md` - Added agent suite integration notes
+- `CLAUDE.md` - Updated agent count to 10, added Critic
+- `crates/specks/src/cli.rs` - Updated help text with critic in agent list
+- `.specks/specks-1.md` - All agent lists updated to include critic, counts updated to 10
+
+**Test Results:**
+- `cargo nextest run`: 107 tests passed
+
+**Checkpoints Verified:**
+- All 10 agent definitions follow agent definition format (C08): PASS
+- Monitor halt protocol documented (signal file, implementer checks it): PASS
+- Reviewer and auditor produce complementary reports: PASS
+- Committer respects commit-policy (manual vs auto): PASS
+- Director orchestrates full execution loop per S10: PASS
+- Escalation paths documented correctly per C07: PASS
+- Run directory structure documented with expected reports: PASS
+- Critic properly integrated in planning mode workflow: PASS
+
+**Key Decisions/Notes:**
+- Added specks-critic as 10th agent to review plan quality in planning phase
+- Director now uses critic (not auditor) for plan review - auditor is execution-only
+- Director principle: should only orchestrate and decide based on agent reports, never do substantive work itself
+- Clean separation: Critic="Is this plan good?", Reviewer="Did they build what was planned?", Auditor="Is the code good?"
+- Historical implementation log entries left unchanged (they were accurate when written)
+
+---
+
 ## [specks-1.md] Step 7: Final Documentation | COMPLETE | 2026-02-04
 
 **Completed:** 2026-02-04

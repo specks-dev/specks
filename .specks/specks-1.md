@@ -23,7 +23,7 @@
 
 Specks transforms ideas into working software through orchestrated LLM agents. The core value is the **multi-agent suite**—a team of specialized agents orchestrated by a central **director** agent that handles the full lifecycle from planning through implementation and delivery.
 
-The **planner** takes brief ideas or detailed descriptions, explores codebases, asks clarifying questions, and produces comprehensive specks (structured implementation plans). The **architect** designs implementation strategies with expected file changes. The **implementer** writes code while the **monitor** watches for drift. The **reviewer** and **auditor** provide quality gates. The **logger** and **committer** handle documentation and commits.
+The **planner** takes brief ideas or detailed descriptions, explores codebases, asks clarifying questions, and produces comprehensive specks (structured implementation plans). The **critic** reviews plan quality before implementation begins. The **architect** designs implementation strategies with expected file changes. The **implementer** writes code while the **monitor** watches for drift. The **reviewer** and **auditor** provide quality gates. The **logger** and **committer** handle documentation and commits.
 
 The skeleton (`.specks/specks-skeleton.md`) defines a **format specification** for specks—structured sections for decisions, specifications, execution steps, and validation criteria. The CLI provides utilities to support the workflow: initializing projects, validating speck structure, listing specks, tracking completion status, and integrating with beads for execution tracking.
 
@@ -55,7 +55,7 @@ This approach differs from documentation tools or static templates. The intellig
 
 #### Scope {#scope}
 
-1. Multi-agent suite: director, planner, architect, implementer, monitor, reviewer, auditor, logger, committer
+1. Multi-agent suite: director, planner, critic, architect, implementer, monitor, reviewer, auditor, logger, committer
 2. CLI infrastructure with clap-based command parsing
 3. `specks init` command for project initialization
 4. `specks validate [file]` command for structure validation
@@ -81,7 +81,7 @@ This approach differs from documentation tools or static templates. The intellig
 
 - Rust toolchain (1.70+)
 - `.specks/specks-skeleton.md` format specification exists
-- Agent definitions in `agents/specks-*.md` (director, planner, architect, implementer, monitor, reviewer, auditor, logger, committer)
+- Agent definitions in `agents/specks-*.md` (director, planner, critic, architect, implementer, monitor, reviewer, auditor, logger, committer)
 - Skills available: implement-plan, update-plan-implementation-log, prepare-git-commit-message
 
 #### Constraints {#constraints}
@@ -379,17 +379,18 @@ This approach differs from documentation tools or static templates. The intellig
 - Director as hub enables clear escalation paths and coordinated decision-making
 - Aligns with Claude Code's subagent model for practical implementation
 
-**The nine agents:**
+**The ten agents:**
 
 | Agent | Phase | Role |
 |-------|-------|------|
 | **director** | both | Orchestrates all other agents, makes decisions, handles escalation |
 | **planner** | planning | Takes idea → structured plan following skeleton format |
-| **architect** | planning | Takes step → implementation strategy + test plan |
+| **critic** | planning | Reviews plan quality before implementation |
+| **architect** | both | Takes step → implementation strategy + test plan |
 | **implementer** | execution | Writes code, focused doer |
 | **monitor** | execution | Runs parallel to implementer, detects drift, can signal halt |
 | **reviewer** | execution | Checks plan adherence: did implementation match spec? |
-| **auditor** | both | Checks code quality/performance, runs at step/milestone/completion |
+| **auditor** | execution | Checks code quality/performance, runs at step/milestone/completion |
 | **logger** | execution | Writes detailed change log entries |
 | **committer** | execution | Writes commit message and commits |
 
@@ -1790,7 +1791,7 @@ All Specks code that invokes `bd` with `--json`, and any mock/fake `bd` used in 
 - [ ] README.md with installation and quick start
 - [ ] `specks --help` comprehensive help text
 - [ ] Skeleton format documentation (inline comments explaining each section)
-- [ ] Agent suite instructions and examples (director, planner, architect, implementer, monitor, reviewer, auditor, logger, committer)
+- [ ] Agent suite instructions and examples (director, planner, critic, architect, implementer, monitor, reviewer, auditor, logger, committer)
 - [ ] CLAUDE.md section for specks conventions
 - [ ] Example specks in repository
 
@@ -2285,67 +2286,67 @@ tests/fixtures/
 - Integration tests with mock-bd
 
 **Tasks:**
-- [ ] Create `agents/specks-implementer.md` with:
-  - [ ] Role: writes code following architect's strategy
-  - [ ] Invokes implement-plan skill
-  - [ ] Checks for halt signal between major operations (D14)
-  - [ ] Returns partial status if halted
-  - [ ] Checks task boxes in speck as work completes
-- [ ] Create `agents/specks-monitor.md` with:
-  - [ ] Role: runs parallel to implementer, detects drift
-  - [ ] Polls for uncommitted changes at intervals
-  - [ ] Compares changed files against architect's `expected_touch_set` for objective drift detection
-  - [ ] Evaluates changes against plan and architect strategy
-  - [ ] Drift detection criteria per C06
-  - [ ] Writes halt signal file if significant drift detected
-  - [ ] Returns HALT/CONTINUE status to director
-- [ ] Create `agents/specks-reviewer.md` with:
-  - [ ] Role: checks plan adherence after step completes
-  - [ ] Verifies all tasks from step completed
-  - [ ] Verifies tests match test plan
-  - [ ] Verifies artifacts produced as expected
-  - [ ] Writes reviewer-report.md to run directory
-- [ ] Create `agents/specks-auditor.md` with:
-  - [ ] Role: checks code quality and performance
-  - [ ] Evaluates code structure and maintainability
-  - [ ] Identifies security concerns
-  - [ ] Checks project conventions
-  - [ ] Writes auditor-report.md to run directory
-  - [ ] Runs at step, milestone, and completion per D13
-- [ ] Create `agents/specks-logger.md` with:
-  - [ ] Role: writes change log entries to implementation log
-  - [ ] Invokes update-plan-implementation-log skill
-  - [ ] Documents what was implemented in this step
-- [ ] Create `agents/specks-committer.md` with:
-  - [ ] Role: handles commit preparation and (optionally) execution
-  - [ ] Invokes prepare-git-commit-message skill
-  - [ ] With commit-policy=auto: also performs git commit
-  - [ ] With commit-policy=manual: writes message, returns to director
-  - [ ] Writes committer-prep.md to run directory
-- [ ] Update director agent with full execution loop per S10
-- [ ] Implement halt signal file protocol per D14
-- [ ] Add integration notes to existing skill documentation
+- [x] Create `agents/specks-implementer.md` with:
+  - [x] Role: writes code following architect's strategy
+  - [x] Invokes implement-plan skill
+  - [x] Checks for halt signal between major operations (D14)
+  - [x] Returns partial status if halted
+  - [x] Checks task boxes in speck as work completes
+- [x] Create `agents/specks-monitor.md` with:
+  - [x] Role: runs parallel to implementer, detects drift
+  - [x] Polls for uncommitted changes at intervals
+  - [x] Compares changed files against architect's `expected_touch_set` for objective drift detection
+  - [x] Evaluates changes against plan and architect strategy
+  - [x] Drift detection criteria per C06
+  - [x] Writes halt signal file if significant drift detected
+  - [x] Returns HALT/CONTINUE status to director
+- [x] Create `agents/specks-reviewer.md` with:
+  - [x] Role: checks plan adherence after step completes
+  - [x] Verifies all tasks from step completed
+  - [x] Verifies tests match test plan
+  - [x] Verifies artifacts produced as expected
+  - [x] Writes reviewer-report.md to run directory
+- [x] Create `agents/specks-auditor.md` with:
+  - [x] Role: checks code quality and performance
+  - [x] Evaluates code structure and maintainability
+  - [x] Identifies security concerns
+  - [x] Checks project conventions
+  - [x] Writes auditor-report.md to run directory
+  - [x] Runs at step, milestone, and completion per D13
+- [x] Create `agents/specks-logger.md` with:
+  - [x] Role: writes change log entries to implementation log
+  - [x] Invokes update-plan-implementation-log skill
+  - [x] Documents what was implemented in this step
+- [x] Create `agents/specks-committer.md` with:
+  - [x] Role: handles commit preparation and (optionally) execution
+  - [x] Invokes prepare-git-commit-message skill
+  - [x] With commit-policy=auto: also performs git commit
+  - [x] With commit-policy=manual: writes message, returns to director
+  - [x] Writes committer-prep.md to run directory
+- [x] Update director agent with full execution loop per S10
+- [x] Implement halt signal file protocol per D14
+- [x] Add integration notes to existing skill documentation
 
 **Tests:**
-- [ ] Agent test: Implementer writes code and checks for halt signal
-- [ ] Agent test: Monitor detects drift and writes halt signal
-- [ ] Agent test: Reviewer produces plan adherence report
-- [ ] Agent test: Auditor produces quality report
-- [ ] Integration test: Director spawns implementer + monitor in parallel
-- [ ] Integration test: Director handles HALT from monitor
-- [ ] Integration test: Director invokes reviewer + auditor after step
-- [ ] Integration test: Director escalates correctly per C07
-- [ ] Integration test: Committer respects commit-policy
-- [ ] Integration test: Full step execution with mock-bd
+- [x] Agent test: Implementer writes code and checks for halt signal
+- [x] Agent test: Monitor detects drift and writes halt signal
+- [x] Agent test: Reviewer produces plan adherence report
+- [x] Agent test: Auditor produces quality report
+- [x] Integration test: Director spawns implementer + monitor in parallel
+- [x] Integration test: Director handles HALT from monitor
+- [x] Integration test: Director invokes reviewer + auditor after step
+- [x] Integration test: Director escalates correctly per C07
+- [x] Integration test: Committer respects commit-policy
+- [x] Integration test: Full step execution with mock-bd
 
 **Checkpoint:**
-- [ ] All 6 execution agents follow agent definition format (C08)
-- [ ] Monitor halt protocol works (signal file, implementer checks it)
-- [ ] Reviewer and auditor produce complementary reports
-- [ ] Committer respects commit-policy (manual vs auto)
-- [ ] Director orchestrates full execution loop per S10
-- [ ] Escalation paths work correctly per C07
-- [ ] Run directory contains all expected reports after step
+- [x] All 6 execution agents follow agent definition format (C08)
+- [x] Monitor halt protocol works (signal file, implementer checks it)
+- [x] Reviewer and auditor produce complementary reports
+- [x] Committer respects commit-policy (manual vs auto)
+- [x] Director orchestrates full execution loop per S10
+- [x] Escalation paths work correctly per C07
+- [x] Run directory contains all expected reports after step
 
 **Rollback:**
 - Revert agent definitions and documentation changes
@@ -2434,7 +2435,7 @@ If any agent fails or produces incorrect output:
 
 ### 1.0.6 Deliverables and Checkpoints {#deliverables}
 
-**Deliverable:** A multi-agent system that transforms ideas into working software, consisting of a nine-agent suite (director, planner, architect, implementer, monitor, reviewer, auditor, logger, committer) for planning, implementation, review, and delivery, plus CLI utilities for validation, progress tracking, and beads integration.
+**Deliverable:** A multi-agent system that transforms ideas into working software, consisting of a ten-agent suite (director, planner, critic, architect, implementer, monitor, reviewer, auditor, logger, committer) for planning, implementation, review, and delivery, plus CLI utilities for validation, progress tracking, and beads integration.
 
 #### Phase Exit Criteria ("Done means...") {#exit-criteria}
 
@@ -2452,7 +2453,7 @@ If any agent fails or produces incorrect output:
 - [ ] `specks beads pull` updates checkboxes from bead completion
 - [ ] Re-running sync converges to same state (idempotent)
 - [ ] Mock-bd harness enables deterministic CI tests without network
-- [ ] All 9 agent definitions complete and follow agent definition format (C08)
+- [ ] All 10 agent definitions complete and follow agent definition format (C08)
 - [ ] Director orchestrates full execution loop per S10
 - [ ] Monitor halt protocol works (D14)
 - [ ] Run persistence captures agent reports (D15)
@@ -2463,7 +2464,7 @@ If any agent fails or produces incorrect output:
 - [ ] Agent test: Planner produces valid, comprehensive specks
 - [ ] Agent test: Director orchestrates full step execution
 - [ ] Golden test: All fixtures produce expected output
-- [ ] **E2E test (Step 9):** Complete pipeline on real feature with all 9 agents
+- [ ] **E2E test (Step 9):** Complete pipeline on real feature with all 10 agents
 
 #### Milestones {#milestones}
 

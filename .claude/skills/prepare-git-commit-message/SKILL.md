@@ -79,3 +79,22 @@ Fix null pointer in user lookup
 ## Finishing Up
 
 Respond with the commit message written.
+
+## Integration with Specks Agent Suite
+
+This skill is invoked by the **specks-committer** agent during execution. When running under the agent suite:
+
+- The **director** orchestrates the overall workflow
+- The **logger** has already documented the work in the implementation log
+- The **committer** agent invokes this skill to prepare the commit message
+- Depending on `commit-policy`:
+  - `manual`: Message is written; user commits manually
+  - `auto`: Committer also stages and commits
+
+### Commit Policy Awareness
+
+The committer agent respects the `commit-policy` set at director invocation:
+- **manual** (default): This skill writes the message to `git-commit-message.txt`. The director pauses for user to review and commit.
+- **auto**: This skill writes the message, then committer stages files and runs `git commit -F git-commit-message.txt`.
+
+In both cases, this skill's job is only to prepare the message. The actual staging and committing (in auto mode) is handled by the committer agent.
