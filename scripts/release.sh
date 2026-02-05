@@ -1,121 +1,86 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Release specks
 #
 # Usage: ./scripts/release.sh <version>
 #
-# Examples:
-#   ./scripts/release.sh 0.1.1
-#   ./scripts/release.sh v0.2.0
-#
-# The script validates everything before making changes.
 
 set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+VERSION="${1:-}"
+VERSION="${VERSION#v}"
 
-error() { echo -e "${RED}Error: $1${NC}" >&2; exit 1; }
-warn() { echo -e "${YELLOW}$1${NC}"; }
-info() { echo -e "${GREEN}$1${NC}"; }
+echo "==> Releasing v$VERSION"
+echo ""
 
-# --- Argument validation ---
-
-if [[ $# -ne 1 ]]; then
-    echo "Usage: $0 <version>" >&2
-    echo "Example: $0 0.1.1" >&2
+# Validate
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Error: Invalid version format. Expected X.Y.Z" >&2
     exit 1
 fi
 
-# Strip 'v' prefix if provided
-VERSION="${1#v}"
-
-# Validate semver format (X.Y.Z)
-if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    error "Invalid version format: '$VERSION'. Expected X.Y.Z (e.g., 0.1.1)"
+if [[ "$(git branch --show-current)" != "main" ]]; then
+    echo "Error: Must be on main branch" >&2
+    exit 1
 fi
 
-# --- Version validation (check BEFORE git state) ---
-
-CURRENT_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-
-# Compare versions (split into parts)
-IFS='.' read -r CUR_MAJOR CUR_MINOR CUR_PATCH <<< "$CURRENT_VERSION"
-IFS='.' read -r NEW_MAJOR NEW_MINOR NEW_PATCH <<< "$VERSION"
-
-version_gt() {
-    if [[ $NEW_MAJOR -gt $CUR_MAJOR ]]; then return 0; fi
-    if [[ $NEW_MAJOR -lt $CUR_MAJOR ]]; then return 1; fi
-    if [[ $NEW_MINOR -gt $CUR_MINOR ]]; then return 0; fi
-    if [[ $NEW_MINOR -lt $CUR_MINOR ]]; then return 1; fi
-    if [[ $NEW_PATCH -gt $CUR_PATCH ]]; then return 0; fi
-    return 1
-}
-
-if ! version_gt; then
-    error "New version ($VERSION) must be greater than current version ($CURRENT_VERSION)"
+echo "==> Checking for existing release..."
+if gh release view "v$VERSION" &>/dev/null; then
+    echo "Error: v$VERSION already released. Bump version number." >&2
+    exit 1
 fi
 
-# --- Git state validation ---
-
-# Must be on main branch
-BRANCH=$(git branch --show-current)
-if [[ "$BRANCH" != "main" ]]; then
-    error "Must be on main branch (currently on '$BRANCH')"
+# Clean up orphaned tag from failed release
+if git ls-remote --tags origin 2>/dev/null | grep -q "refs/tags/v$VERSION$"; then
+    echo "==> Cleaning up orphaned tag from failed release..."
+    git push origin ":refs/tags/v$VERSION" &>/dev/null || true
 fi
 
-# Working directory must be clean
-if ! git diff --quiet HEAD; then
-    error "Working directory has uncommitted changes. Commit or stash them first."
+# Version check
+CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+IFS='.' read -r CUR_MAJ CUR_MIN CUR_PAT <<< "$CURRENT"
+IFS='.' read -r NEW_MAJ NEW_MIN NEW_PAT <<< "$VERSION"
+
+if [[ $NEW_MAJ -lt $CUR_MAJ ]] || \
+   [[ $NEW_MAJ -eq $CUR_MAJ && $NEW_MIN -lt $CUR_MIN ]] || \
+   [[ $NEW_MAJ -eq $CUR_MAJ && $NEW_MIN -eq $CUR_MIN && $NEW_PAT -lt $CUR_PAT ]]; then
+    echo "Error: $VERSION must be >= current ($CURRENT)" >&2
+    exit 1
 fi
 
-# Must be up to date with origin
-git fetch origin main --quiet
-LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse origin/main)
-if [[ "$LOCAL" != "$REMOTE" ]]; then
-    error "Local main is not up to date with origin. Run 'git pull' or 'git push' first."
+# Build
+echo "==> Formatting code..."
+cargo fmt --all --quiet
+
+echo "==> Running clippy (auto-fix)..."
+cargo clippy --workspace --fix --allow-dirty --allow-staged -- -D warnings &>/dev/null
+
+echo "==> Verifying clean build..."
+cargo clippy --workspace -- -D warnings &>/dev/null
+
+# Update version
+echo "==> Updating version to $VERSION..."
+sed -i '' "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+
+# Commit
+git add -A
+if ! git diff --cached --quiet; then
+    echo "==> Committing changes..."
+    git commit -m "Release $VERSION" --quiet
 fi
 
-# Tag must not already exist
-if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-    error "Tag v$VERSION already exists"
-fi
+# Clean up local tag
+git tag -d "v$VERSION" &>/dev/null || true
 
-# --- Confirmation ---
+# Push
+echo "==> Syncing with origin..."
+git pull --rebase origin main --quiet || true
+git push origin main --quiet
 
-echo ""
-info "Release Summary"
-echo "  Current version: $CURRENT_VERSION"
-echo "  New version:     $VERSION"
-echo "  Tag:             v$VERSION"
-echo ""
-read -p "Proceed with release? [y/N] " -n 1 -r
-echo ""
-
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    warn "Aborted."
-    exit 0
-fi
-
-# --- Execute release ---
-
-info "Updating Cargo.toml..."
-sed -i '' "s/^version = \"$CURRENT_VERSION\"/version = \"$VERSION\"/" Cargo.toml
-
-info "Committing..."
-git add Cargo.toml
-git commit -m "Release $VERSION"
-
-info "Tagging v$VERSION..."
+echo "==> Tagging v$VERSION..."
 git tag "v$VERSION"
-
-info "Pushing to origin..."
-git push origin main "v$VERSION"
+git push origin "v$VERSION" --quiet
 
 echo ""
-info "Released v$VERSION"
-echo "CI will build binaries and update the Homebrew formula."
-echo "Watch progress: https://github.com/kocienda/specks/actions"
+echo "==> Released v$VERSION"
+echo "    CI: https://github.com/kocienda/specks/actions"
