@@ -34,16 +34,16 @@ fn main() -> ExitCode {
                 update_body,
                 prune_deps,
                 substeps,
-            } => commands::run_sync(
+            } => commands::run_sync(commands::beads::sync::SyncOptions {
                 file,
                 dry_run,
                 update_title,
                 update_body,
                 prune_deps,
-                substeps,
-                cli.json,
-                cli.quiet,
-            ),
+                substeps_mode: substeps,
+                json_output: cli.json,
+                quiet: cli.quiet,
+            }),
             BeadsCommands::Link {
                 file,
                 step_anchor,
@@ -76,7 +76,7 @@ fn main() -> ExitCode {
             checkpoint_mode,
             dry_run,
             timeout,
-        }) => commands::run_execute(
+        }) => commands::run_execute(commands::execute::ExecuteOptions {
             speck,
             start_step,
             end_step,
@@ -84,9 +84,9 @@ fn main() -> ExitCode {
             checkpoint_mode,
             dry_run,
             timeout,
-            cli.json,
-            cli.quiet,
-        ),
+            json_output: cli.json,
+            quiet: cli.quiet,
+        }),
         None => {
             // No subcommand - print version info
             if !cli.quiet {

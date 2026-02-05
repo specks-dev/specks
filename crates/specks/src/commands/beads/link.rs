@@ -209,8 +209,12 @@ fn write_bead_to_step(content: &str, anchor: &str, step_line: usize, bead_id: &s
             let mut depends_on_line = None;
 
             // Look at next lines
-            for j in i + 1..std::cmp::min(i + 20, lines.len()) {
-                let next_line = lines[j];
+            for (j, next_line) in lines
+                .iter()
+                .enumerate()
+                .take(std::cmp::min(i + 20, lines.len()))
+                .skip(i + 1)
+            {
 
                 // Track **Depends on:** line
                 if next_line.starts_with("**Depends on:**") {
@@ -247,16 +251,16 @@ fn write_bead_to_step(content: &str, anchor: &str, step_line: usize, bead_id: &s
                 if let Some(pos) = insert_before_commit {
                     // Copy lines from after step header to insert position
                     let insert_after = depends_on_line.unwrap_or(i);
-                    for j in i + 1..=insert_after {
-                        new_lines.push(lines[j].to_string());
+                    for line in lines.iter().take(insert_after + 1).skip(i + 1) {
+                        new_lines.push(line.to_string());
                     }
                     // Insert bead line after Depends on (or after header)
                     new_lines.push(String::new());
                     new_lines.push(bead_line.clone());
                     // Continue with remaining lines before Commit
-                    for j in insert_after + 1..pos {
-                        if !bead_pattern.is_match(lines[j]) {
-                            new_lines.push(lines[j].to_string());
+                    for line in lines.iter().take(pos).skip(insert_after + 1) {
+                        if !bead_pattern.is_match(line) {
+                            new_lines.push(line.to_string());
                         }
                     }
                     i = pos - 1;

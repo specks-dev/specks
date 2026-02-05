@@ -3,7 +3,8 @@
 //! Per Spec S01, this command creates or revises specks through an iterative
 //! planning loop with interviewer, planner, and critic agents.
 
-use std::path::PathBuf;
+#[allow(unused_imports)]
+use std::path::{Path, PathBuf};
 
 use specks_core::{SpecksError, find_project_root};
 
@@ -285,9 +286,9 @@ fn output_error_json(command: &str, code: &str, message: &str) {
 }
 
 /// Make a path relative to the project root using forward slashes
-fn make_relative_path(project_root: &std::path::Path, path: &PathBuf) -> String {
+fn make_relative_path(project_root: &std::path::Path, path: &Path) -> String {
     path.strip_prefix(project_root)
-        .unwrap_or(path.as_path())
+        .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
 }

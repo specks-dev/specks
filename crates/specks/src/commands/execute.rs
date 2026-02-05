@@ -4,7 +4,7 @@
 //! implementation using the director agent's S10 execution protocol.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use specks_core::{Severity, SpecksError, find_project_root, parse_speck, validate_speck};
 use uuid::Uuid;
@@ -137,19 +137,20 @@ impl std::fmt::Display for ExecutionOutcomeStatus {
     }
 }
 
+/// Options for the execute command
+pub struct ExecuteOptions {
+    pub speck: String,
+    pub start_step: Option<String>,
+    pub end_step: Option<String>,
+    pub commit_policy: String,
+    pub checkpoint_mode: String,
+    pub dry_run: bool,
+    pub timeout: u64,
+    pub json_output: bool,
+    pub quiet: bool,
+}
+
 /// Run the execute command
-///
-/// # Arguments
-///
-/// * `speck` - Path to the speck file to execute
-/// * `start_step` - Optional step anchor to start from
-/// * `end_step` - Optional step anchor to stop after
-/// * `commit_policy` - "manual" or "auto"
-/// * `checkpoint_mode` - "step", "milestone", or "continuous"
-/// * `dry_run` - Whether to just show the plan without executing
-/// * `timeout` - Timeout per step in seconds
-/// * `json_output` - Whether to output in JSON format
-/// * `quiet` - Whether to suppress progress messages
 ///
 /// # Returns
 ///
@@ -160,17 +161,18 @@ impl std::fmt::Display for ExecutionOutcomeStatus {
 /// - 4: Execution halted by monitor
 /// - 6: Claude CLI not installed
 /// - 9: Not initialized
-pub fn run_execute(
-    speck: String,
-    start_step: Option<String>,
-    end_step: Option<String>,
-    commit_policy: String,
-    checkpoint_mode: String,
-    dry_run: bool,
-    timeout: u64,
-    json_output: bool,
-    quiet: bool,
-) -> Result<i32, String> {
+pub fn run_execute(opts: ExecuteOptions) -> Result<i32, String> {
+    let ExecuteOptions {
+        speck,
+        start_step,
+        end_step,
+        commit_policy,
+        checkpoint_mode,
+        dry_run,
+        timeout,
+        json_output,
+        quiet,
+    } = opts;
     // Find project root
     let project_root = match find_project_root() {
         Ok(root) => root,
@@ -809,7 +811,7 @@ fn output_error_json(command: &str, code: &str, message: &str, speck_path: &str)
 /// Output success in JSON format
 fn output_success_json(
     project_root: &std::path::Path,
-    speck_path: &PathBuf,
+    speck_path: &Path,
     outcome: &ExecutionOutcome,
 ) {
     let data = ExecuteData {
@@ -846,9 +848,9 @@ fn output_success_json(
 }
 
 /// Make a path relative to the project root using forward slashes
-fn make_relative_path(project_root: &std::path::Path, path: &PathBuf) -> String {
+fn make_relative_path(project_root: &std::path::Path, path: &Path) -> String {
     path.strip_prefix(project_root)
-        .unwrap_or(path.as_path())
+        .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
 }

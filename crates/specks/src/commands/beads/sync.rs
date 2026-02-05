@@ -18,17 +18,32 @@ pub struct SyncData {
     pub dry_run: bool,
 }
 
+/// Options for the sync command
+pub struct SyncOptions {
+    pub file: String,
+    pub dry_run: bool,
+    #[allow(dead_code)]
+    pub update_title: bool,
+    #[allow(dead_code)]
+    pub update_body: bool,
+    pub prune_deps: bool,
+    pub substeps_mode: String,
+    pub json_output: bool,
+    pub quiet: bool,
+}
+
 /// Run the beads sync command
-pub fn run_sync(
-    file: String,
-    dry_run: bool,
-    update_title: bool,
-    update_body: bool,
-    prune_deps: bool,
-    substeps_mode: String,
-    json_output: bool,
-    quiet: bool,
-) -> Result<i32, String> {
+pub fn run_sync(opts: SyncOptions) -> Result<i32, String> {
+    let SyncOptions {
+        file,
+        dry_run,
+        update_title: _,
+        update_body: _,
+        prune_deps,
+        substeps_mode,
+        json_output,
+        quiet,
+    } = opts;
     // Find project root
     let project_root = match find_project_root() {
         Ok(root) => root,
@@ -111,19 +126,15 @@ pub fn run_sync(
     };
 
     // Perform sync
-    let result = sync_speck_to_beads(
-        &path,
-        &speck,
-        &content,
-        &beads,
-        &config,
+    let ctx = SyncContext {
+        beads: &beads,
+        config: &config,
         dry_run,
-        update_title,
-        update_body,
         prune_deps,
-        &substeps_mode,
+        substeps_mode: &substeps_mode,
         quiet,
-    );
+    };
+    let result = sync_speck_to_beads(&path, &speck, &content, &ctx);
 
     match result {
         Ok((root_id, steps_synced, deps_added, updated_content)) => {
@@ -179,19 +190,22 @@ pub fn run_sync(
     }
 }
 
+/// Internal context for sync operations
+struct SyncContext<'a> {
+    beads: &'a BeadsCli,
+    config: &'a Config,
+    dry_run: bool,
+    prune_deps: bool,
+    substeps_mode: &'a str,
+    quiet: bool,
+}
+
 /// Sync a speck to beads
 fn sync_speck_to_beads(
     path: &Path,
     speck: &Speck,
     content: &str,
-    beads: &BeadsCli,
-    config: &Config,
-    dry_run: bool,
-    _update_title: bool,
-    _update_body: bool,
-    prune_deps: bool,
-    substeps_mode: &str,
-    quiet: bool,
+    ctx: &SyncContext<'_>,
 ) -> Result<(Option<String>, usize, usize, Option<String>), SpecksError> {
     let mut updated_content = content.to_string();
     let mut steps_synced = 0;
@@ -209,10 +223,7 @@ fn sync_speck_to_beads(
         speck,
         &phase_title,
         &speck_path,
-        beads,
-        config,
-        dry_run,
-        quiet,
+        ctx,
         &mut updated_content,
     )?;
 
@@ -225,9 +236,9 @@ fn sync_speck_to_beads(
             step,
             &root_id,
             &speck_path,
-            beads,
-            dry_run,
-            quiet,
+            ctx.beads,
+            ctx.dry_run,
+            ctx.quiet,
             &mut updated_content,
         )?;
 
@@ -235,15 +246,15 @@ fn sync_speck_to_beads(
         steps_synced += 1;
 
         // Handle substeps if mode is "children"
-        if substeps_mode == "children" {
+        if ctx.substeps_mode == "children" {
             for substep in &step.substeps {
                 let substep_bead_id = ensure_substep_bead(
                     substep,
                     &step_bead_id,
                     &speck_path,
-                    beads,
-                    dry_run,
-                    quiet,
+                    ctx.beads,
+                    ctx.dry_run,
+                    ctx.quiet,
                     &mut updated_content,
                 )?;
 
@@ -260,15 +271,15 @@ fn sync_speck_to_beads(
                 bead_id,
                 &step.depends_on,
                 &anchor_to_bead,
-                beads,
-                prune_deps,
-                dry_run,
+                ctx.beads,
+                ctx.prune_deps,
+                ctx.dry_run,
             )?;
             deps_added += added;
         }
 
         // Handle substep dependencies
-        if substeps_mode == "children" {
+        if ctx.substeps_mode == "children" {
             for substep in &step.substeps {
                 if let Some(bead_id) = anchor_to_bead.get(&substep.anchor) {
                     // Substeps inherit parent deps if no explicit deps
@@ -281,9 +292,9 @@ fn sync_speck_to_beads(
                         bead_id,
                         deps,
                         &anchor_to_bead,
-                        beads,
-                        prune_deps,
-                        dry_run,
+                        ctx.beads,
+                        ctx.prune_deps,
+                        ctx.dry_run,
                     )?;
                     deps_added += added;
                 }
@@ -309,36 +320,33 @@ fn ensure_root_bead(
     speck: &Speck,
     phase_title: &str,
     speck_path: &str,
-    beads: &BeadsCli,
-    config: &Config,
-    dry_run: bool,
-    quiet: bool,
+    ctx: &SyncContext<'_>,
     content: &mut String,
 ) -> Result<String, SpecksError> {
     // Check if we already have a root ID
     if let Some(ref root_id) = speck.metadata.beads_root_id {
         // Verify it exists
-        if beads.bead_exists(root_id) {
+        if ctx.beads.bead_exists(root_id) {
             return Ok(root_id.clone());
         }
         // Root bead was deleted, need to recreate
-        if !quiet {
+        if !ctx.quiet {
             eprintln!("warning: root bead {} not found, recreating", root_id);
         }
     }
 
     // Create root bead
     let description = format!("Specks: {}", speck_path);
-    let issue_type = &config.specks.beads.root_issue_type;
+    let issue_type = &ctx.config.specks.beads.root_issue_type;
 
-    if dry_run {
+    if ctx.dry_run {
         // Generate a fake ID for dry run
         let fake_id = "bd-dryrun-root".to_string();
         write_beads_root_to_content(content, &fake_id);
         return Ok(fake_id);
     }
 
-    let issue = beads.create(
+    let issue = ctx.beads.create(
         phase_title,
         Some(&description),
         None,
@@ -518,8 +526,8 @@ fn write_beads_root_to_content(content: &mut String, bead_id: &str) {
             }
             if in_metadata && line.starts_with('|') && line.contains("Last updated") {
                 // Insert after the table row containing Last updated
-                for j in i + 1..lines.len() {
-                    if !lines[j].starts_with('|') {
+                for (j, next_line) in lines.iter().enumerate().skip(i + 1) {
+                    if !next_line.starts_with('|') {
                         insert_pos = Some(j);
                         break;
                     }
@@ -557,9 +565,12 @@ fn write_bead_to_step(content: &mut String, anchor: &str, step_line: usize, bead
             let mut found_bead = false;
             let mut insert_before_commit = None;
 
-            for j in i + 1..std::cmp::min(i + 20, lines.len()) {
-                let next_line = lines[j];
-
+            for (j, next_line) in lines
+                .iter()
+                .enumerate()
+                .take(std::cmp::min(i + 20, lines.len()))
+                .skip(i + 1)
+            {
                 // Check if bead line already exists
                 if bead_pattern.is_match(next_line) {
                     // Replace it
@@ -585,8 +596,8 @@ fn write_bead_to_step(content: &mut String, anchor: &str, step_line: usize, bead
             if !found_bead {
                 if let Some(pos) = insert_before_commit {
                     // Copy lines up to insert position
-                    for j in i + 1..pos {
-                        new_lines.push(lines[j].to_string());
+                    for next_line in lines.iter().take(pos).skip(i + 1) {
+                        new_lines.push(next_line.to_string());
                     }
                     // Insert bead line
                     new_lines.push(bead_line.clone());
