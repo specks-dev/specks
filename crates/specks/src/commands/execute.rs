@@ -264,13 +264,12 @@ pub fn run_execute(
 
     // Verify beads root exists (optional - warn if missing)
     let beads_root = parsed_speck.metadata.beads_root_id.clone();
-    if beads_root.is_none() && !dry_run
-        && !quiet {
-            eprintln!(
-                "warning: No Beads Root in metadata. Run `specks beads sync {}` to set up work tracking.",
-                speck
-            );
-        }
+    if beads_root.is_none() && !dry_run && !quiet {
+        eprintln!(
+            "warning: No Beads Root in metadata. Run `specks beads sync {}` to set up work tracking.",
+            speck
+        );
+    }
 
     // Parse policies
     let commit_policy = CommitPolicy::from_str(&commit_policy);

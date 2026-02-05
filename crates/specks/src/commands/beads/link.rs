@@ -61,18 +61,20 @@ pub fn run_link(
     // If beads validation is enabled, verify bead exists
     if config.specks.beads.enabled && config.specks.beads.validate_bead_ids {
         let beads = BeadsCli::new(bd_path);
-        if beads.is_installed() && beads.is_initialized(&project_root)
-            && !beads.bead_exists(&bead_id) {
-                return output_error(
-                    json_output,
-                    "E015",
-                    &format!("bead not found: {}", bead_id),
-                    &file,
-                    &step_anchor,
-                    &bead_id,
-                    1,
-                );
-            }
+        if beads.is_installed()
+            && beads.is_initialized(&project_root)
+            && !beads.bead_exists(&bead_id)
+        {
+            return output_error(
+                json_output,
+                "E015",
+                &format!("bead not found: {}", bead_id),
+                &file,
+                &step_anchor,
+                &bead_id,
+                1,
+            );
+        }
     }
 
     // Resolve file path
