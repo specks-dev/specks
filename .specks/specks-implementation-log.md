@@ -6,6 +6,77 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 4: Implement specks execute Command | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- [D01] CLI-first agent invocation - execute command design
+- [D09] Execute command workflow - director's S10 execution protocol
+- Spec S02: specks execute command specification
+- Agent invocation architecture (Concept C01)
+- `crates/specks/src/commands/plan.rs` - existing command pattern
+- `crates/specks/src/agent.rs` - AgentRunner infrastructure
+- `crates/specks/src/cli.rs` - CLI structure
+- `crates/specks-core/src/error.rs` - error codes pattern
+- `agents/specks-director.md` - S10 execution protocol details
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add `Commands::Execute` variant to cli.rs with all options | Done |
+| Implement `run_execute()` in commands/execute.rs | Done |
+| Validate speck exists and passes validation | Done |
+| Verify speck status is "active" | Done |
+| Verify beads root exists (or run sync) | Done |
+| Create run directory with UUID | Done |
+| Construct director agent prompt with speck and options | Done |
+| Invoke director agent via AgentRunner | Done |
+| Monitor for halt signals from .specks/runs/{uuid}/.halt | Done |
+| Collect run artifacts (architect-plan.md, etc.) | Done |
+| Implement --dry-run to show execution plan | Done |
+| Implement --start-step and --end-step filtering | Done |
+| Implement --commit-policy and --checkpoint-mode | Done |
+| Add E022 (Monitor halted execution) to error.rs | Done |
+| Add ExecuteData struct to output.rs | Done |
+| Update commands/mod.rs exports | Done |
+
+**Files Created:**
+- `crates/specks/src/commands/execute.rs` - Execute command implementation with CommitPolicy, CheckpointMode enums, ExecutionContext, ExecutionOutcome structs, director invocation, halt signal detection, step filtering (~800 lines including tests)
+
+**Files Modified:**
+- `crates/specks/src/main.rs` - Added Execute command handling in match statement
+- `crates/specks/src/cli.rs` - Added Commands::Execute variant with all options (speck, start-step, end-step, commit-policy, checkpoint-mode, dry-run, timeout), 6 unit tests
+- `crates/specks/src/commands/mod.rs` - Added execute module, exported run_execute
+- `crates/specks/src/output.rs` - Added ExecuteData struct for JSON output
+- `crates/specks-core/src/error.rs` - Added E022 MonitorHalted error with exit code 4, plus unit test
+- `Cargo.toml` - Added uuid and chrono workspace dependencies
+- `crates/specks/Cargo.toml` - Added uuid.workspace and chrono.workspace
+- `crates/specks/tests/cli_integration_tests.rs` - Added 5 integration tests for execute command
+- `crates/specks/src/agent.rs` - Removed unused exit_code field, added #[allow(dead_code)] to with_claude_path
+- `crates/specks/src/planning_loop.rs` - Fixed dead code warnings with #[allow(dead_code)] and _json_output rename
+- `crates/specks/src/share.rs` - Added #[allow(dead_code)] to list_available_skills
+
+**Test Results:**
+- `cargo nextest run`: 196 tests passed (5 new integration tests for execute command)
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS (no warnings)
+- `cargo test` passes (new tests): PASS (196 tests)
+- `specks execute .specks/specks-test.md --dry-run` shows execution plan: PASS
+- Run directory created with expected structure: PASS (invocation.json, status.json)
+
+**Key Decisions/Notes:**
+- Added uuid and chrono dependencies for run ID generation and timestamps
+- Dry-run mode shows execution plan without creating run directory or invoking agents
+- Step filtering normalizes anchor formats (handles both `#step-1` and `step-1`)
+- Status is validated to require "active" - draft and done specks are rejected
+- Beads root check warns but doesn't fail (optional feature)
+- Fixed all 8 compiler warnings from previous steps (dead code, unused fields)
+
+---
+
 ## [specks-2.md] Step 3.5: Package Claude Code Skills for Distribution | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

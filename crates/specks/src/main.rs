@@ -76,6 +76,25 @@ fn main() -> ExitCode {
                 commands::run_setup_claude(check, force, cli.json, cli.quiet)
             }
         },
+        Some(Commands::Execute {
+            speck,
+            start_step,
+            end_step,
+            commit_policy,
+            checkpoint_mode,
+            dry_run,
+            timeout,
+        }) => commands::run_execute(
+            speck,
+            start_step,
+            end_step,
+            commit_policy,
+            checkpoint_mode,
+            dry_run,
+            timeout,
+            cli.json,
+            cli.quiet,
+        ),
         None => {
             // No subcommand - print version info
             if !cli.quiet {

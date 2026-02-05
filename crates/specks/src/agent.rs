@@ -17,8 +17,6 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 300;
 pub struct AgentResult {
     /// The agent's text output
     pub output: String,
-    /// Exit code from the claude CLI
-    pub exit_code: i32,
     /// Whether the agent completed successfully
     pub success: bool,
 }
@@ -73,6 +71,7 @@ impl AgentRunner {
     }
 
     /// Set a custom path to the claude CLI
+    #[allow(dead_code)] // Used in tests
     pub fn with_claude_path(mut self, path: PathBuf) -> Self {
         self.claude_path = path;
         self
@@ -179,7 +178,6 @@ impl AgentRunner {
 
         Ok(AgentResult {
             output: stdout,
-            exit_code,
             success: output.status.success(),
         })
     }
@@ -520,8 +518,6 @@ mod tests {
 
         let agent_result = result.unwrap();
         assert!(agent_result.success);
-        // Default mock has empty output (no env vars set)
-        assert_eq!(agent_result.exit_code, 0);
 
         // Clean up
         let _ = std::fs::remove_file(&agent_path);

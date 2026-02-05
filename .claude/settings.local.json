@@ -35,7 +35,8 @@
       "Bash(SPECKS_SHARE_DIR=/Users/kocienda/Mounts/u/src/specks /Users/kocienda/Mounts/u/src/specks/target/debug/specks setup claude:*)",
       "Bash(SPECKS_SHARE_DIR=/Users/kocienda/Mounts/u/src/specks /Users/kocienda/Mounts/u/src/specks/target/debug/specks:*)",
       "Bash(python3:*)",
-      "Bash(ruby -c:*)"
+      "Bash(ruby -c:*)",
+      "Bash(/Users/kocienda/Mounts/u/src/specks/target/debug/specks:*)"
     ]
   }
 }

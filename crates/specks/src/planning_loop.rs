@@ -26,6 +26,7 @@ pub enum LoopState {
     /// Interviewer presenting results and asking for approval
     InterviewerPresent,
     /// User provided feedback, loop back to planner
+    #[allow(dead_code)] // Part of state machine design, used when full loop is implemented
     Revise,
     /// User approved the speck
     Approved,
@@ -40,6 +41,7 @@ impl LoopState {
     }
 
     /// Get the next state in the normal flow
+    #[allow(dead_code)] // Part of state machine design
     pub fn next(&self) -> Option<LoopState> {
         match self {
             LoopState::Start => Some(LoopState::InterviewerGather),
@@ -157,8 +159,8 @@ pub struct PlanningLoop {
     timeout_secs: u64,
     /// Speck name (if specified)
     speck_name: Option<String>,
-    /// Whether to output in JSON format
-    json_output: bool,
+    /// Whether to output in JSON format (reserved for future use)
+    _json_output: bool,
     /// Whether to suppress progress messages
     quiet: bool,
 }
@@ -182,28 +184,32 @@ impl PlanningLoop {
             project_root,
             timeout_secs,
             speck_name,
-            json_output,
+            _json_output: json_output,
             quiet,
         }
     }
 
     /// Set a custom agent runner (for testing)
+    #[allow(dead_code)]
     pub fn with_runner(mut self, runner: AgentRunner) -> Self {
         self.runner = runner;
         self
     }
 
     /// Get the current state
+    #[allow(dead_code)]
     pub fn state(&self) -> &LoopState {
         &self.state
     }
 
     /// Get the current context
+    #[allow(dead_code)]
     pub fn context(&self) -> &LoopContext {
         &self.context
     }
 
     /// Get the iteration count
+    #[allow(dead_code)]
     pub fn iteration(&self) -> usize {
         self.context.iteration
     }

@@ -253,3 +253,22 @@ pub struct SkillInfo {
     /// Installation status (installed, updated, unchanged, missing, source_missing)
     pub status: String,
 }
+
+/// Data payload for execute command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecuteData {
+    /// Path to the speck file being executed
+    pub speck_path: String,
+    /// UUID of this execution run
+    pub run_id: String,
+    /// Path to the run directory
+    pub run_directory: String,
+    /// Steps that were completed (anchors with #)
+    pub steps_completed: Vec<String>,
+    /// Steps remaining to be executed (anchors with #)
+    pub steps_remaining: Vec<String>,
+    /// Number of commits created
+    pub commits_created: usize,
+    /// Execution outcome: "success", "failure", "halted", "partial"
+    pub outcome: String,
+}

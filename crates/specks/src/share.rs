@@ -148,6 +148,7 @@ pub fn get_skills_dir(share_dir: &Path) -> Option<PathBuf> {
 /// List available skills in the share directory.
 ///
 /// Returns a list of skill names that are available for installation.
+#[allow(dead_code)] // Useful utility function, kept for future use
 pub fn list_available_skills(share_dir: &Path) -> Vec<String> {
     let Some(skills_dir) = get_skills_dir(share_dir) else {
         return vec![];

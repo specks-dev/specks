@@ -1,6 +1,7 @@
 //! CLI command implementations
 
 pub mod beads;
+pub mod execute;
 pub mod init;
 pub mod list;
 pub mod plan;
@@ -10,6 +11,7 @@ pub mod validate;
 pub mod version;
 
 pub use beads::{run_beads_status, run_link, run_pull, run_sync, BeadsCommands};
+pub use execute::run_execute;
 pub use init::run_init;
 pub use list::run_list;
 pub use plan::run_plan;

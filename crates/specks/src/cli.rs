@@ -124,6 +124,40 @@ pub enum Commands {
     /// Configure external tool integrations like Claude Code.
     #[command(subcommand, long_about = "Setup specks integrations with external tools.\n\nSubcommands:\n  claude   Install Claude Code skills for /specks-plan and /specks-execute\n\nSkills are pre-packaged configurations that enable specks functionality\nwithin Claude Code sessions. They must be installed to each project\nwhere you want to use the slash commands.")]
     Setup(SetupCommands),
+
+    /// Execute a speck's steps through agent-driven implementation
+    ///
+    /// Runs the director agent to implement steps in the speck. Each step goes
+    /// through architect, implementer, reviewer, auditor, and committer agents.
+    #[command(long_about = "Execute a speck's steps through agent-driven implementation.\n\nWorkflow per step:\n  1. Architect creates implementation strategy\n  2. Implementer writes code (with Monitor watching)\n  3. Reviewer checks plan adherence\n  4. Auditor verifies code quality\n  5. Logger updates implementation log\n  6. Committer prepares/creates commit\n\nOptions:\n  --start-step   Begin from specific step (default: first ready)\n  --end-step     Stop after specific step (default: all)\n  --commit-policy  manual = prompt before commit (default)\n                   auto = commit automatically\n  --checkpoint-mode  step = pause after each step (default)\n                     milestone = pause at milestones only\n                     continuous = no pauses\n  --dry-run      Show execution plan without running\n\nRequires Claude Code CLI (claude) to be installed.\nSpeck must have Status = active in Plan Metadata.")]
+    Execute {
+        /// Path to speck file to execute
+        speck: String,
+
+        /// Step anchor to start from (default: first ready step)
+        #[arg(long)]
+        start_step: Option<String>,
+
+        /// Step anchor to stop after (default: all steps)
+        #[arg(long)]
+        end_step: Option<String>,
+
+        /// Commit policy: manual or auto (default: manual)
+        #[arg(long, default_value = "manual")]
+        commit_policy: String,
+
+        /// Checkpoint mode: step, milestone, or continuous (default: step)
+        #[arg(long, default_value = "step")]
+        checkpoint_mode: String,
+
+        /// Show what would be executed without doing it
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Timeout per step in seconds (default: 600)
+        #[arg(long, default_value = "600")]
+        timeout: u64,
+    },
 }
 
 /// Setup subcommands
@@ -333,6 +367,138 @@ mod tests {
                 assert!(!force);
             }
             _ => panic!("Expected Setup Claude command"),
+        }
+    }
+
+    #[test]
+    fn test_execute_command_basic() {
+        let cli =
+            Cli::try_parse_from(["specks", "execute", ".specks/specks-1.md"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Execute {
+                speck,
+                start_step,
+                end_step,
+                commit_policy,
+                checkpoint_mode,
+                dry_run,
+                timeout,
+            }) => {
+                assert_eq!(speck, ".specks/specks-1.md");
+                assert!(start_step.is_none());
+                assert!(end_step.is_none());
+                assert_eq!(commit_policy, "manual");
+                assert_eq!(checkpoint_mode, "step");
+                assert!(!dry_run);
+                assert_eq!(timeout, 600);
+            }
+            _ => panic!("Expected Execute command"),
+        }
+    }
+
+    #[test]
+    fn test_execute_command_with_step_range() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "execute",
+            ".specks/specks-1.md",
+            "--start-step",
+            "#step-1",
+            "--end-step",
+            "#step-3",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::Execute {
+                start_step,
+                end_step,
+                ..
+            }) => {
+                assert_eq!(start_step, Some("#step-1".to_string()));
+                assert_eq!(end_step, Some("#step-3".to_string()));
+            }
+            _ => panic!("Expected Execute command"),
+        }
+    }
+
+    #[test]
+    fn test_execute_command_with_policies() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "execute",
+            ".specks/specks-1.md",
+            "--commit-policy",
+            "auto",
+            "--checkpoint-mode",
+            "milestone",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::Execute {
+                commit_policy,
+                checkpoint_mode,
+                ..
+            }) => {
+                assert_eq!(commit_policy, "auto");
+                assert_eq!(checkpoint_mode, "milestone");
+            }
+            _ => panic!("Expected Execute command"),
+        }
+    }
+
+    #[test]
+    fn test_execute_command_dry_run() {
+        let cli =
+            Cli::try_parse_from(["specks", "execute", ".specks/specks-1.md", "--dry-run"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Execute { dry_run, .. }) => {
+                assert!(dry_run);
+            }
+            _ => panic!("Expected Execute command"),
+        }
+    }
+
+    #[test]
+    fn test_execute_command_with_timeout() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "execute",
+            ".specks/specks-1.md",
+            "--timeout",
+            "1200",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::Execute { timeout, .. }) => {
+                assert_eq!(timeout, 1200);
+            }
+            _ => panic!("Expected Execute command"),
+        }
+    }
+
+    #[test]
+    fn test_execute_command_with_global_flags() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "--json",
+            "--quiet",
+            "execute",
+            ".specks/specks-1.md",
+        ])
+        .unwrap();
+
+        assert!(cli.json);
+        assert!(cli.quiet);
+        match cli.command {
+            Some(Commands::Execute { speck, .. }) => {
+                assert_eq!(speck, ".specks/specks-1.md");
+            }
+            _ => panic!("Expected Execute command"),
         }
     }
 }

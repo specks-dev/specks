@@ -18,6 +18,8 @@ toml.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 regex.workspace = true
+uuid.workspace = true
+chrono.workspace = true
 specks-core.workspace = true
 
 [dev-dependencies]

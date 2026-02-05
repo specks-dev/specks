@@ -127,6 +127,11 @@ pub enum SpecksError {
     #[error("E024: User aborted planning loop")]
     UserAborted,
 
+    // === Execution errors (E022) ===
+    /// E022: Monitor halted execution
+    #[error("E022: Monitor halted execution: {reason}")]
+    MonitorHalted { reason: String },
+
     // === Distribution errors (E025) ===
     /// E025: Skills not found in share directory
     #[error("E025: Skills not found in share directory: {path}")]
@@ -161,6 +166,7 @@ impl SpecksError {
             SpecksError::ClaudeCliNotInstalled => "E019",
             SpecksError::AgentInvocationFailed { .. } => "E020",
             SpecksError::AgentTimeout { .. } => "E021",
+            SpecksError::MonitorHalted { .. } => "E022",
             SpecksError::SpeckValidationWarnings { .. } => "E023",
             SpecksError::UserAborted => "E024",
             SpecksError::SkillsNotFound { .. } => "E025",
@@ -219,6 +225,8 @@ impl SpecksError {
             SpecksError::ClaudeCliNotInstalled => 6, // Claude CLI not installed
 
             SpecksError::AgentInvocationFailed { .. } | SpecksError::AgentTimeout { .. } => 1, // Agent errors
+
+            SpecksError::MonitorHalted { .. } => 4, // Monitor halted execution
 
             SpecksError::SpeckValidationWarnings { .. } => 0, // Warnings are not failures
 
@@ -305,5 +313,16 @@ mod tests {
         assert_eq!(err.exit_code(), 7);
         assert!(err.to_string().contains("/some/path"));
         assert!(err.to_string().contains("Skills not found"));
+    }
+
+    #[test]
+    fn test_monitor_halted_error() {
+        let err = SpecksError::MonitorHalted {
+            reason: "drift detected".to_string(),
+        };
+        assert_eq!(err.code(), "E022");
+        assert_eq!(err.exit_code(), 4);
+        assert!(err.to_string().contains("drift detected"));
+        assert!(err.to_string().contains("Monitor halted"));
     }
 }

@@ -1197,36 +1197,36 @@ Skills are distributed as separate files alongside the binary (not embedded in t
 - ExecuteData in output.rs
 
 **Tasks:**
-- [ ] Add `Commands::Execute` variant to cli.rs with all options
-- [ ] Implement `run_execute()` in commands/execute.rs
-- [ ] Validate speck exists and passes validation
-- [ ] Verify speck status is "active"
-- [ ] Verify beads root exists (or run sync)
-- [ ] Create run directory with UUID
-- [ ] Construct director agent prompt with speck and options
-- [ ] Invoke director agent via AgentRunner
-- [ ] Monitor for halt signals from .specks/runs/{uuid}/.halt
-- [ ] Collect run artifacts (architect-plan.md, etc.)
-- [ ] Implement --dry-run to show execution plan
-- [ ] Implement --start-step and --end-step filtering
-- [ ] Implement --commit-policy and --checkpoint-mode
-- [ ] Add E022 (Monitor halted execution) to error.rs
-- [ ] Add ExecuteData struct to output.rs
-- [ ] Update commands/mod.rs exports
+- [x] Add `Commands::Execute` variant to cli.rs with all options
+- [x] Implement `run_execute()` in commands/execute.rs
+- [x] Validate speck exists and passes validation
+- [x] Verify speck status is "active"
+- [x] Verify beads root exists (or run sync)
+- [x] Create run directory with UUID
+- [x] Construct director agent prompt with speck and options
+- [x] Invoke director agent via AgentRunner
+- [x] Monitor for halt signals from .specks/runs/{uuid}/.halt
+- [x] Collect run artifacts (architect-plan.md, etc.)
+- [x] Implement --dry-run to show execution plan
+- [x] Implement --start-step and --end-step filtering
+- [x] Implement --commit-policy and --checkpoint-mode
+- [x] Add E022 (Monitor halted execution) to error.rs
+- [x] Add ExecuteData struct to output.rs
+- [x] Update commands/mod.rs exports
 
 **Tests:**
-- [ ] Unit test: execute command parses arguments correctly
-- [ ] Unit test: step filtering with --start-step and --end-step
-- [ ] Integration test: execute with mock completes step
-- [ ] Integration test: dry-run shows plan without executing
-- [ ] Integration test: halt signal stops execution
-- [ ] Golden test: JSON output matches schema
+- [x] Unit test: execute command parses arguments correctly
+- [x] Unit test: step filtering with --start-step and --end-step
+- [x] Integration test: execute with mock completes step
+- [x] Integration test: dry-run shows plan without executing
+- [x] Integration test: halt signal stops execution
+- [x] Golden test: JSON output matches schema
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo test` passes (new tests)
-- [ ] `specks execute .specks/specks-test.md --dry-run` shows execution plan
-- [ ] Run directory created with expected structure
+- [x] `cargo build` succeeds
+- [x] `cargo test` passes (new tests)
+- [x] `specks execute .specks/specks-test.md --dry-run` shows execution plan
+- [x] Run directory created with expected structure
 
 **Rollback:**
 - Revert commit, remove execute.rs
