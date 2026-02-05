@@ -157,12 +157,12 @@ impl AgentRunner {
 
         // Add allowed tools
         if !config.allowed_tools.is_empty() {
-            cmd.arg("--allowedTools");
+            cmd.arg("--allowed-tools");
             cmd.arg(config.allowed_tools.join(","));
         }
 
         // Add system prompt (the agent definition)
-        cmd.arg("--systemPrompt");
+        cmd.arg("--system-prompt");
         cmd.arg(&agent_content);
 
         // Add the user prompt
@@ -302,12 +302,50 @@ pub fn is_specks_workspace(path: &Path) -> bool {
     test_agent.exists()
 }
 
+/// Find the specks workspace root relative to the running binary.
+///
+/// If the binary is running from a cargo target directory (target/debug/ or target/release/),
+/// this returns the workspace root (parent of target/). This enables development builds
+/// to find agents regardless of what directory they're invoked from.
+///
+/// Handles both:
+/// - Direct binaries: `.../specks/target/debug/specks`
+/// - Test binaries: `.../specks/target/debug/deps/specks-xxxx`
+///
+/// Returns `None` if:
+/// - The binary path can't be determined
+/// - The binary isn't in a cargo target directory
+/// - The workspace root doesn't look like the specks workspace
+pub fn find_binary_workspace_root() -> Option<PathBuf> {
+    let exe_path = std::env::current_exe().ok()?;
+
+    // Walk up the directory tree looking for a "target" directory
+    // This handles both direct binaries (target/debug/specks) and
+    // test binaries (target/debug/deps/specks-xxxx)
+    let mut current = exe_path.parent()?;
+
+    while let Some(parent) = current.parent() {
+        if current.file_name()?.to_str()? == "target" {
+            // Found target directory - parent is the workspace root
+            let workspace_root = parent;
+            if is_specks_workspace(workspace_root) {
+                return Some(workspace_root.to_path_buf());
+            }
+            // Found target but not specks workspace, stop looking
+            return None;
+        }
+        current = parent;
+    }
+
+    None
+}
+
 /// Resolve the path to an agent definition using per-agent resolution.
 ///
 /// Resolution order:
 /// 1. `project_root/agents/{agent_name}.md` (if file exists)
 /// 2. `{share_dir}/agents/{agent_name}.md` where share_dir comes from `find_share_dir()`
-/// 3. Development fallback: detected specks workspace agents directory
+/// 3. Development fallback: binary's workspace agents directory (for dev builds run from anywhere)
 ///
 /// Returns `None` if the agent is not found in any location.
 pub fn resolve_agent_path(agent_name: &str, project_root: &Path) -> Option<PathBuf> {
@@ -327,9 +365,10 @@ pub fn resolve_agent_path(agent_name: &str, project_root: &Path) -> Option<PathB
         }
     }
 
-    // 3. Development fallback: check if we're in the specks workspace
-    if is_specks_workspace(project_root) {
-        let dev_agent = project_root.join("agents").join(&filename);
+    // 3. Development fallback: check if binary is running from a cargo target directory
+    //    This enables dev builds to find agents regardless of working directory
+    if let Some(workspace_root) = find_binary_workspace_root() {
+        let dev_agent = workspace_root.join("agents").join(&filename);
         if dev_agent.is_file() {
             return Some(dev_agent);
         }
@@ -382,9 +421,9 @@ pub fn resolve_agent_path_with_source(
         }
     }
 
-    // 3. Development fallback: check if we're in the specks workspace
-    if is_specks_workspace(project_root) {
-        let dev_agent = project_root.join("agents").join(&filename);
+    // 3. Development fallback: check if binary is running from a cargo target directory
+    if let Some(workspace_root) = find_binary_workspace_root() {
+        let dev_agent = workspace_root.join("agents").join(&filename);
         if dev_agent.is_file() {
             return Some((dev_agent, AgentSource::Development));
         }
@@ -440,13 +479,20 @@ pub fn verify_required_agents(
     }
 }
 
+/// Construct the expected agent path without checking existence.
+///
+/// This is a pure function with no I/O - useful for tests and error messages.
+fn construct_agent_path(project_root: &Path, agent_name: &str) -> PathBuf {
+    project_root.join("agents").join(format!("{}.md", agent_name))
+}
+
 /// Get the path to a specific agent definition using per-agent resolution.
 ///
 /// Returns the resolved path if found, or the project-local path if not found
 /// (which will produce a clear "file not found" error when read).
 pub fn get_agent_path(project_root: &Path, agent_name: &str) -> PathBuf {
     resolve_agent_path(agent_name, project_root)
-        .unwrap_or_else(|| project_root.join("agents").join(format!("{}.md", agent_name)))
+        .unwrap_or_else(|| construct_agent_path(project_root, agent_name))
 }
 
 /// Create an AgentConfig for the interviewer agent
@@ -574,10 +620,29 @@ mod tests {
     }
 
     #[test]
-    fn test_get_agent_path() {
+    fn test_construct_agent_path() {
+        // Pure path construction - no I/O, deterministic
         let project_root = PathBuf::from("/project");
-        let path = get_agent_path(&project_root, "specks-interviewer");
+        let path = construct_agent_path(&project_root, "specks-interviewer");
         assert_eq!(path, PathBuf::from("/project/agents/specks-interviewer.md"));
+    }
+
+    #[test]
+    fn test_get_agent_path_resolves_in_dev() {
+        // When running in dev workspace, get_agent_path resolves to real agents
+        let fake_project = PathBuf::from("/nonexistent-project");
+        let path = get_agent_path(&fake_project, "specks-interviewer");
+
+        // Should resolve to development workspace since /nonexistent has no agents
+        if let Some(workspace) = find_binary_workspace_root() {
+            assert_eq!(path, workspace.join("agents/specks-interviewer.md"));
+        } else {
+            // If no dev workspace detected, falls back to constructed path
+            assert_eq!(
+                path,
+                PathBuf::from("/nonexistent-project/agents/specks-interviewer.md")
+            );
+        }
     }
 
     #[test]
@@ -979,5 +1044,31 @@ mod tests {
         assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-committer"));
         assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-logger"));
         assert_eq!(EXECUTE_REQUIRED_AGENTS.len(), 8);
+    }
+
+    #[test]
+    fn test_find_binary_workspace_root_in_cargo_tests() {
+        // When running tests via cargo, the test binary is in target/debug/deps/
+        // The function should find the specks workspace root
+        let result = find_binary_workspace_root();
+
+        // In cargo test context, we should find the workspace
+        assert!(
+            result.is_some(),
+            "Should find workspace root when running cargo tests"
+        );
+
+        let workspace = result.unwrap();
+        assert!(
+            is_specks_workspace(&workspace),
+            "Detected workspace should be the specks workspace"
+        );
+
+        // Verify it matches the expected workspace root
+        let expected = find_workspace_root();
+        assert_eq!(
+            workspace, expected,
+            "Binary workspace detection should match test workspace"
+        );
     }
 }

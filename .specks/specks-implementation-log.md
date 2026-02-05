@@ -6,6 +6,59 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8 Dependencies: Plan Reorganization | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Phase 2.0 plan file
+- `crates/specks/src/agent.rs` - Agent resolution and invocation
+- `crates/specks/src/planning_loop.rs` - Planning loop implementation
+- `agents/specks-interviewer.md` - Interviewer agent definition
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Fix CLI flag format (`--systemPrompt` → `--system-prompt`, `--allowedTools` → `--allowed-tools`) | Done |
+| Diagnose CLI hang issue (agents can't use AskUserQuestion in `--print` mode) | Done |
+| Design Interaction Adapter architecture with code-architect | Done |
+| Create Step 8.3 (was 8.4): Interaction Adapter System plan with 7 substeps | Done |
+| Renumber steps: Interaction Adapter → 8.3, Greenfield Test → 8.4 | Done |
+| Fix all step dependencies to eliminate circular references | Done |
+| Fix development ergonomics: `find_binary_workspace_root()` for dev builds | Done |
+| Add `construct_agent_path()` to separate path construction from resolution | Done |
+| Create `docs/tutorials/py-calc-example.md` tutorial | Done |
+| Update `docs/getting-started.md` with py-calc Quick Start | Done |
+
+**Files Created:**
+- `docs/tutorials/py-calc-example.md` - Greenfield project tutorial for building Python calculator
+
+**Files Modified:**
+- `crates/specks/src/agent.rs` - Fixed CLI flags, added `find_binary_workspace_root()`, `construct_agent_path()`, updated tests
+- `docs/getting-started.md` - Updated Quick Start section to use py-calc example
+- `.specks/specks-2.md` - Major reorganization of Step 8 substeps and dependencies
+
+**Test Results:**
+- `cargo nextest run`: 223 tests passed (2 new tests added)
+
+**Checkpoints Verified:**
+- Development build finds agents from any directory: PASS
+- CLI flags use correct kebab-case format: PASS
+- Step dependencies are linear (no circular refs): PASS
+
+**Key Decisions/Notes:**
+- **Root cause identified**: `--print` mode in Claude CLI is incompatible with `AskUserQuestion` tool. Agents cannot interact with users in batch mode.
+- **Solution designed**: Interaction Adapter pattern with mode-specific implementations:
+  - CLI mode: `specks` owns interaction via `inquire` crate, agents run without `AskUserQuestion`
+  - Claude Code mode: Interviewer agent uses `AskUserQuestion` natively
+- **Design decisions added**: D15 (Specks owns CLI interaction), D16 (Agents own Claude Code interaction), D17 (Graceful non-TTY fallback)
+- **New dependencies planned**: `inquire`, `indicatif`, `owo-colors`, `ctrlc`
+- **Step reordering**: Interaction Adapter must come before Greenfield Test (can't test `specks plan` until interaction works)
+- **Substeps 8.3.1-8.3.7 planned**: Core trait, CLI adapter, planning loop integration, mode-aware config, non-interactive mode, Claude Code verification, polish/docs
+
+---
+
 ## [specks-2.md] Step 8.2: Global Skills Installation Option | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

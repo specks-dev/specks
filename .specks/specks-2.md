@@ -1689,13 +1689,364 @@ specks setup claude --check --global  # Check global installation
 
 ---
 
-#### Step 8.3: Greenfield Project Test (py-calc) {#step-8-3}
+#### Step 8.3: Interaction Adapter System {#step-8-3}
 
 **Depends on:** #step-8-2
 
+**Purpose:** Enable mode-specific, excellent user interaction by abstracting interaction patterns behind an adapter trait. CLI mode uses polished terminal prompts; Claude Code mode delegates interaction to the interviewer agent.
+
+**Context:**
+
+The `specks plan` CLI command hangs because agents try to use `AskUserQuestion` tool, but in `--print` mode the user cannot interact. The root cause is that agent-driven interaction does not work outside Claude Code. The solution is an `InteractionAdapter` trait that abstracts interaction patterns, with mode-specific implementations.
+
+**Design Decisions:**
+
+- **[D15] Specks Owns CLI Interaction** {#d15-cli-interaction}: In CLI mode, specks itself gathers user input using `inquire` crate and passes responses to agents as context. The interviewer agent runs without `AskUserQuestion` tool.
+
+- **[D16] Agents Own Claude Code Interaction** {#d16-cc-interaction}: In Claude Code mode (via skills), the interviewer agent uses `AskUserQuestion` natively. No Rust adapter is needed; the interviewer IS the adapter.
+
+- **[D17] Graceful Non-TTY Fallback** {#d17-non-tty}: When stdin is not a TTY (CI, pipes), use sensible defaults or fail fast with clear message rather than hanging.
+
+**Dependencies to add:**
+```toml
+inquire = "0.7"      # Interactive prompts
+indicatif = "0.17"   # Progress spinners
+owo-colors = "4"     # Colored output
+ctrlc = "3.4"        # Ctrl+C handling
+```
+
+---
+
+##### Step 8.3.1: Core Interaction Adapter Trait {#step-8-3-1}
+
+**Depends on:** #step-8-2
+
+**Commit:** `feat(core): add InteractionAdapter trait for mode-agnostic user interaction`
+
+**References:** [D15] CLI interaction, [D16] CC interaction, (#d15-cli-interaction, #d16-cc-interaction)
+
+**Artifacts:**
+- `crates/specks-core/src/interaction.rs` - InteractionAdapter trait and types
+- Updated `crates/specks-core/src/lib.rs` - Export interaction module
+
+**Tasks:**
+- [ ] Add dependencies to `crates/specks-core/Cargo.toml`: `inquire`, `indicatif`, `owo-colors`
+- [ ] Create `interaction.rs` module with `InteractionAdapter` trait
+- [ ] Define trait methods:
+  - `ask_text(&self, prompt: &str, default: Option<&str>) -> Result<String>`
+  - `ask_select(&self, prompt: &str, options: &[&str]) -> Result<usize>`
+  - `ask_confirm(&self, prompt: &str, default: bool) -> Result<bool>`
+  - `ask_multi_select(&self, prompt: &str, options: &[&str]) -> Result<Vec<usize>>`
+  - `start_progress(&self, message: &str) -> ProgressHandle`
+  - `end_progress(&self, handle: ProgressHandle, success: bool)`
+  - `print_info(&self, message: &str)`
+  - `print_warning(&self, message: &str)`
+  - `print_error(&self, message: &str)`
+  - `print_success(&self, message: &str)`
+- [ ] Define `ProgressHandle` type for tracking spinners
+- [ ] Define `InteractionError` enum with variants for cancellation, timeout, non-tty
+- [ ] Export trait and types from lib.rs
+
+**Tests:**
+- [ ] Unit test: trait is object-safe (can use `dyn InteractionAdapter`)
+- [ ] Unit test: error types implement std::error::Error
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Trait compiles and is usable as trait object
+
+**Rollback:**
+- Remove interaction.rs, revert Cargo.toml changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.2: CLI Adapter Implementation {#step-8-3-2}
+
+**Depends on:** #step-8-3-1
+
+**Commit:** `feat(cli): implement CliAdapter with inquire for interactive prompts`
+
+**References:** [D15] CLI interaction, [D17] Non-TTY fallback, (#d15-cli-interaction, #d17-non-tty)
+
+**Artifacts:**
+- `crates/specks/src/interaction/mod.rs` - CLI interaction module
+- `crates/specks/src/interaction/cli_adapter.rs` - CliAdapter implementation
+- Updated `crates/specks/Cargo.toml` - Add ctrlc dependency
+
+**Tasks:**
+- [ ] Add `ctrlc = "3.4"` to `crates/specks/Cargo.toml`
+- [ ] Create `interaction/` module directory
+- [ ] Implement `CliAdapter` struct with TTY detection
+- [ ] Implement `ask_text` using `inquire::Text`
+- [ ] Implement `ask_select` using `inquire::Select`
+- [ ] Implement `ask_confirm` using `inquire::Confirm`
+- [ ] Implement `ask_multi_select` using `inquire::MultiSelect`
+- [ ] Implement `start_progress` using `indicatif::ProgressBar::new_spinner()`
+- [ ] Implement `end_progress` with success/failure styling
+- [ ] Implement `print_*` methods using `owo-colors` for consistent styling
+- [ ] Add TTY check: if not TTY, return `InteractionError::NonTty` or use defaults
+- [ ] Set up Ctrl+C handler with `ctrlc` crate for graceful cancellation
+- [ ] Handle Ctrl+C during prompts: return `InteractionError::Cancelled`
+
+**Color Scheme:**
+- Info: default/white
+- Warning: yellow
+- Error: red bold
+- Success: green
+
+**Tests:**
+- [ ] Unit test: `CliAdapter::new()` detects TTY correctly
+- [ ] Unit test: non-TTY mode returns appropriate errors
+- [ ] Integration test: manual verification of prompt styling (document in test comments)
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Manual test: `CliAdapter` prompts work in terminal
+- [ ] Manual test: Ctrl+C cancels gracefully
+
+**Rollback:**
+- Remove interaction module, revert Cargo.toml
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.3: Planning Loop Adapter Integration {#step-8-3-3}
+
+**Depends on:** #step-8-3-2
+
+**Commit:** `feat(plan): integrate InteractionAdapter into planning loop`
+
+**References:** [D15] CLI interaction, (#d15-cli-interaction, #planning-loop)
+
+**Artifacts:**
+- Updated `crates/specks/src/commands/plan.rs` - Use adapter for all user interaction
+- Updated `crates/specks-core/src/planning_loop.rs` - Accept adapter parameter
+
+**Tasks:**
+- [ ] Update `PlanningLoop` to accept `Box<dyn InteractionAdapter>` parameter
+- [ ] Replace direct stdin reads with `adapter.ask_text()`
+- [ ] Replace yes/no prompts with `adapter.ask_confirm()`
+- [ ] Add progress spinners for agent invocation:
+  - "Interviewer gathering requirements..."
+  - "Planner creating speck..."
+  - "Critic reviewing speck..."
+- [ ] Use `adapter.print_*` for status messages
+- [ ] Update `plan` command to create `CliAdapter` and pass to loop
+- [ ] Handle `InteractionError::Cancelled` - clean exit with message
+- [ ] Handle `InteractionError::NonTty` - fail fast with helpful message
+
+**Interaction Flow (CLI mode):**
+```
+1. specks plan "add feature X"
+2. CLI creates CliAdapter
+3. PlanningLoop uses adapter for all prompts
+4. Interviewer agent runs WITHOUT AskUserQuestion tool
+5. CLI gathers input via adapter, passes to interviewer as context
+6. Loop continues until user approves or cancels
+```
+
+**Tests:**
+- [ ] Integration test: planning loop with mock adapter
+- [ ] Integration test: cancellation handling
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] `specks plan "test"` uses interactive prompts (manual test)
+- [ ] Ctrl+C during planning exits gracefully
+
+**Rollback:**
+- Revert changes to plan.rs and planning_loop.rs
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.4: Mode-Aware Agent Configuration {#step-8-3-4}
+
+**Depends on:** #step-8-3-3
+
+**Commit:** `feat(agents): add mode-aware tool configuration for interviewer`
+
+**References:** [D15] CLI interaction, [D16] CC interaction, (#d15-cli-interaction, #d16-cc-interaction)
+
+**Artifacts:**
+- Updated `crates/specks-core/src/agent.rs` - Mode-aware config generation
+- Updated interviewer agent documentation
+
+**Tasks:**
+- [ ] Add `InteractionMode` enum: `Cli`, `ClaudeCode`
+- [ ] Add `interviewer_config(mode: InteractionMode)` function
+- [ ] CLI mode config: Remove `AskUserQuestion` from tool list
+- [ ] Claude Code mode config: Include `AskUserQuestion` in tool list
+- [ ] Update agent loading to accept mode parameter
+- [ ] Document the mode difference in interviewer agent header
+
+**Agent Tool Sets:**
+```
+CLI mode:       Read, Grep, Glob, Bash, Task
+Claude Code:    Read, Grep, Glob, Bash, Task, AskUserQuestion
+```
+
+**Tests:**
+- [ ] Unit test: `interviewer_config(Cli)` excludes AskUserQuestion
+- [ ] Unit test: `interviewer_config(ClaudeCode)` includes AskUserQuestion
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Interviewer agent in CLI mode does not attempt AskUserQuestion
+
+**Rollback:**
+- Revert agent.rs changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.5: Non-Interactive Mode Support {#step-8-3-5}
+
+**Depends on:** #step-8-3-4
+
+**Commit:** `feat(cli): add non-interactive mode with --yes flag and CI detection`
+
+**References:** [D17] Non-TTY fallback, (#d17-non-tty)
+
+**Artifacts:**
+- `crates/specks/src/interaction/non_interactive.rs` - NonInteractiveAdapter
+- Updated CLI argument parsing
+
+**Tasks:**
+- [ ] Create `NonInteractiveAdapter` implementing `InteractionAdapter`
+- [ ] `ask_confirm` returns `true` (accept defaults)
+- [ ] `ask_text` returns default or empty string
+- [ ] `ask_select` returns first option
+- [ ] Progress methods are no-ops or minimal output
+- [ ] Add `--yes` / `-y` flag to bypass confirmations
+- [ ] Detect CI environment: `CI=true`, `GITHUB_ACTIONS`, `JENKINS_URL`
+- [ ] Auto-select non-interactive mode when:
+  - `--yes` flag provided
+  - CI environment detected
+  - stdin is not a TTY
+- [ ] Print warning when using non-interactive defaults
+
+**Tests:**
+- [ ] Unit test: CI detection works for common CI systems
+- [ ] Unit test: NonInteractiveAdapter returns expected defaults
+- [ ] Integration test: `specks plan --yes` runs without prompts
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] `CI=true specks plan "test"` does not hang
+- [ ] `specks plan --yes "test"` accepts defaults
+
+**Rollback:**
+- Remove non_interactive.rs, revert CLI changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.6: Claude Code Path Verification {#step-8-3-6}
+
+**Depends on:** #step-8-3-5
+
+**Commit:** `test: verify Claude Code interaction path works correctly`
+
+**References:** [D16] CC interaction, (#d16-cc-interaction)
+
+**Artifacts:**
+- Updated skill SKILL.md files with interaction mode documentation
+- Test script for Claude Code path
+
+**Tasks:**
+- [ ] Verify `/specks-plan` skill works in Claude Code
+- [ ] Verify interviewer agent can use AskUserQuestion in CC mode
+- [ ] Document interaction mode in skill SKILL.md files
+- [ ] Create manual test script for Claude Code path
+- [ ] Verify director coordination works with Task tool
+
+**Test Script (manual):**
+```
+1. Open Claude Code in test project
+2. Run: /specks-plan "add a greeting command"
+3. Verify: Interviewer asks questions via AskUserQuestion
+4. Verify: Planning loop completes
+5. Verify: Speck is created
+```
+
+**Checkpoint:**
+- [ ] `/specks-plan` works in Claude Code (manual test)
+- [ ] Interviewer uses AskUserQuestion correctly
+- [ ] No adapter code is invoked in Claude Code path
+
+**Rollback:**
+- N/A (verification step)
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.7: Interaction Polish and Documentation {#step-8-3-7}
+
+**Depends on:** #step-8-3-6
+
+**Commit:** `docs: add interaction adapter documentation and polish UX`
+
+**References:** (#d15-cli-interaction, #d16-cc-interaction, #d17-non-tty)
+
+**Artifacts:**
+- `docs/architecture/interaction-adapter.md` - Architecture documentation
+- Updated `docs/getting-started.md` - Note about interaction modes
+- Updated README
+
+**Tasks:**
+- [ ] Create architecture documentation for interaction adapter
+- [ ] Document the two modes and when each is used
+- [ ] Add troubleshooting section for non-TTY issues
+- [ ] Polish spinner messages for consistency
+- [ ] Add helpful error messages for common issues:
+  - "Not a terminal - use --yes for non-interactive mode"
+  - "Cancelled by user"
+- [ ] Verify color output respects NO_COLOR environment variable
+- [ ] Test on macOS Terminal, iTerm2, VS Code terminal
+
+**Checkpoint:**
+- [ ] Documentation is complete and accurate
+- [ ] Error messages are helpful
+- [ ] Colors work correctly in tested terminals
+- [ ] NO_COLOR is respected
+
+**Rollback:**
+- Revert documentation changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+**Step 8.3 Completion Checkpoint:**
+- [ ] All substeps completed
+- [ ] `specks plan "test"` works interactively in CLI
+- [ ] `specks plan --yes "test"` works non-interactively
+- [ ] `/specks-plan` works in Claude Code
+- [ ] Documentation complete
+- [ ] No regressions in existing functionality
+
+---
+
+#### Step 8.4: Greenfield Project Test (py-calc) {#step-8-4}
+
+**Depends on:** #step-8-3
+
 **Commit:** `test: validate greenfield onboarding with py-calc example`
 
-**References:** (#step-8-1, #step-8-2)
+**References:** (#step-8-1, #step-8-2, #step-8-3)
 
 **Context:**
 
@@ -1736,18 +2087,18 @@ specks plan "create a python command-line calculator that supports +, -, *, /"
 ```
 
 **Tasks:**
-- [ ] Document the complete test scenario
+- [x] Document the complete test scenario
 - [ ] Run test on fresh macOS system (or VM)
-- [ ] Capture output for documentation
-- [ ] Identify and fix any issues discovered
-- [ ] Create `docs/tutorials/py-calc-example.md` with walkthrough
-- [ ] Update `docs/getting-started.md` to use py-calc example
+- [x] Capture output for documentation
+- [x] Identify and fix any issues discovered
+- [x] Create `docs/tutorials/py-calc-example.md` with walkthrough
+- [x] Update `docs/getting-started.md` to use py-calc example
 
 **Checkpoint:**
 - [ ] Test scenario passes completely on fresh system
 - [ ] Both CLI and Claude Code paths work
-- [ ] Output is clear and helpful
-- [ ] Documentation captures the actual experience
+- [x] Output is clear and helpful
+- [x] Documentation captures the actual experience
 
 **Rollback:**
 - Document issues, create follow-up tasks
@@ -1756,15 +2107,9 @@ specks plan "create a python command-line calculator that supports +, -, *, /"
 
 ---
 
-#### Step 8.4: Reserved {#step-8-4}
-
-*Intentionally left blank for future use.*
-
----
-
 #### Step 8.5: Living On - Using Specks to Develop Specks {#step-8-5}
 
-**Depends on:** #step-8-3
+**Depends on:** #step-8-4
 
 **Purpose:** Enable comfortable self-development where the specks team uses `specks plan` and `specks execute` to add features to specks itself, with appropriate safety mechanisms and clear workflows.
 
@@ -1792,7 +2137,7 @@ This is the ultimate ergonomics test. If the specks team cannot comfortably use 
 
 ##### Step 8.5.1: Development Mode Detection {#step-8-5-1}
 
-**Depends on:** #step-8-3
+**Depends on:** #step-8-4
 
 **Commit:** `feat(core): add development mode detection for specks workspace`
 

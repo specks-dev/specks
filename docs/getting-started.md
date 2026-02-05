@@ -191,45 +191,56 @@ specks execute .specks/specks-feature.md
 - Monitor can halt execution if drift is detected
 - Supports manual or automatic commits
 
-## Quick Start Workflow
+## Quick Start: Build a Python Calculator
 
-### Create Your First Speck
+The fastest way to learn specks is to build something. Let's create a Python command-line calculator from scratch.
+
+### 1. Create and Initialize Your Project
 
 ```bash
-# Start the planning loop
-specks plan "add a health check endpoint to the API"
+mkdir py-calc
+cd py-calc
+specks init
 ```
 
-The interviewer will ask you questions to understand your requirements. As the loop progresses:
+You'll see that specks creates the `.specks/` directory and installs Claude Code skills.
 
-1. Review the generated speck
-2. Provide feedback on any concerns
-3. When satisfied, say "ready" or "approve"
+### 2. Plan Your Application
 
-The final speck is saved to `.specks/` with status "active".
-
-### Validate Your Speck
+Start the planning loop with a clear description:
 
 ```bash
-specks validate specks-healthcheck.md
+specks plan "create a python command-line calculator that supports +, -, *, /"
 ```
 
-This checks that the speck follows the required format and has valid references.
+The interviewer asks clarifying questions, the planner creates a speck, and the critic reviews it. When you're satisfied with the plan, say "ready" to finalize.
 
-### Execute the Speck
+### 3. Validate the Speck
+
+Check that the generated speck is valid:
 
 ```bash
-specks execute .specks/specks-healthcheck.md
+specks validate specks-py-calc.md
+```
+
+### 4. Execute the Speck
+
+Implement the calculator by executing the speck:
+
+```bash
+specks execute .specks/specks-py-calc.md
 ```
 
 The director orchestrates the agent suite to implement each step. You'll see progress updates and be prompted at checkpoints.
 
-### Track Progress
+### 5. Track Progress
 
 ```bash
-specks status specks-healthcheck.md   # Detailed status
-specks list                           # All specks overview
+specks status specks-py-calc.md   # Detailed status
+specks list                        # All specks overview
 ```
+
+For the complete walkthrough, see the [Python Calculator Tutorial](tutorials/py-calc-example.md).
 
 ## Using Specks Inside Claude Code
 
@@ -343,7 +354,8 @@ Options:
 
 ## Next Steps
 
-- **Tutorial**: [Create Your First Speck](tutorials/first-speck.md)
-- **Tutorial**: [Execute a Plan](tutorials/execute-plan.md)
+- **Tutorial**: [Build a Python Calculator](tutorials/py-calc-example.md) — Complete greenfield example
+- **Tutorial**: [Create Your First Speck](tutorials/first-speck.md) — Deep dive into the planning loop
+- **Tutorial**: [Execute a Plan](tutorials/execute-plan.md) — Understanding the execution workflow
 - **Contributing**: See [CONTRIBUTING.md](../CONTRIBUTING.md) for development setup
 - **Reference**: Check `.specks/specks-skeleton.md` for the full speck format
