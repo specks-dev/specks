@@ -929,38 +929,38 @@ tests/fixtures/
 - Error code E024 (user aborted)
 
 **Tasks:**
-- [ ] Add `Commands::Plan` variant to cli.rs with all options
-- [ ] Create planning_loop.rs with LoopState enum and PlanningLoop struct
-- [ ] Implement state transitions: Start -> InterviewerGather -> Planner -> Critic -> InterviewerPresent -> (Revise | Approved)
-- [ ] Implement `run_plan()` in commands/plan.rs
-- [ ] Detect input type: idea string vs existing speck path
-- [ ] Invoke interviewer agent for initial input gathering
-- [ ] Invoke planner agent with interviewer output
-- [ ] Run `specks validate` on created speck
-- [ ] Invoke critic agent to review speck
-- [ ] Invoke interviewer to present results with punch list and ask "ready or revise?"
-- [ ] Handle user feedback and loop back to planner (loop runs until user says ready)
-- [ ] Handle abort/exit cleanly
-- [ ] Set speck status to "active" on approval
-- [ ] Add E024 error code (user aborted)
-- [ ] Add PlanData struct to output.rs
-- [ ] Update commands/mod.rs exports
+- [x] Add `Commands::Plan` variant to cli.rs with all options
+- [x] Create planning_loop.rs with LoopState enum and PlanningLoop struct
+- [x] Implement state transitions: Start -> InterviewerGather -> Planner -> Critic -> InterviewerPresent -> (Revise | Approved)
+- [x] Implement `run_plan()` in commands/plan.rs
+- [x] Detect input type: idea string vs existing speck path
+- [x] Invoke interviewer agent for initial input gathering
+- [x] Invoke planner agent with interviewer output
+- [x] Run `specks validate` on created speck
+- [x] Invoke critic agent to review speck
+- [x] Invoke interviewer to present results with punch list and ask "ready or revise?"
+- [x] Handle user feedback and loop back to planner (loop runs until user says ready)
+- [x] Handle abort/exit cleanly
+- [x] Set speck status to "active" on approval
+- [x] Add E024 error code (user aborted)
+- [x] Add PlanData struct to output.rs
+- [x] Update commands/mod.rs exports
 
 **Tests:**
-- [ ] Unit test: plan command parses arguments correctly
-- [ ] Unit test: input type detection (idea vs speck path)
-- [ ] Unit test: loop state machine transitions correctly
-- [ ] Integration test: plan with mock completes single iteration
-- [ ] Integration test: plan loops on revision feedback
-- [ ] Integration test: plan handles abort cleanly
-- [ ] Golden test: JSON output matches schema
+- [x] Unit test: plan command parses arguments correctly
+- [x] Unit test: input type detection (idea vs speck path)
+- [x] Unit test: loop state machine transitions correctly
+- [x] Integration test: plan with mock completes single iteration
+- [x] Integration test: plan loops on revision feedback
+- [x] Integration test: plan handles abort cleanly
+- [x] Golden test: JSON output matches schema
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo test` passes (new tests)
-- [ ] `specks plan "test idea"` with mock produces speck file
-- [ ] Created speck passes `specks validate`
-- [ ] Loop terminates on user approval or abort
+- [x] `cargo build` succeeds
+- [x] `cargo test` passes (new tests)
+- [x] `specks plan "test idea"` with mock produces speck file
+- [x] Created speck passes `specks validate`
+- [x] Loop terminates on user approval or abort
 
 **Rollback:**
 - Revert commit, remove plan.rs and planning_loop.rs

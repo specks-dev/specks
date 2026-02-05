@@ -200,3 +200,31 @@ pub struct SubstepStatus {
     /// Total number of items
     pub total: usize,
 }
+
+/// Data payload for plan command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanData {
+    /// Path to the created/revised speck file
+    pub speck_path: String,
+    /// Name of the speck (without prefix/extension)
+    pub speck_name: String,
+    /// Mode: "new" or "revision"
+    pub mode: String,
+    /// Number of planning loop iterations
+    pub iterations: usize,
+    /// Validation results
+    pub validation: PlanValidation,
+    /// Whether the critic approved the speck
+    pub critic_approved: bool,
+    /// Whether the user approved the speck
+    pub user_approved: bool,
+}
+
+/// Validation summary for plan command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanValidation {
+    /// Number of validation errors
+    pub errors: usize,
+    /// Number of validation warnings
+    pub warnings: usize,
+}

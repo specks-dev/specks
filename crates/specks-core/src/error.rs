@@ -117,6 +117,15 @@ pub enum SpecksError {
     /// E021: Agent timeout
     #[error("E021: Agent timeout after {secs} seconds")]
     AgentTimeout { secs: u64 },
+
+    // === Planning errors (E023-E024) ===
+    /// E023: Created speck has validation warnings
+    #[error("E023: Created speck has validation warnings")]
+    SpeckValidationWarnings { warning_count: usize },
+
+    /// E024: User aborted planning loop
+    #[error("E024: User aborted planning loop")]
+    UserAborted,
 }
 
 impl SpecksError {
@@ -147,6 +156,8 @@ impl SpecksError {
             SpecksError::ClaudeCliNotInstalled => "E019",
             SpecksError::AgentInvocationFailed { .. } => "E020",
             SpecksError::AgentTimeout { .. } => "E021",
+            SpecksError::SpeckValidationWarnings { .. } => "E023",
+            SpecksError::UserAborted => "E024",
         }
     }
 
@@ -202,6 +213,10 @@ impl SpecksError {
             SpecksError::ClaudeCliNotInstalled => 6, // Claude CLI not installed
 
             SpecksError::AgentInvocationFailed { .. } | SpecksError::AgentTimeout { .. } => 1, // Agent errors
+
+            SpecksError::SpeckValidationWarnings { .. } => 0, // Warnings are not failures
+
+            SpecksError::UserAborted => 5, // User aborted planning loop
         }
     }
 }
@@ -258,5 +273,18 @@ mod tests {
         assert_eq!(err.code(), "E021");
         assert_eq!(err.exit_code(), 1);
         assert!(err.to_string().contains("300 seconds"));
+    }
+
+    #[test]
+    fn test_planning_error_codes() {
+        let err = SpecksError::SpeckValidationWarnings { warning_count: 3 };
+        assert_eq!(err.code(), "E023");
+        assert_eq!(err.exit_code(), 0); // Warnings don't cause failure
+        assert!(err.to_string().contains("validation warnings"));
+
+        let err = SpecksError::UserAborted;
+        assert_eq!(err.code(), "E024");
+        assert_eq!(err.exit_code(), 5);
+        assert!(err.to_string().contains("aborted"));
     }
 }

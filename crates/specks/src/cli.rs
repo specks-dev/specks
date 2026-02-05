@@ -93,6 +93,31 @@ pub enum Commands {
         #[arg(short, long)]
         verbose: bool,
     },
+
+    /// Create or revise a speck through iterative agent collaboration
+    ///
+    /// Runs an interactive planning loop: interviewer gathers input, planner creates
+    /// the speck, critic reviews, and you approve or request revisions.
+    #[command(long_about = "Create or revise a speck through iterative agent collaboration.\n\nWorkflow:\n  1. Interviewer gathers requirements from you\n  2. Planner creates or revises the speck\n  3. Critic reviews for quality and compliance\n  4. Interviewer presents results and asks: ready or revise?\n  5. Loop continues until you approve\n\nModes:\n  - New: Provide an idea string to create a new speck\n  - Revision: Provide a path to an existing speck to revise it\n  - Interactive: Omit input to be prompted for an idea\n\nRequires Claude Code CLI (claude) to be installed.")]
+    Plan {
+        /// Either an idea string OR path to existing speck for revision
+        ///
+        /// If a file path ending in .md exists, enters revision mode.
+        /// Otherwise, treats the input as an idea for a new speck.
+        input: Option<String>,
+
+        /// Name for the speck file (default: auto-generated from idea)
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Additional context files to include (can be repeated)
+        #[arg(long = "context", short = 'c')]
+        context_files: Vec<String>,
+
+        /// Timeout per agent invocation in seconds (default: 300)
+        #[arg(long, default_value = "300")]
+        timeout: u64,
+    },
 }
 
 /// Get the command args for use in the application
@@ -130,6 +155,105 @@ mod tests {
                 "SPECKS_BUILD_DATE should be YYYY-MM-DD format, got: {}",
                 build_date
             );
+        }
+    }
+
+    #[test]
+    fn test_plan_command_parses_idea() {
+        // Test parsing plan command with an idea string
+        let cli = Cli::try_parse_from(["specks", "plan", "add a new feature"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Plan {
+                input,
+                name,
+                context_files,
+                timeout,
+            }) => {
+                assert_eq!(input, Some("add a new feature".to_string()));
+                assert!(name.is_none());
+                assert!(context_files.is_empty());
+                assert_eq!(timeout, 300);
+            }
+            _ => panic!("Expected Plan command"),
+        }
+    }
+
+    #[test]
+    fn test_plan_command_with_name() {
+        let cli = Cli::try_parse_from(["specks", "plan", "add feature", "--name", "my-feature"])
+            .unwrap();
+
+        match cli.command {
+            Some(Commands::Plan { input, name, .. }) => {
+                assert_eq!(input, Some("add feature".to_string()));
+                assert_eq!(name, Some("my-feature".to_string()));
+            }
+            _ => panic!("Expected Plan command"),
+        }
+    }
+
+    #[test]
+    fn test_plan_command_with_context_files() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "plan",
+            "add feature",
+            "-c",
+            "context1.md",
+            "--context",
+            "context2.md",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::Plan { context_files, .. }) => {
+                assert_eq!(context_files.len(), 2);
+                assert_eq!(context_files[0], "context1.md");
+                assert_eq!(context_files[1], "context2.md");
+            }
+            _ => panic!("Expected Plan command"),
+        }
+    }
+
+    #[test]
+    fn test_plan_command_with_timeout() {
+        let cli =
+            Cli::try_parse_from(["specks", "plan", "add feature", "--timeout", "600"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Plan { timeout, .. }) => {
+                assert_eq!(timeout, 600);
+            }
+            _ => panic!("Expected Plan command"),
+        }
+    }
+
+    #[test]
+    fn test_plan_command_no_input() {
+        // Plan command should work without input (will prompt or error at runtime)
+        let cli = Cli::try_parse_from(["specks", "plan"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Plan { input, .. }) => {
+                assert!(input.is_none());
+            }
+            _ => panic!("Expected Plan command"),
+        }
+    }
+
+    #[test]
+    fn test_plan_command_with_global_flags() {
+        let cli =
+            Cli::try_parse_from(["specks", "--json", "--quiet", "plan", "add feature"]).unwrap();
+
+        assert!(cli.json);
+        assert!(cli.quiet);
+        match cli.command {
+            Some(Commands::Plan { input, .. }) => {
+                assert_eq!(input, Some("add feature".to_string()));
+            }
+            _ => panic!("Expected Plan command"),
         }
     }
 }

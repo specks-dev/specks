@@ -4,6 +4,7 @@ mod agent;
 mod cli;
 mod commands;
 mod output;
+mod planning_loop;
 
 use std::process::ExitCode;
 
@@ -63,6 +64,12 @@ fn main() -> ExitCode {
         Some(Commands::Version { verbose }) => {
             commands::run_version(verbose, cli.json, cli.quiet)
         }
+        Some(Commands::Plan {
+            input,
+            name,
+            context_files,
+            timeout,
+        }) => commands::run_plan(input, name, context_files, timeout, cli.json, cli.quiet),
         None => {
             // No subcommand - print version info
             if !cli.quiet {

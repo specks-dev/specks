@@ -6,6 +6,76 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 2: Implement specks plan Command | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- Spec S01: specks plan Command (#s01-plan-command) - command specification with options and exit codes
+- Concept C02: Planning Loop State Machine (#c02-planning-loop) - state diagram and transitions
+- [D01] CLI-first agent invocation - decision to add plan as first-class CLI command
+- [D03] Iterative planning loop - loop until user approval with no arbitrary limit
+- [D08] Plan command workflow - interviewer -> planner -> critic -> interviewer flow
+- `crates/specks/src/agent.rs` - agent invocation infrastructure from Step 1
+- `crates/specks/src/commands/validate.rs` - existing command pattern
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add `Commands::Plan` variant to cli.rs with all options | Done |
+| Create planning_loop.rs with LoopState enum and PlanningLoop struct | Done |
+| Implement state transitions: Start -> InterviewerGather -> Planner -> Critic -> InterviewerPresent -> (Revise \| Approved) | Done |
+| Implement `run_plan()` in commands/plan.rs | Done |
+| Detect input type: idea string vs existing speck path | Done |
+| Invoke interviewer agent for initial input gathering | Done |
+| Invoke planner agent with interviewer output | Done |
+| Run `specks validate` on created speck | Done |
+| Invoke critic agent to review speck | Done |
+| Invoke interviewer to present results with punch list and ask "ready or revise?" | Done |
+| Handle user feedback and loop back to planner (loop runs until user says ready) | Done |
+| Handle abort/exit cleanly | Done |
+| Set speck status to "active" on approval | Done |
+| Add E024 error code (user aborted) | Done |
+| Add PlanData struct to output.rs | Done |
+| Update commands/mod.rs exports | Done |
+
+**Files Created:**
+- `crates/specks/src/planning_loop.rs` - Planning loop state machine (671 lines) with LoopState enum, PlanMode, LoopContext, PlanningLoop struct, LoopOutcome, UserDecision, and helper functions
+- `crates/specks/src/commands/plan.rs` - Plan command implementation (220 lines) with run_plan() and JSON output formatting
+- `tests/bin/claude-mock-plan` - Enhanced mock for planning loop tests (128 lines) with state tracking and scenario simulation
+- `tests/integration/plan-tests.sh` - Integration test suite (208 lines) with 8 test cases
+
+**Files Modified:**
+- `crates/specks/src/cli.rs` - Added Commands::Plan variant with options (input, name, context_files, timeout) and 7 unit tests
+- `crates/specks/src/main.rs` - Added `mod planning_loop` and Plan command handling
+- `crates/specks/src/commands/mod.rs` - Added `pub mod plan` and `pub use plan::run_plan`
+- `crates/specks/src/output.rs` - Added PlanData and PlanValidation structs for JSON output
+- `crates/specks-core/src/error.rs` - Added E023 (SpeckValidationWarnings, exit 0) and E024 (UserAborted, exit 5) error variants
+- `.specks/specks-2.md` - Checked off all Step 2 tasks, tests, and checkpoints
+
+**Test Results:**
+- `cargo nextest run`: 151 tests passed (23 new tests)
+- `tests/integration/plan-tests.sh`: 8 integration tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo test` passes (new tests): PASS (151 tests)
+- `specks plan "test idea"` with mock produces speck file: PASS
+- Created speck passes `specks validate`: PASS
+- Loop terminates on user approval or abort: PASS
+
+**Key Decisions/Notes:**
+- State machine follows Concept C02 exactly: START → INTERVIEWER(gather) → PLANNER → CRITIC → INTERVIEWER(present) → APPROVED/REVISE
+- Input detection checks for .md extension and file existence to distinguish ideas from revision paths
+- Planning loop validates speck after planner creates it using specks_core::validate_speck()
+- User decision parsing looks for APPROVED/ABORTED/REVISE keywords in interviewer output
+- Mock claude CLI for tests simulates full loop by creating actual speck files
+- Exit codes follow specification: 0=success, 1=error, 3=validation error, 5=aborted, 6=claude not installed
+- Some dead code warnings expected (methods/variants for future use or testing)
+
+---
+
 ## [specks-2.md] Step 1: Agent Invocation Infrastructure | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05
