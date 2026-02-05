@@ -231,7 +231,7 @@ pub fn find_specks(project_root: &Path) -> Result<Vec<PathBuf>, SpecksError> {
     }
 
     let mut specks = Vec::new();
-    let entries = fs::read_dir(&specks_dir).map_err(|e| SpecksError::Io(e))?;
+    let entries = fs::read_dir(&specks_dir).map_err(SpecksError::Io)?;
 
     for entry in entries {
         let entry = entry.map_err(SpecksError::Io)?;

@@ -239,11 +239,10 @@ fn mark_step_checkboxes_complete(
         }
 
         // Check if we've exited the step (next step header or section divider)
-        if in_target_step && past_step {
-            if line.starts_with("####") || line.starts_with("#####") || line.starts_with("---") {
+        if in_target_step && past_step
+            && (line.starts_with("####") || line.starts_with("#####") || line.starts_with("---")) {
                 in_target_step = false;
             }
-        }
 
         if in_target_step
             && !line.contains(&format!("{{#{}}}", step_anchor))

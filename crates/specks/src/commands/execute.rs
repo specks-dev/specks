@@ -264,14 +264,13 @@ pub fn run_execute(
 
     // Verify beads root exists (optional - warn if missing)
     let beads_root = parsed_speck.metadata.beads_root_id.clone();
-    if beads_root.is_none() && !dry_run {
-        if !quiet {
+    if beads_root.is_none() && !dry_run
+        && !quiet {
             eprintln!(
                 "warning: No Beads Root in metadata. Run `specks beads sync {}` to set up work tracking.",
                 speck
             );
         }
-    }
 
     // Parse policies
     let commit_policy = CommitPolicy::from_str(&commit_policy);
@@ -354,7 +353,7 @@ pub fn run_execute(
 
     // Check Claude CLI
     let runner = AgentRunner::new(project_root.clone());
-    if let Err(_) = runner.check_claude_cli() {
+    if runner.check_claude_cli().is_err() {
         let message =
             "Claude CLI not installed. Install Claude Code from https://claude.ai/download";
         if json_output {

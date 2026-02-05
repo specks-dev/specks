@@ -63,8 +63,9 @@ release VERSION:
         exit 1
     fi
 
-    # Auto-fix: format code
+    # Auto-fix: format and lint
     cargo fmt --all
+    cargo clippy --workspace --fix --allow-dirty --allow-staged -- -D warnings
 
     # Auto-fix: update version in Cargo.toml
     sed -i '' "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
