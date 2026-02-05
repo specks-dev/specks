@@ -1,7 +1,7 @@
 # Homebrew formula for specks
 #
 # To install:
-#   brew tap kocienda/specks https://github.com/kocienda/specks
+#   brew tap specks-dev/specks https://github.com/specks-dev/specks
 #   brew install specks
 #
 # This formula downloads prebuilt binaries from GitHub Releases.
@@ -9,17 +9,17 @@
 
 class Specks < Formula
   desc "From ideas to implementation via multi-agent orchestration"
-  homepage "https://github.com/kocienda/specks"
+  homepage "https://github.com/specks-dev/specks"
   version "0.1.0"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/kocienda/specks/releases/download/v#{version}/specks-#{version}-macos-arm64.tar.gz"
+      url "https://github.com/specks-dev/specks/releases/download/v#{version}/specks-#{version}-macos-arm64.tar.gz"
       # SHA256 ARM64: PLACEHOLDER_ARM64_SHA256
       sha256 "PLACEHOLDER_ARM64_SHA256"
     else
-      url "https://github.com/kocienda/specks/releases/download/v#{version}/specks-#{version}-macos-x86_64.tar.gz"
+      url "https://github.com/specks-dev/specks/releases/download/v#{version}/specks-#{version}-macos-x86_64.tar.gz"
       # SHA256 X86_64: PLACEHOLDER_X86_64_SHA256
       sha256 "PLACEHOLDER_X86_64_SHA256"
     end

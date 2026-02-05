@@ -83,4 +83,4 @@ git push origin "v$VERSION" --quiet
 
 echo ""
 echo "==> Released v$VERSION"
-echo "    CI: https://github.com/kocienda/specks/actions"
+echo "    CI: https://github.com/specks-dev/specks/actions"

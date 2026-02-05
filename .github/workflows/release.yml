@@ -110,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     # Only run for real releases (not test tags like v0.0.1-test)
     # Only run on the main repository
-    if: github.repository == 'kocienda/specks' && !contains(github.ref, '-')
+    if: github.repository == 'specks-dev/specks' && !contains(github.ref, '-')
     concurrency:
       group: formula-update
       cancel-in-progress: false
