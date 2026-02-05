@@ -1386,12 +1386,12 @@ CI handles everything else:
 The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5 and 5. This step documents the installation experience for users.
 
 **Tasks:**
-- [ ] Add "Installation" section to README with:
-  - [ ] Homebrew installation (tap + install commands)
-  - [ ] Direct binary download option (from GitHub Releases)
-  - [ ] Building from source option
-- [ ] Add post-install setup instructions (`specks init`, `specks setup claude`)
-- [ ] Verify formula caveats message is helpful
+- [x] Add "Installation" section to README with:
+  - [x] Homebrew installation (tap + install commands)
+  - [x] Direct binary download option (from GitHub Releases)
+  - [x] Building from source option
+- [x] Add post-install setup instructions (`specks init`, `specks setup claude`)
+- [x] Verify formula caveats message is helpful
 
 **Tests:**
 - [ ] Manual test: follow README instructions on fresh system
@@ -1399,9 +1399,9 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 - [ ] Manual test: `specks setup claude` works after brew install
 
 **Checkpoint:**
-- [ ] README has clear installation section
-- [ ] All three installation methods documented
-- [ ] Post-install steps are clear
+- [x] README has clear installation section
+- [x] All three installation methods documented
+- [x] Post-install steps are clear
 
 **Rollback:**
 - Revert README changes

@@ -6,6 +6,44 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 6: Homebrew Installation Documentation | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- [D06] Homebrew tap for installation
+- [Q02] Homebrew tap location (resolved: specks-dev/specks repo)
+- Formula/specks.rb caveats section
+- Existing README.md installation section
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add Homebrew installation (tap + install commands) | Done |
+| Add direct binary download option (from GitHub Releases) | Done |
+| Add building from source option | Done |
+| Add post-install setup instructions (`specks init`, `specks setup claude`) | Done |
+| Verify formula caveats message is helpful | Done |
+| Fix repo URL from `yourusername/specks` to `specks-dev/specks` | Done |
+| Fix Beads integration URL placeholder | Done |
+
+**Files Modified:**
+- `README.md` - Rewrote Installation section with Homebrew instructions, binary download for ARM64/x86_64, from source with correct repo URL, post-install setup instructions; fixed Beads integration URL
+- `.specks/specks-2.md` - Checked off all tasks and checkpoints for Step 6
+
+**Checkpoints Verified:**
+- README has clear installation section: PASS
+- All three installation methods documented: PASS
+- Post-install steps are clear: PASS
+
+**Key Decisions/Notes:**
+- Formula caveats already explain `specks setup claude` well, no changes needed
+- Added verification commands (`specks --version`, `specks setup claude --check`) to post-install section
+- Noted that binary download users may need manual skill installation since skills are bundled with Homebrew but not directly in the tarball extraction path
+
+---
+
 ## [specks-2.md] Step 5: GitHub Releases Workflow | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

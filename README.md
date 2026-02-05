@@ -4,18 +4,62 @@ Go from ideas to implementation via multi-agent orchestration. Specks transforms
 
 ## Installation
 
-### From source
+### Homebrew (macOS)
+
+The easiest way to install specks on macOS:
 
 ```bash
-git clone https://github.com/yourusername/specks.git
+brew tap specks-dev/specks https://github.com/specks-dev/specks
+brew install specks
+```
+
+### Download Binary
+
+Download prebuilt binaries from [GitHub Releases](https://github.com/specks-dev/specks/releases):
+
+```bash
+# For Apple Silicon (M1/M2/M3)
+curl -L https://github.com/specks-dev/specks/releases/latest/download/specks-0.1.3-macos-arm64.tar.gz | tar xz
+sudo mv bin/specks /usr/local/bin/
+
+# For Intel Mac
+curl -L https://github.com/specks-dev/specks/releases/latest/download/specks-0.1.3-macos-x86_64.tar.gz | tar xz
+sudo mv bin/specks /usr/local/bin/
+```
+
+### From Source
+
+Requires Rust 1.70+ and Cargo:
+
+```bash
+git clone https://github.com/specks-dev/specks.git
 cd specks
 cargo install --path crates/specks
 ```
 
-### Requirements
+### Post-Install Setup
 
-- Rust 1.70+
-- Cargo
+After installation, initialize specks in your project:
+
+```bash
+cd your-project
+specks init
+```
+
+This creates a `.specks/` directory and installs Claude Code skills to `.claude/skills/`.
+
+If you installed via binary download (not Homebrew), you may need to manually install the skills:
+
+```bash
+specks setup claude
+```
+
+Verify your installation:
+
+```bash
+specks --version
+specks setup claude --check
+```
 
 ## Quick Start
 
@@ -149,7 +193,7 @@ Specks follow a structured markdown format. See `.specks/specks-skeleton.md` for
 
 ## Beads Integration
 
-Specks integrates with [Beads](https://github.com/yourorg/beads) for issue/task tracking. This enables two-way synchronization between speck steps and external work items.
+Specks integrates with [Beads](https://github.com/specks-dev/beads) for issue/task tracking. This enables two-way synchronization between speck steps and external work items.
 
 ### Requirements
 
