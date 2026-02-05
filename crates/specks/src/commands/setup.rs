@@ -19,19 +19,31 @@ pub fn run_setup_claude(
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
-    // Find share directory
-    let share_dir = find_share_dir();
-
     // Get current directory as project directory
     let project_dir =
         std::env::current_dir().map_err(|e| format!("failed to get current directory: {}", e))?;
 
+    run_setup_claude_impl(check, force, json_output, quiet, &project_dir)
+}
+
+/// Internal implementation that accepts a project directory.
+/// This allows testing without changing the global current directory.
+fn run_setup_claude_impl(
+    check: bool,
+    force: bool,
+    json_output: bool,
+    quiet: bool,
+    project_dir: &Path,
+) -> Result<i32, String> {
+    // Find share directory
+    let share_dir = find_share_dir();
+
     if check {
         // Verification mode - just check status
-        run_check_mode(&share_dir, &project_dir, json_output, quiet)
+        run_check_mode(&share_dir, project_dir, json_output, quiet)
     } else {
         // Installation mode
-        run_install_mode(&share_dir, &project_dir, force, json_output, quiet)
+        run_install_mode(&share_dir, project_dir, force, json_output, quiet)
     }
 }
 
@@ -320,13 +332,11 @@ mod tests {
         unsafe {
             std::env::set_var(crate::share::SHARE_DIR_ENV_VAR, share.path());
         }
-        let saved_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(project.path()).unwrap();
 
-        let result = run_setup_claude(true, false, false, true);
+        // Use the internal implementation directly to avoid changing current_dir
+        // (which causes race conditions in parallel tests)
+        let result = run_setup_claude_impl(true, false, false, true, project.path());
 
-        // Restore
-        std::env::set_current_dir(saved_dir).unwrap();
         unsafe {
             std::env::remove_var(crate::share::SHARE_DIR_ENV_VAR);
         }
@@ -345,13 +355,10 @@ mod tests {
         unsafe {
             std::env::set_var(crate::share::SHARE_DIR_ENV_VAR, share.path());
         }
-        let saved_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(project.path()).unwrap();
 
-        let result = run_setup_claude(false, false, false, true);
+        // Use the internal implementation directly to avoid changing current_dir
+        let result = run_setup_claude_impl(false, false, false, true, project.path());
 
-        // Restore
-        std::env::set_current_dir(saved_dir).unwrap();
         unsafe {
             std::env::remove_var(crate::share::SHARE_DIR_ENV_VAR);
         }
@@ -384,19 +391,16 @@ mod tests {
         unsafe {
             std::env::set_var(crate::share::SHARE_DIR_ENV_VAR, share.path());
         }
-        let saved_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(project.path()).unwrap();
 
+        // Use the internal implementation directly to avoid changing current_dir
         // First install
-        let result1 = run_setup_claude(false, false, false, true);
+        let result1 = run_setup_claude_impl(false, false, false, true, project.path());
         assert!(result1.is_ok());
         assert_eq!(result1.unwrap(), 0);
 
         // Second install should also succeed
-        let result2 = run_setup_claude(false, false, false, true);
+        let result2 = run_setup_claude_impl(false, false, false, true, project.path());
 
-        // Restore
-        std::env::set_current_dir(saved_dir).unwrap();
         unsafe {
             std::env::remove_var(crate::share::SHARE_DIR_ENV_VAR);
         }
