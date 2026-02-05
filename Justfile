@@ -63,6 +63,18 @@ release VERSION:
         exit 1
     fi
 
+    # Version must be greater than current
+    CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+    IFS='.' read -r CUR_MAJ CUR_MIN CUR_PAT <<< "$CURRENT"
+    IFS='.' read -r NEW_MAJ NEW_MIN NEW_PAT <<< "$VERSION"
+
+    if [[ $NEW_MAJ -lt $CUR_MAJ ]] || \
+       [[ $NEW_MAJ -eq $CUR_MAJ && $NEW_MIN -lt $CUR_MIN ]] || \
+       [[ $NEW_MAJ -eq $CUR_MAJ && $NEW_MIN -eq $CUR_MIN && $NEW_PAT -le $CUR_PAT ]]; then
+        echo "Error: $VERSION must be greater than current ($CURRENT)" >&2
+        exit 1
+    fi
+
     # Auto-fix: format and lint
     cargo fmt --all
     cargo clippy --workspace --fix --allow-dirty --allow-staged -- -D warnings
