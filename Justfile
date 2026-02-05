@@ -63,6 +63,18 @@ release VERSION:
         exit 1
     fi
 
+    # Check if this version was already successfully released
+    if gh release view "v$VERSION" &>/dev/null; then
+        echo "Error: v$VERSION already released. Bump version number." >&2
+        exit 1
+    fi
+
+    # Clean up orphaned remote tag from failed release (if any)
+    if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION$"; then
+        echo "Cleaning up failed release tag..."
+        git push origin ":refs/tags/v$VERSION" 2>/dev/null || true
+    fi
+
     # Version must be >= current (equal allowed for retry)
     CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
     IFS='.' read -r CUR_MAJ CUR_MIN CUR_PAT <<< "$CURRENT"
@@ -88,12 +100,6 @@ release VERSION:
     # Auto-fix: stage and commit any changes
     git add -A
     git diff --cached --quiet || git commit -m "Release $VERSION"
-
-    # Check if tag exists on remote (successful release - don't overwrite)
-    if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION$"; then
-        echo "Error: v$VERSION already released. Bump version number." >&2
-        exit 1
-    fi
 
     # Delete local tag if present (failed release retry)
     git tag -d "v$VERSION" 2>/dev/null || true
