@@ -73,9 +73,11 @@ fn main() -> ExitCode {
             verbose_agents,
         ),
         Some(Commands::Setup(setup_cmd)) => match setup_cmd {
-            SetupCommands::Claude { check, force } => {
-                commands::run_setup_claude(check, force, cli.json, cli.quiet)
-            }
+            SetupCommands::Claude {
+                global,
+                check,
+                force,
+            } => commands::run_setup_claude(global, check, force, cli.json, cli.quiet),
         },
         Some(Commands::Execute {
             speck,

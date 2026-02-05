@@ -239,6 +239,9 @@ pub struct SetupData {
     /// Share directory path, if found
     #[serde(skip_serializing_if = "Option::is_none")]
     pub share_dir: Option<String>,
+    /// Target directory for installation (e.g., ".claude/skills/" or "~/.claude/skills/")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_dir: Option<String>,
     /// Skills that were installed/checked
     pub skills_installed: Vec<SkillInfo>,
 }

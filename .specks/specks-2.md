@@ -1656,12 +1656,12 @@ Currently, skills are installed per-project to `.claude/skills/`. This means eve
 - Updated CLI help text
 
 **Tasks:**
-- [ ] Add `install_skills_globally()` function to `share.rs`
-- [ ] Detect home directory using `dirs::home_dir()`
-- [ ] Create `~/.claude/skills/` if it doesn't exist
-- [ ] Add `--global` flag to `specks setup claude`
-- [ ] Update help text to explain global vs per-project
-- [ ] Add `--global` to `specks setup claude --check` for verification
+- [x] Add `install_skills_globally()` function to `share.rs`
+- [x] Detect home directory using `dirs::home_dir()`
+- [x] Create `~/.claude/skills/` if it doesn't exist
+- [x] Add `--global` flag to `specks setup claude`
+- [x] Update help text to explain global vs per-project
+- [x] Add `--global` to `specks setup claude --check` for verification
 
 **Command Interface:**
 ```bash
@@ -1671,16 +1671,16 @@ specks setup claude --check --global  # Check global installation
 ```
 
 **Tests:**
-- [ ] Unit test: `install_skills_globally()` creates correct directory structure
-- [ ] Unit test: Global installation doesn't affect per-project installation
-- [ ] Integration test: `specks setup claude --global` installs to home directory
-- [ ] Integration test: `--check --global` reports correct status
+- [x] Unit test: `install_skills_globally()` creates correct directory structure
+- [x] Unit test: Global installation doesn't affect per-project installation
+- [x] Integration test: `specks setup claude --global` installs to home directory
+- [x] Integration test: `--check --global` reports correct status
 
 **Checkpoint:**
-- [ ] `specks setup claude --global` installs to `~/.claude/skills/`
+- [x] `specks setup claude --global` installs to `~/.claude/skills/`
 - [ ] `/specks-plan` works from any directory after global install
-- [ ] Per-project install still works as before
-- [ ] `--check --global` reports installation status correctly
+- [x] Per-project install still works as before
+- [x] `--check --global` reports installation status correctly
 
 **Rollback:**
 - Revert commits, remove `--global` flag

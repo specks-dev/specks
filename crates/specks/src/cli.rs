@@ -198,9 +198,13 @@ pub enum SetupCommands {
     /// Installs /specks-plan and /specks-execute skills to the current project.
     /// These skills enable using specks from within Claude Code sessions.
     #[command(
-        long_about = "Install Claude Code skills for specks slash commands.\n\nThis command copies skill files from the specks distribution to your\nproject's .claude/skills/ directory. Once installed, you can use:\n\n  /specks-plan \"idea\"           Create a new speck from an idea\n  /specks-plan path/to/speck.md Revise an existing speck\n  /specks-execute path/to/speck Execute a speck's steps\n\nOptions:\n  --check   Verify installation status without making changes\n  --force   Overwrite existing skills even if unchanged\n\nSkill source locations (in order of precedence):\n  1. SPECKS_SHARE_DIR environment variable\n  2. ../share/specks/ relative to the specks binary\n  3. /opt/homebrew/share/specks/ (macOS ARM)\n  4. /usr/local/share/specks/ (macOS x86_64)\n\nIf skills are missing or share directory not found, verify your\nspecks installation or set SPECKS_SHARE_DIR explicitly."
+        long_about = "Install Claude Code skills for specks slash commands.\n\nThis command copies skill files from the specks distribution to your\nproject's .claude/skills/ directory (or ~/.claude/skills/ with --global).\nOnce installed, you can use:\n\n  /specks-plan \"idea\"           Create a new speck from an idea\n  /specks-plan path/to/speck.md Revise an existing speck\n  /specks-execute path/to/speck Execute a speck's steps\n\nInstallation locations:\n  Per-project (default): .claude/skills/ in current directory\n  Global (--global):     ~/.claude/skills/ in home directory\n\nGlobal installation is useful when you work on many projects and want\nthe skills available everywhere without per-project setup.\n\nOptions:\n  --global  Install to ~/.claude/skills/ (global) instead of .claude/skills/\n  --check   Verify installation status without making changes\n  --force   Overwrite existing skills even if unchanged\n\nSkill source locations (in order of precedence):\n  1. SPECKS_SHARE_DIR environment variable\n  2. ../share/specks/ relative to the specks binary\n  3. /opt/homebrew/share/specks/ (macOS ARM)\n  4. /usr/local/share/specks/ (macOS x86_64)\n\nIf skills are missing or share directory not found, verify your\nspecks installation or set SPECKS_SHARE_DIR explicitly."
     )]
     Claude {
+        /// Install to ~/.claude/skills/ (global) instead of per-project
+        #[arg(long)]
+        global: bool,
+
         /// Verify installation status without installing
         #[arg(long)]
         check: bool,
@@ -361,7 +365,12 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "setup", "claude"]).unwrap();
 
         match cli.command {
-            Some(Commands::Setup(SetupCommands::Claude { check, force })) => {
+            Some(Commands::Setup(SetupCommands::Claude {
+                global,
+                check,
+                force,
+            })) => {
+                assert!(!global);
                 assert!(!check);
                 assert!(!force);
             }
@@ -374,7 +383,12 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "setup", "claude", "--check"]).unwrap();
 
         match cli.command {
-            Some(Commands::Setup(SetupCommands::Claude { check, force })) => {
+            Some(Commands::Setup(SetupCommands::Claude {
+                global,
+                check,
+                force,
+            })) => {
+                assert!(!global);
                 assert!(check);
                 assert!(!force);
             }
@@ -387,7 +401,12 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "setup", "claude", "--force"]).unwrap();
 
         match cli.command {
-            Some(Commands::Setup(SetupCommands::Claude { check, force })) => {
+            Some(Commands::Setup(SetupCommands::Claude {
+                global,
+                check,
+                force,
+            })) => {
+                assert!(!global);
                 assert!(!check);
                 assert!(force);
             }
@@ -396,12 +415,54 @@ mod tests {
     }
 
     #[test]
-    fn test_setup_claude_with_global_flags() {
+    fn test_setup_claude_with_global() {
+        let cli = Cli::try_parse_from(["specks", "setup", "claude", "--global"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Setup(SetupCommands::Claude {
+                global,
+                check,
+                force,
+            })) => {
+                assert!(global);
+                assert!(!check);
+                assert!(!force);
+            }
+            _ => panic!("Expected Setup Claude command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_claude_with_global_and_check() {
+        let cli =
+            Cli::try_parse_from(["specks", "setup", "claude", "--global", "--check"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Setup(SetupCommands::Claude {
+                global,
+                check,
+                force,
+            })) => {
+                assert!(global);
+                assert!(check);
+                assert!(!force);
+            }
+            _ => panic!("Expected Setup Claude command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_claude_with_cli_global_flags() {
         let cli = Cli::try_parse_from(["specks", "--json", "setup", "claude", "--check"]).unwrap();
 
         assert!(cli.json);
         match cli.command {
-            Some(Commands::Setup(SetupCommands::Claude { check, force })) => {
+            Some(Commands::Setup(SetupCommands::Claude {
+                global,
+                check,
+                force,
+            })) => {
+                assert!(!global);
                 assert!(check);
                 assert!(!force);
             }

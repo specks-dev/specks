@@ -6,6 +6,61 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.2: Global Skills Installation Option | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `crates/specks/src/share.rs` - Share directory discovery and skill installation
+- `crates/specks/src/commands/setup.rs` - Setup command implementation
+- `crates/specks/src/cli.rs` - CLI argument parsing
+- `crates/specks/src/output.rs` - JSON output types
+- `crates/specks/src/main.rs` - Command dispatch
+- `Cargo.toml` - Workspace dependencies
+- `.specks/specks-2.md` - Plan specification for Step 8.2
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add `install_skills_globally()` function to `share.rs` | Done |
+| Detect home directory using `dirs::home_dir()` | Done |
+| Create `~/.claude/skills/` if it doesn't exist | Done |
+| Add `--global` flag to `specks setup claude` | Done |
+| Update help text to explain global vs per-project | Done |
+| Add `--global` to `specks setup claude --check` for verification | Done |
+
+**Files Created:**
+- None (all modifications to existing files)
+
+**Files Modified:**
+- `Cargo.toml` - Added `dirs = "5"` workspace dependency
+- `crates/specks/Cargo.toml` - Added `dirs.workspace = true` dependency
+- `crates/specks/src/share.rs` - Added `get_global_skills_dir()`, `get_global_skill_path()`, `copy_skill_globally()`, `verify_global_skill_installation()`, `install_all_skills_globally()`, `verify_all_skills_globally()`, and 7 unit tests
+- `crates/specks/src/commands/setup.rs` - Added global parameter, `run_setup_claude_global()`, `run_check_mode_global()`, `run_install_mode_global()`, `output_share_dir_not_found()` helper
+- `crates/specks/src/cli.rs` - Added `--global` flag to `SetupCommands::Claude`, updated help text, added 3 new CLI tests
+- `crates/specks/src/output.rs` - Added `target_dir` field to `SetupData` struct
+- `crates/specks/src/main.rs` - Updated command dispatch to pass `global` parameter
+- `.specks/specks-2.md` - Updated task/test/checkpoint checkboxes
+
+**Test Results:**
+- `cargo nextest run`: 221 tests passed (7 new tests added)
+
+**Checkpoints Verified:**
+- `specks setup claude --global` installs to `~/.claude/skills/`: PASS
+- Per-project install still works as before: PASS
+- `--check --global` reports installation status correctly: PASS
+- `/specks-plan` works from any directory after global install: MANUAL TEST REQUIRED
+
+**Key Decisions/Notes:**
+- Added `dirs` crate (version 5) for cross-platform home directory detection
+- Global installation creates `~/.claude/skills/{skill-name}/SKILL.md` structure
+- Added `target_dir` field to JSON output to indicate installation target
+- Output messages now distinguish between "(per-project)" and "(global)" modes
+- Tests use fake HOME environment variable to test global installation without modifying real home directory
+
+---
+
 ## [specks-2.md] Step 8.1: Agent Distribution and Discovery | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

@@ -2,9 +2,13 @@
 //!
 //! Skills are distributed as separate files alongside the specks binary.
 //! This module handles discovering the share directory and installing
-//! skills to projects.
+//! skills to projects or globally.
 //!
-//! Discovery order:
+//! Skills can be installed to:
+//! - Per-project: `.claude/skills/` in a project directory
+//! - Global: `~/.claude/skills/` in the user's home directory
+//!
+//! Discovery order for share directory:
 //! 1. Environment variable: SPECKS_SHARE_DIR
 //! 2. Relative to binary: ../share/specks/ (works for homebrew and tarball)
 //! 3. Standard locations: /opt/homebrew/share/specks/, /usr/local/share/specks/
@@ -184,6 +188,20 @@ fn get_dest_skill_path(project_dir: &Path, skill_name: &str) -> PathBuf {
         .join(SKILL_FILE_NAME)
 }
 
+/// Get the global skills directory path (~/.claude/skills/).
+///
+/// Returns None if the home directory cannot be determined.
+pub fn get_global_skills_dir() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    Some(home.join(".claude").join(SKILLS_DIR_NAME))
+}
+
+/// Get the destination path for a skill in the global skills directory.
+fn get_global_skill_path(skill_name: &str) -> Option<PathBuf> {
+    let global_dir = get_global_skills_dir()?;
+    Some(global_dir.join(skill_name).join(SKILL_FILE_NAME))
+}
+
 /// Copy a skill from the share directory to a project.
 ///
 /// If `force` is true, overwrites existing files even if they match.
@@ -305,6 +323,133 @@ pub fn verify_all_skills(share_dir: &Path, project_dir: &Path) -> Vec<(String, S
         .iter()
         .map(|skill_name| {
             let status = verify_skill_installation(share_dir, skill_name, project_dir);
+            (skill_name.to_string(), status)
+        })
+        .collect()
+}
+
+/// Copy a skill from the share directory to the global skills directory (~/.claude/skills/).
+///
+/// If `force` is true, overwrites existing files even if they match.
+/// Returns the installation status.
+pub fn copy_skill_globally(
+    share_dir: &Path,
+    skill_name: &str,
+    force: bool,
+) -> Result<SkillInstallStatus, String> {
+    // Get source path
+    let Some(source_path) = get_source_skill_path(share_dir, skill_name) else {
+        return Ok(SkillInstallStatus::SourceMissing);
+    };
+
+    // Read source content
+    let source_content = fs::read_to_string(&source_path)
+        .map_err(|e| format!("failed to read source skill {}: {}", skill_name, e))?;
+
+    // Get destination path
+    let Some(dest_path) = get_global_skill_path(skill_name) else {
+        return Err("failed to determine home directory".to_string());
+    };
+
+    // Check if destination exists and compare content
+    if dest_path.exists() {
+        let dest_content = fs::read_to_string(&dest_path)
+            .map_err(|e| format!("failed to read existing skill {}: {}", skill_name, e))?;
+
+        if source_content == dest_content && !force {
+            return Ok(SkillInstallStatus::Unchanged);
+        }
+
+        // Files differ or force is true - update
+        // Create parent directories if needed
+        if let Some(parent) = dest_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                format!("failed to create directory for skill {}: {}", skill_name, e)
+            })?;
+        }
+
+        fs::write(&dest_path, &source_content)
+            .map_err(|e| format!("failed to write skill {}: {}", skill_name, e))?;
+
+        Ok(SkillInstallStatus::Updated)
+    } else {
+        // Destination doesn't exist - install
+        // Create parent directories
+        if let Some(parent) = dest_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                format!("failed to create directory for skill {}: {}", skill_name, e)
+            })?;
+        }
+
+        fs::write(&dest_path, &source_content)
+            .map_err(|e| format!("failed to write skill {}: {}", skill_name, e))?;
+
+        Ok(SkillInstallStatus::Installed)
+    }
+}
+
+/// Verify if a skill is installed and up-to-date in the global skills directory.
+pub fn verify_global_skill_installation(
+    share_dir: &Path,
+    skill_name: &str,
+) -> SkillVerifyStatus {
+    // Get source path
+    let Some(source_path) = get_source_skill_path(share_dir, skill_name) else {
+        return SkillVerifyStatus::SourceMissing;
+    };
+
+    // Get destination path
+    let Some(dest_path) = get_global_skill_path(skill_name) else {
+        return SkillVerifyStatus::Missing;
+    };
+
+    // Check if destination exists
+    if !dest_path.exists() {
+        return SkillVerifyStatus::Missing;
+    }
+
+    // Compare contents
+    let source_content = match fs::read_to_string(&source_path) {
+        Ok(c) => c,
+        Err(_) => return SkillVerifyStatus::SourceMissing,
+    };
+
+    let dest_content = match fs::read_to_string(&dest_path) {
+        Ok(c) => c,
+        Err(_) => return SkillVerifyStatus::Missing,
+    };
+
+    if source_content == dest_content {
+        SkillVerifyStatus::UpToDate
+    } else {
+        SkillVerifyStatus::Outdated
+    }
+}
+
+/// Install all available skills to the global skills directory (~/.claude/skills/).
+///
+/// Returns a list of (skill_name, status) pairs.
+pub fn install_all_skills_globally(
+    share_dir: &Path,
+    force: bool,
+) -> Vec<(String, Result<SkillInstallStatus, String>)> {
+    AVAILABLE_SKILLS
+        .iter()
+        .map(|skill_name| {
+            let status = copy_skill_globally(share_dir, skill_name, force);
+            (skill_name.to_string(), status)
+        })
+        .collect()
+}
+
+/// Verify all skills in the global skills directory.
+///
+/// Returns a list of (skill_name, status) pairs.
+pub fn verify_all_skills_globally(share_dir: &Path) -> Vec<(String, SkillVerifyStatus)> {
+    AVAILABLE_SKILLS
+        .iter()
+        .map(|skill_name| {
+            let status = verify_global_skill_installation(share_dir, skill_name);
             (skill_name.to_string(), status)
         })
         .collect()
@@ -564,6 +709,217 @@ mod tests {
                 "Skill {} should be up to date",
                 skill_name
             );
+        }
+    }
+
+    #[test]
+    fn test_get_global_skills_dir() {
+        // Just verify it returns something when home exists
+        let result = get_global_skills_dir();
+        // On any system with a home directory, this should succeed
+        assert!(result.is_some());
+
+        let global_dir = result.unwrap();
+        // Path should end with .claude/skills
+        assert!(global_dir.ends_with(".claude/skills"));
+    }
+
+    #[test]
+    fn test_copy_skill_globally_creates_directory() {
+        let share = create_test_share_dir();
+        let fake_home = TempDir::new().unwrap();
+
+        // Set HOME to our temp dir to control where global skills go
+        // SAFETY: Tests run single-threaded for env var tests
+        let old_home = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", fake_home.path());
+        }
+
+        let status = copy_skill_globally(share.path(), "specks-plan", false).unwrap();
+        assert_eq!(status, SkillInstallStatus::Installed);
+
+        // Verify file was created in fake home
+        let dest_path = fake_home
+            .path()
+            .join(".claude/skills/specks-plan/SKILL.md");
+        assert!(dest_path.exists());
+
+        let content = fs::read_to_string(&dest_path).unwrap();
+        assert_eq!(content, "# specks-plan skill content");
+
+        // Restore HOME
+        unsafe {
+            if let Some(h) = old_home {
+                std::env::set_var("HOME", h);
+            } else {
+                std::env::remove_var("HOME");
+            }
+        }
+    }
+
+    #[test]
+    fn test_copy_skill_globally_unchanged() {
+        let share = create_test_share_dir();
+        let fake_home = TempDir::new().unwrap();
+
+        // Set HOME to our temp dir
+        // SAFETY: Tests run single-threaded for env var tests
+        let old_home = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", fake_home.path());
+        }
+
+        // First install
+        copy_skill_globally(share.path(), "specks-plan", false).unwrap();
+
+        // Second install should be unchanged
+        let status = copy_skill_globally(share.path(), "specks-plan", false).unwrap();
+        assert_eq!(status, SkillInstallStatus::Unchanged);
+
+        // Restore HOME
+        unsafe {
+            if let Some(h) = old_home {
+                std::env::set_var("HOME", h);
+            } else {
+                std::env::remove_var("HOME");
+            }
+        }
+    }
+
+    #[test]
+    fn test_verify_global_skill_missing() {
+        let share = create_test_share_dir();
+        let fake_home = TempDir::new().unwrap();
+
+        // Set HOME to our temp dir
+        // SAFETY: Tests run single-threaded for env var tests
+        let old_home = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", fake_home.path());
+        }
+
+        // Don't install - verify should report missing
+        let status = verify_global_skill_installation(share.path(), "specks-plan");
+        assert_eq!(status, SkillVerifyStatus::Missing);
+
+        // Restore HOME
+        unsafe {
+            if let Some(h) = old_home {
+                std::env::set_var("HOME", h);
+            } else {
+                std::env::remove_var("HOME");
+            }
+        }
+    }
+
+    #[test]
+    fn test_verify_global_skill_up_to_date() {
+        let share = create_test_share_dir();
+        let fake_home = TempDir::new().unwrap();
+
+        // Set HOME to our temp dir
+        // SAFETY: Tests run single-threaded for env var tests
+        let old_home = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", fake_home.path());
+        }
+
+        // Install skill
+        copy_skill_globally(share.path(), "specks-plan", false).unwrap();
+
+        // Verify should be up to date
+        let status = verify_global_skill_installation(share.path(), "specks-plan");
+        assert_eq!(status, SkillVerifyStatus::UpToDate);
+
+        // Restore HOME
+        unsafe {
+            if let Some(h) = old_home {
+                std::env::set_var("HOME", h);
+            } else {
+                std::env::remove_var("HOME");
+            }
+        }
+    }
+
+    #[test]
+    fn test_install_all_skills_globally() {
+        let share = create_test_share_dir();
+        let fake_home = TempDir::new().unwrap();
+
+        // Set HOME to our temp dir
+        // SAFETY: Tests run single-threaded for env var tests
+        let old_home = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", fake_home.path());
+        }
+
+        let results = install_all_skills_globally(share.path(), false);
+
+        assert_eq!(results.len(), 2);
+        for (skill_name, status) in &results {
+            assert!(
+                AVAILABLE_SKILLS.contains(&skill_name.as_str()),
+                "Unexpected skill: {}",
+                skill_name
+            );
+            assert_eq!(
+                status.as_ref().unwrap(),
+                &SkillInstallStatus::Installed,
+                "Skill {} should be installed",
+                skill_name
+            );
+        }
+
+        // Restore HOME
+        unsafe {
+            if let Some(h) = old_home {
+                std::env::set_var("HOME", h);
+            } else {
+                std::env::remove_var("HOME");
+            }
+        }
+    }
+
+    #[test]
+    fn test_global_install_does_not_affect_per_project() {
+        let share = create_test_share_dir();
+        let project = TempDir::new().unwrap();
+        let fake_home = TempDir::new().unwrap();
+
+        // Set HOME to our temp dir
+        // SAFETY: Tests run single-threaded for env var tests
+        let old_home = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", fake_home.path());
+        }
+
+        // Install globally
+        install_all_skills_globally(share.path(), false);
+
+        // Per-project installation should still be missing
+        let project_path = project.path().join(".claude/skills/specks-plan/SKILL.md");
+        assert!(!project_path.exists());
+
+        // Now install per-project
+        copy_skill_to_project(share.path(), "specks-plan", project.path(), false).unwrap();
+
+        // Per-project should exist
+        assert!(project_path.exists());
+
+        // Global should still exist
+        let global_path = fake_home
+            .path()
+            .join(".claude/skills/specks-plan/SKILL.md");
+        assert!(global_path.exists());
+
+        // Restore HOME
+        unsafe {
+            if let Some(h) = old_home {
+                std::env::set_var("HOME", h);
+            } else {
+                std::env::remove_var("HOME");
+            }
         }
     }
 }
