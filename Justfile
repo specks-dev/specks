@@ -79,6 +79,9 @@ release VERSION:
     cargo fmt --all
     cargo clippy --workspace --fix --allow-dirty --allow-staged -- -D warnings
 
+    # Verify clean build (warnings are errors)
+    cargo clippy --workspace -- -D warnings
+
     # Auto-fix: update version in Cargo.toml
     sed -i '' "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
 
