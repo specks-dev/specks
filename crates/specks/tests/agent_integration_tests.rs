@@ -118,7 +118,11 @@ fn test_agent_definitions_have_valid_frontmatter() {
 
         let (name, description, tools, model) = frontmatter.unwrap();
         assert_eq!(name, *agent, "Agent name mismatch for {}", agent);
-        assert!(!description.is_empty(), "Agent {} missing description", agent);
+        assert!(
+            !description.is_empty(),
+            "Agent {} missing description",
+            agent
+        );
         assert!(!tools.is_empty(), "Agent {} missing tools", agent);
         assert!(!model.is_empty(), "Agent {} missing model", agent);
     }

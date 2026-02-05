@@ -8,7 +8,10 @@ pub enum SpecksError {
     // === Structural errors (E001-E006) ===
     /// E001: Missing required section
     #[error("E001: Missing required section: {section}")]
-    MissingSection { section: String, line: Option<usize> },
+    MissingSection {
+        section: String,
+        line: Option<usize>,
+    },
 
     /// E002: Missing or empty required metadata field
     #[error("E002: Missing or empty required metadata field: {field}")]

@@ -21,9 +21,10 @@ pub mod validator;
 pub mod beads;
 
 // Re-exports for convenience
+pub use beads::{BeadStatus, BeadsCli, Issue, IssueDetails, is_valid_bead_id};
 pub use config::{
-    find_project_root, find_project_root_from, find_specks, is_reserved_file, speck_name_from_path,
-    BeadsConfig, Config, NamingConfig, SpecksConfig, RESERVED_FILES,
+    BeadsConfig, Config, NamingConfig, RESERVED_FILES, SpecksConfig, find_project_root,
+    find_project_root_from, find_specks, is_reserved_file, speck_name_from_path,
 };
 pub use error::SpecksError;
 pub use parser::parse_speck;
@@ -32,7 +33,6 @@ pub use types::{
     SpeckStatus, Step, Substep,
 };
 pub use validator::{
-    validate_speck, validate_speck_with_config, Severity, ValidationConfig, ValidationIssue,
-    ValidationLevel, ValidationResult,
+    Severity, ValidationConfig, ValidationIssue, ValidationLevel, ValidationResult, validate_speck,
+    validate_speck_with_config,
 };
-pub use beads::{BeadsCli, BeadStatus, Issue, IssueDetails, is_valid_bead_id};

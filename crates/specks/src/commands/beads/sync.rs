@@ -4,9 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use specks_core::{
-    find_project_root, parse_speck, BeadsCli, Config, Speck, SpecksError,
-};
+use specks_core::{BeadsCli, Config, Speck, SpecksError, find_project_root, parse_speck};
 
 use crate::output::{JsonIssue, JsonResponse};
 
@@ -47,8 +45,8 @@ pub fn run_sync(
 
     // Load config
     let config = Config::load_from_project(&project_root).unwrap_or_default();
-    let bd_path = std::env::var("SPECKS_BD_PATH")
-        .unwrap_or_else(|_| config.specks.beads.bd_path.clone());
+    let bd_path =
+        std::env::var("SPECKS_BD_PATH").unwrap_or_else(|_| config.specks.beads.bd_path.clone());
     let beads = BeadsCli::new(bd_path);
 
     // Check if beads CLI is installed
@@ -325,10 +323,7 @@ fn ensure_root_bead(
         }
         // Root bead was deleted, need to recreate
         if !quiet {
-            eprintln!(
-                "warning: root bead {} not found, recreating",
-                root_id
-            );
+            eprintln!("warning: root bead {} not found, recreating", root_id);
         }
     }
 
@@ -343,7 +338,13 @@ fn ensure_root_bead(
         return Ok(fake_id);
     }
 
-    let issue = beads.create(phase_title, Some(&description), None, Some(issue_type), None)?;
+    let issue = beads.create(
+        phase_title,
+        Some(&description),
+        None,
+        Some(issue_type),
+        None,
+    )?;
 
     // Write Beads Root to content
     write_beads_root_to_content(content, &issue.id);
@@ -369,10 +370,7 @@ fn ensure_step_bead(
         }
         // Bead was deleted, need to recreate
         if !quiet {
-            eprintln!(
-                "warning: step bead {} not found, recreating",
-                bead_id
-            );
+            eprintln!("warning: step bead {} not found, recreating", bead_id);
         }
     }
 
@@ -420,10 +418,7 @@ fn ensure_substep_bead(
         }
         // Bead was deleted, need to recreate
         if !quiet {
-            eprintln!(
-                "warning: substep bead {} not found, recreating",
-                bead_id
-            );
+            eprintln!("warning: substep bead {} not found, recreating", bead_id);
         }
     }
 
@@ -622,10 +617,14 @@ fn resolve_file_path(project_root: &Path, file: &str) -> std::path::PathBuf {
         if as_is.exists() {
             as_is
         } else {
-            project_root.join(".specks").join(format!("specks-{}", file))
+            project_root
+                .join(".specks")
+                .join(format!("specks-{}", file))
         }
     } else {
-        project_root.join(".specks").join(format!("specks-{}.md", file))
+        project_root
+            .join(".specks")
+            .join(format!("specks-{}.md", file))
     }
 }
 

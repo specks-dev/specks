@@ -21,8 +21,7 @@ static VALID_BEAD_ID: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-z0-9][a-z0-9-]*-[a-z0-9]+(\.[0-9]+)*$").unwrap());
 
 /// Regex for unfilled placeholder pattern (<...>)
-static PLACEHOLDER_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^<[^>]+>$").unwrap());
+static PLACEHOLDER_PATTERN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^<[^>]+>$").unwrap());
 
 /// Regex to detect prose-style dependencies (e.g., "Step 0" instead of "#step-0")
 static PROSE_DEPENDENCY: LazyLock<Regex> =
@@ -31,8 +30,7 @@ static PROSE_DEPENDENCY: LazyLock<Regex> =
 /// Regex for valid **References:** format - must contain [DNN] decision citations
 /// Valid: "[D01] Decision name, [D02] Another"
 /// Also valid: "Spec S01", "Table T01", "(#anchor)"
-static DECISION_CITATION: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\[D\d{2}\]").unwrap());
+static DECISION_CITATION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[D\d{2}\]").unwrap());
 
 /// Regex for anchor citations in References (must be in parentheses with # prefix)
 static ANCHOR_CITATION: LazyLock<Regex> =
@@ -66,17 +64,26 @@ impl ValidationResult {
 
     /// Count errors
     pub fn error_count(&self) -> usize {
-        self.issues.iter().filter(|i| i.severity == Severity::Error).count()
+        self.issues
+            .iter()
+            .filter(|i| i.severity == Severity::Error)
+            .count()
     }
 
     /// Count warnings
     pub fn warning_count(&self) -> usize {
-        self.issues.iter().filter(|i| i.severity == Severity::Warning).count()
+        self.issues
+            .iter()
+            .filter(|i| i.severity == Severity::Warning)
+            .count()
     }
 
     /// Count info messages
     pub fn info_count(&self) -> usize {
-        self.issues.iter().filter(|i| i.severity == Severity::Info).count()
+        self.issues
+            .iter()
+            .filter(|i| i.severity == Severity::Info)
+            .count()
     }
 }
 
@@ -307,7 +314,9 @@ fn check_required_sections(speck: &Speck, result: &mut ValidationResult) {
     for (anchor, name) in required_sections {
         // Check if section exists by looking for the anchor or a variant
         let has_section = anchor_names.contains(anchor)
-            || anchor_names.iter().any(|a| a.ends_with(&format!("-{}", anchor)))
+            || anchor_names
+                .iter()
+                .any(|a| a.ends_with(&format!("-{}", anchor)))
             || (anchor == "execution-steps" && !speck.steps.is_empty());
 
         if !has_section {
@@ -424,7 +433,11 @@ fn check_duplicate_anchors(speck: &Speck, result: &mut ValidationResult) {
     for anchor in &speck.anchors {
         // Extract original name from "(duplicate)" marker
         let name = if anchor.name.contains("(duplicate)") {
-            anchor.name.split(" (duplicate)").next().unwrap_or(&anchor.name)
+            anchor
+                .name
+                .split(" (duplicate)")
+                .next()
+                .unwrap_or(&anchor.name)
         } else {
             &anchor.name
         };
@@ -440,10 +453,8 @@ fn check_duplicate_anchors(speck: &Speck, result: &mut ValidationResult) {
                 .with_anchor(name),
             );
             // Add note about first occurrence
-            result.issues.last_mut().unwrap().message = format!(
-                "Duplicate anchor: {} (first at line {})",
-                name, first_line
-            );
+            result.issues.last_mut().unwrap().message =
+                format!("Duplicate anchor: {} (first at line {})", name, first_line);
         } else {
             seen.insert(name, anchor.line);
         }
@@ -897,7 +908,10 @@ fn check_bead_without_integration(speck: &Speck, result: &mut ValidationResult) 
                 ValidationIssue::new(
                     "W008",
                     Severity::Warning,
-                    format!("Step {} has bead ID but beads integration not enabled", step.number),
+                    format!(
+                        "Step {} has bead ID but beads integration not enabled",
+                        step.number
+                    ),
                 )
                 .at_line(step.line)
                 .with_anchor(&step.anchor),
@@ -988,7 +1002,11 @@ Deliverable text.
         let speck = parse_speck(content).unwrap();
         let result = validate_speck(&speck);
 
-        assert!(result.valid, "Expected valid speck, got issues: {:?}", result.issues);
+        assert!(
+            result.valid,
+            "Expected valid speck, got issues: {:?}",
+            result.issues
+        );
     }
 
     #[test]
@@ -1018,7 +1036,10 @@ Deliverable text.
 
         assert!(!result.valid);
         let e001_issues: Vec<_> = result.issues.iter().filter(|i| i.code == "E001").collect();
-        assert!(!e001_issues.is_empty(), "Expected E001 errors for missing sections");
+        assert!(
+            !e001_issues.is_empty(),
+            "Expected E001 errors for missing sections"
+        );
     }
 
     #[test]
@@ -1038,7 +1059,10 @@ Deliverable text.
         let result = validate_speck(&speck);
 
         let e002_issues: Vec<_> = result.issues.iter().filter(|i| i.code == "E002").collect();
-        assert!(!e002_issues.is_empty(), "Expected E002 error for missing Owner");
+        assert!(
+            !e002_issues.is_empty(),
+            "Expected E002 error for missing Owner"
+        );
     }
 
     #[test]
@@ -1400,7 +1424,8 @@ Question without resolution.
     #[test]
     fn test_i001_document_size() {
         // Create a speck with 2000+ lines
-        let mut content = String::from(r#"## Phase 1.0: Test {#phase-1}
+        let mut content = String::from(
+            r#"## Phase 1.0: Test {#phase-1}
 
 ### Plan Metadata {#plan-metadata}
 
@@ -1410,7 +1435,8 @@ Question without resolution.
 | Status | draft |
 | Last updated | 2026-02-03 |
 
-"#);
+"#,
+        );
 
         for i in 0..2000 {
             content.push_str(&format!("Line {}\n", i));
@@ -1460,7 +1486,10 @@ Question without resolution.
             .iter()
             .filter(|i| i.severity == Severity::Warning)
             .collect();
-        assert!(lenient_warnings.is_empty(), "Lenient should not include warnings");
+        assert!(
+            lenient_warnings.is_empty(),
+            "Lenient should not include warnings"
+        );
 
         // Normal: Errors + warnings
         let normal_config = ValidationConfig {
@@ -1473,7 +1502,10 @@ Question without resolution.
             .iter()
             .filter(|i| i.severity == Severity::Warning)
             .collect();
-        assert!(!normal_warnings.is_empty(), "Normal should include warnings");
+        assert!(
+            !normal_warnings.is_empty(),
+            "Normal should include warnings"
+        );
     }
 
     #[test]
@@ -1496,10 +1528,26 @@ Question without resolution.
     fn test_validation_result_counts() {
         let mut result = ValidationResult::new();
 
-        result.add_issue(ValidationIssue::new("E001", Severity::Error, "Error 1".to_string()));
-        result.add_issue(ValidationIssue::new("E002", Severity::Error, "Error 2".to_string()));
-        result.add_issue(ValidationIssue::new("W001", Severity::Warning, "Warning 1".to_string()));
-        result.add_issue(ValidationIssue::new("I001", Severity::Info, "Info 1".to_string()));
+        result.add_issue(ValidationIssue::new(
+            "E001",
+            Severity::Error,
+            "Error 1".to_string(),
+        ));
+        result.add_issue(ValidationIssue::new(
+            "E002",
+            Severity::Error,
+            "Error 2".to_string(),
+        ));
+        result.add_issue(ValidationIssue::new(
+            "W001",
+            Severity::Warning,
+            "Warning 1".to_string(),
+        ));
+        result.add_issue(ValidationIssue::new(
+            "I001",
+            Severity::Info,
+            "Info 1".to_string(),
+        ));
 
         assert_eq!(result.error_count(), 2);
         assert_eq!(result.warning_count(), 1);
@@ -1531,7 +1579,11 @@ Question without resolution.
         let result = validate_speck(&speck);
 
         let e018_issues: Vec<_> = result.issues.iter().filter(|i| i.code == "E018").collect();
-        assert_eq!(e018_issues.len(), 1, "Expected E018 error for vague reference");
+        assert_eq!(
+            e018_issues.len(),
+            1,
+            "Expected E018 error for vague reference"
+        );
         assert!(e018_issues[0].message.contains("vague"));
     }
 
@@ -1568,7 +1620,11 @@ Decision text.
         let result = validate_speck(&speck);
 
         let e018_issues: Vec<_> = result.issues.iter().filter(|i| i.code == "E018").collect();
-        assert!(e018_issues.is_empty(), "Expected no E018 errors for valid references: {:?}", e018_issues);
+        assert!(
+            e018_issues.is_empty(),
+            "Expected no E018 errors for valid references: {:?}",
+            e018_issues
+        );
     }
 
     #[test]

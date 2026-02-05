@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use specks_core::{find_project_root, find_specks, parse_speck, speck_name_from_path, Speck};
+use specks_core::{Speck, find_project_root, find_specks, parse_speck, speck_name_from_path};
 
 use crate::output::{JsonIssue, JsonResponse, ListData, Progress, SpeckSummary};
 
@@ -27,11 +27,8 @@ pub fn run_list(
                     line: None,
                     anchor: None,
                 }];
-                let response: JsonResponse<ListData> = JsonResponse::error(
-                    "list",
-                    ListData { specks: vec![] },
-                    issues,
-                );
+                let response: JsonResponse<ListData> =
+                    JsonResponse::error("list", ListData { specks: vec![] }, issues);
                 println!("{}", serde_json::to_string_pretty(&response).unwrap());
             } else {
                 eprintln!("error: {}", message);
@@ -54,11 +51,8 @@ pub fn run_list(
                     line: None,
                     anchor: None,
                 }];
-                let response: JsonResponse<ListData> = JsonResponse::error(
-                    "list",
-                    ListData { specks: vec![] },
-                    issues,
-                );
+                let response: JsonResponse<ListData> =
+                    JsonResponse::error("list", ListData { specks: vec![] }, issues);
                 println!("{}", serde_json::to_string_pretty(&response).unwrap());
             } else {
                 eprintln!("error: {}", message);

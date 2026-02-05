@@ -171,8 +171,12 @@ impl AgentRunner {
             };
 
             return Err(SpecksError::AgentInvocationFailed {
-                reason: format!("Agent {} failed with exit code {}: {}",
-                    config.agent_name, exit_code, error_output.trim()),
+                reason: format!(
+                    "Agent {} failed with exit code {}: {}",
+                    config.agent_name,
+                    exit_code,
+                    error_output.trim()
+                ),
             });
         }
 
@@ -193,9 +197,11 @@ impl AgentRunner {
         cmd.stderr(Stdio::piped());
 
         // Spawn the child process
-        let mut child = cmd.spawn().map_err(|e| SpecksError::AgentInvocationFailed {
-            reason: format!("Failed to spawn claude process: {}", e),
-        })?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| SpecksError::AgentInvocationFailed {
+                reason: format!("Failed to spawn claude process: {}", e),
+            })?;
 
         // Wait with timeout using a simple polling approach
         // In production, we might use a more sophisticated timeout mechanism
@@ -353,8 +359,9 @@ mod tests {
     #[test]
     fn test_check_claude_cli_not_installed() {
         // Use a path that definitely doesn't exist
-        let runner = AgentRunner::new(PathBuf::from("/project"))
-            .with_claude_path(PathBuf::from("/nonexistent/path/to/claude-that-does-not-exist"));
+        let runner = AgentRunner::new(PathBuf::from("/project")).with_claude_path(PathBuf::from(
+            "/nonexistent/path/to/claude-that-does-not-exist",
+        ));
 
         let result = runner.check_claude_cli();
         assert!(result.is_err());
@@ -386,7 +393,11 @@ mod tests {
         let config = interviewer_config(&project_root);
 
         assert_eq!(config.agent_name, "specks-interviewer");
-        assert!(config.allowed_tools.contains(&"AskUserQuestion".to_string()));
+        assert!(
+            config
+                .allowed_tools
+                .contains(&"AskUserQuestion".to_string())
+        );
         assert!(config.allowed_tools.contains(&"Read".to_string()));
     }
 
@@ -441,7 +452,12 @@ mod tests {
         // Start from the manifest directory (crate root)
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         // Go up two levels: crates/specks -> crates -> workspace root
-        manifest_dir.parent().unwrap().parent().unwrap().to_path_buf()
+        manifest_dir
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf()
     }
 
     #[test]
@@ -451,7 +467,11 @@ mod tests {
         let mock_path = workspace_root.join("tests/bin/claude-mock");
 
         // The mock should exist
-        assert!(mock_path.exists(), "claude-mock should exist at {:?}", mock_path);
+        assert!(
+            mock_path.exists(),
+            "claude-mock should exist at {:?}",
+            mock_path
+        );
     }
 
     #[test]
@@ -471,14 +491,17 @@ mod tests {
         let _ = std::fs::create_dir_all(&temp_dir);
         let agent_path = temp_dir.join("test-agent.md");
 
-        std::fs::write(&agent_path, "# Test Agent\n\nYou are a test agent.").expect("write agent file");
+        std::fs::write(&agent_path, "# Test Agent\n\nYou are a test agent.")
+            .expect("write agent file");
 
         // Create runner with mock path
-        let runner = AgentRunner::new(workspace_root.clone())
-            .with_claude_path(mock_path.clone());
+        let runner = AgentRunner::new(workspace_root.clone()).with_claude_path(mock_path.clone());
 
         // Verify mock is "installed"
-        assert!(runner.check_claude_cli().is_ok(), "mock claude should be detected");
+        assert!(
+            runner.check_claude_cli().is_ok(),
+            "mock claude should be detected"
+        );
 
         // Clean up
         let _ = std::fs::remove_file(&agent_path);
@@ -503,14 +526,9 @@ mod tests {
         let agent_path = temp_dir.join("test-agent.md");
         std::fs::write(&agent_path, "# Test Agent").expect("write agent file");
 
-        let runner = AgentRunner::new(workspace_root)
-            .with_claude_path(mock_path);
+        let runner = AgentRunner::new(workspace_root).with_claude_path(mock_path);
 
-        let config = AgentConfig::new(
-            "test-agent",
-            agent_path.clone(),
-            vec!["Read".to_string()],
-        );
+        let config = AgentConfig::new("test-agent", agent_path.clone(), vec!["Read".to_string()]);
 
         // Default mock behavior: exit 0, empty output
         let result = runner.invoke_agent(&config, "test prompt");

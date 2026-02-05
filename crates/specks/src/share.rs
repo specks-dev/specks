@@ -219,10 +219,7 @@ pub fn copy_skill_to_project(
         // Create parent directories if needed
         if let Some(parent) = dest_path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
-                format!(
-                    "failed to create directory for skill {}: {}",
-                    skill_name, e
-                )
+                format!("failed to create directory for skill {}: {}", skill_name, e)
             })?;
         }
 
@@ -235,10 +232,7 @@ pub fn copy_skill_to_project(
         // Create parent directories
         if let Some(parent) = dest_path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
-                format!(
-                    "failed to create directory for skill {}: {}",
-                    skill_name, e
-                )
+                format!("failed to create directory for skill {}: {}", skill_name, e)
             })?;
         }
 
@@ -416,9 +410,7 @@ mod tests {
         assert_eq!(status, SkillInstallStatus::Installed);
 
         // Verify file was created
-        let dest_path = project
-            .path()
-            .join(".claude/skills/specks-plan/SKILL.md");
+        let dest_path = project.path().join(".claude/skills/specks-plan/SKILL.md");
         assert!(dest_path.exists());
 
         let content = fs::read_to_string(&dest_path).unwrap();
@@ -448,9 +440,7 @@ mod tests {
         copy_skill_to_project(share.path(), "specks-plan", project.path(), false).unwrap();
 
         // Modify the installed skill
-        let dest_path = project
-            .path()
-            .join(".claude/skills/specks-plan/SKILL.md");
+        let dest_path = project.path().join(".claude/skills/specks-plan/SKILL.md");
         fs::write(&dest_path, "# modified content").unwrap();
 
         // Re-install should update
@@ -520,9 +510,7 @@ mod tests {
         copy_skill_to_project(share.path(), "specks-plan", project.path(), false).unwrap();
 
         // Modify the installed skill
-        let dest_path = project
-            .path()
-            .join(".claude/skills/specks-plan/SKILL.md");
+        let dest_path = project.path().join(".claude/skills/specks-plan/SKILL.md");
         fs::write(&dest_path, "# modified content").unwrap();
 
         // Verify should be outdated

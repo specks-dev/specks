@@ -1,7 +1,7 @@
 //! JSON output formatting per Spec S05
 
 use serde::{Deserialize, Serialize};
-use specks_core::{ValidationIssue, Severity};
+use specks_core::{Severity, ValidationIssue};
 
 const SCHEMA_VERSION: &str = "1";
 

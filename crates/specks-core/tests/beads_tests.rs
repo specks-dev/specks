@@ -41,7 +41,8 @@ fn test_issue_details_json_parsing_array() {
 
     // bd show returns array
     let json = r#"[{"id":"bd-fake-1","title":"Test Issue","description":"","status":"open","priority":2,"issue_type":"task","dependencies":[]}]"#;
-    let issues: Vec<IssueDetails> = serde_json::from_str(json).expect("Failed to parse IssueDetails array");
+    let issues: Vec<IssueDetails> =
+        serde_json::from_str(json).expect("Failed to parse IssueDetails array");
 
     assert_eq!(issues.len(), 1);
     assert_eq!(issues[0].id, "bd-fake-1");
@@ -53,7 +54,8 @@ fn test_issue_details_json_parsing_object() {
 
     // bd show may return single object
     let json = r#"{"id":"bd-fake-1","title":"Test Issue","description":"","status":"closed","priority":2,"issue_type":"task","dependencies":[{"id":"bd-fake-0","dependency_type":"blocks"}]}"#;
-    let issue: IssueDetails = serde_json::from_str(json).expect("Failed to parse IssueDetails object");
+    let issue: IssueDetails =
+        serde_json::from_str(json).expect("Failed to parse IssueDetails object");
 
     assert_eq!(issue.id, "bd-fake-1");
     assert_eq!(issue.status, "closed");
@@ -75,7 +77,8 @@ fn test_bead_status_display() {
 fn test_dep_result_json_parsing() {
     use specks_core::beads::DepResult;
 
-    let json = r#"{"status":"added","issue_id":"bd-fake-1","depends_on_id":"bd-fake-0","type":"blocks"}"#;
+    let json =
+        r#"{"status":"added","issue_id":"bd-fake-1","depends_on_id":"bd-fake-0","type":"blocks"}"#;
     let result: DepResult = serde_json::from_str(json).expect("Failed to parse DepResult");
 
     assert_eq!(result.status, "added");

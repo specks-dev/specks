@@ -170,12 +170,10 @@ impl Default for BeadsConfig {
 impl Config {
     /// Load configuration from a file
     pub fn load(path: &Path) -> Result<Self, SpecksError> {
-        let content = fs::read_to_string(path).map_err(|e| {
-            SpecksError::Config(format!("failed to read config file: {}", e))
-        })?;
-        toml::from_str(&content).map_err(|e| {
-            SpecksError::Config(format!("failed to parse config file: {}", e))
-        })
+        let content = fs::read_to_string(path)
+            .map_err(|e| SpecksError::Config(format!("failed to read config file: {}", e)))?;
+        toml::from_str(&content)
+            .map_err(|e| SpecksError::Config(format!("failed to parse config file: {}", e)))
     }
 
     /// Load configuration from .specks/config.toml in the given project root
@@ -190,10 +188,7 @@ impl Config {
 }
 
 /// Reserved file names that are not treated as specks
-pub const RESERVED_FILES: &[&str] = &[
-    "specks-skeleton.md",
-    "specks-implementation-log.md",
-];
+pub const RESERVED_FILES: &[&str] = &["specks-skeleton.md", "specks-implementation-log.md"];
 
 /// Check if a filename is reserved (not a speck)
 pub fn is_reserved_file(filename: &str) -> bool {
@@ -205,9 +200,10 @@ pub fn is_reserved_file(filename: &str) -> bool {
 /// Per [D07], commands search upward from current working directory to find
 /// `.specks/` directory, stopping at filesystem root.
 pub fn find_project_root() -> Result<PathBuf, SpecksError> {
-    find_project_root_from(std::env::current_dir().map_err(|e| {
-        SpecksError::Config(format!("failed to get current directory: {}", e))
-    })?)
+    find_project_root_from(
+        std::env::current_dir()
+            .map_err(|e| SpecksError::Config(format!("failed to get current directory: {}", e)))?,
+    )
 }
 
 /// Find the project root starting from a specific directory
@@ -235,9 +231,7 @@ pub fn find_specks(project_root: &Path) -> Result<Vec<PathBuf>, SpecksError> {
     }
 
     let mut specks = Vec::new();
-    let entries = fs::read_dir(&specks_dir).map_err(|e| {
-        SpecksError::Io(e)
-    })?;
+    let entries = fs::read_dir(&specks_dir).map_err(|e| SpecksError::Io(e))?;
 
     for entry in entries {
         let entry = entry.map_err(SpecksError::Io)?;

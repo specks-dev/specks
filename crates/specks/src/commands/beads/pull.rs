@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::Path;
 
-use specks_core::{find_project_root, find_specks, parse_speck, speck_name_from_path, BeadsCli, Config};
+use specks_core::{
+    BeadsCli, Config, find_project_root, find_specks, parse_speck, speck_name_from_path,
+};
 
 use crate::output::{JsonIssue, JsonResponse};
 
@@ -34,19 +36,14 @@ pub fn run_pull(
     let project_root = match find_project_root() {
         Ok(root) => root,
         Err(_) => {
-            return output_error(
-                json_output,
-                "E009",
-                ".specks directory not initialized",
-                9,
-            );
+            return output_error(json_output, "E009", ".specks directory not initialized", 9);
         }
     };
 
     // Load config
     let config = Config::load_from_project(&project_root).unwrap_or_default();
-    let bd_path = std::env::var("SPECKS_BD_PATH")
-        .unwrap_or_else(|_| config.specks.beads.bd_path.clone());
+    let bd_path =
+        std::env::var("SPECKS_BD_PATH").unwrap_or_else(|_| config.specks.beads.bd_path.clone());
     let beads = BeadsCli::new(bd_path);
 
     // Check if beads CLI is installed
@@ -74,12 +71,7 @@ pub fn run_pull(
         Some(f) => {
             let path = resolve_file_path(&project_root, f);
             if !path.exists() {
-                return output_error(
-                    json_output,
-                    "E002",
-                    &format!("file not found: {}", f),
-                    2,
-                );
+                return output_error(json_output, "E002", &format!("file not found: {}", f), 2);
             }
             vec![path]
         }
@@ -135,7 +127,10 @@ pub fn run_pull(
     } else if !quiet {
         for result in &all_results {
             if result.checkboxes_updated > 0 {
-                println!("{}: {} checkboxes updated", result.name, result.checkboxes_updated);
+                println!(
+                    "{}: {} checkboxes updated",
+                    result.name, result.checkboxes_updated
+                );
                 for step in &result.steps_updated {
                     println!("  {} - marked complete", step);
                 }
@@ -250,7 +245,10 @@ fn mark_step_checkboxes_complete(
             }
         }
 
-        if in_target_step && !line.contains(&format!("{{#{}}}", step_anchor)) && line_num != step_line {
+        if in_target_step
+            && !line.contains(&format!("{{#{}}}", step_anchor))
+            && line_num != step_line
+        {
             past_step = true;
         }
 
@@ -262,7 +260,10 @@ fn mark_step_checkboxes_complete(
                 in_checkpoint_section = checkbox_mode == "all";
             } else if line.starts_with("**") && !line.starts_with("**Bead:**") {
                 // Other bold sections reset checkpoint context
-                if !line.contains("Checkpoint") && !line.contains("Tasks") && !line.contains("Tests") {
+                if !line.contains("Checkpoint")
+                    && !line.contains("Tasks")
+                    && !line.contains("Tests")
+                {
                     in_checkpoint_section = false;
                 }
             }
@@ -303,15 +304,24 @@ fn resolve_file_path(project_root: &Path, file: &str) -> std::path::PathBuf {
         if as_is.exists() {
             as_is
         } else {
-            project_root.join(".specks").join(format!("specks-{}", file))
+            project_root
+                .join(".specks")
+                .join(format!("specks-{}", file))
         }
     } else {
-        project_root.join(".specks").join(format!("specks-{}.md", file))
+        project_root
+            .join(".specks")
+            .join(format!("specks-{}.md", file))
     }
 }
 
 /// Output an error in JSON or text format
-fn output_error(json_output: bool, code: &str, message: &str, exit_code: i32) -> Result<i32, String> {
+fn output_error(
+    json_output: bool,
+    code: &str,
+    message: &str,
+    exit_code: i32,
+) -> Result<i32, String> {
     if json_output {
         let issues = vec![JsonIssue {
             code: code.to_string(),

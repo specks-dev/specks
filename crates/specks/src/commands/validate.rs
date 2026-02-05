@@ -4,9 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use specks_core::{
-    find_project_root, find_specks, parse_speck, speck_name_from_path,
-    validate_speck_with_config, Config, Severity, ValidationConfig, ValidationLevel,
-    ValidationResult,
+    Config, Severity, ValidationConfig, ValidationLevel, ValidationResult, find_project_root,
+    find_specks, parse_speck, speck_name_from_path, validate_speck_with_config,
 };
 
 use crate::output::{JsonIssue, JsonResponse, ValidateData, ValidatedFile};
@@ -32,11 +31,8 @@ pub fn run_validate(
                     line: None,
                     anchor: None,
                 }];
-                let response: JsonResponse<ValidateData> = JsonResponse::error(
-                    "validate",
-                    ValidateData { files: vec![] },
-                    issues,
-                );
+                let response: JsonResponse<ValidateData> =
+                    JsonResponse::error("validate", ValidateData { files: vec![] }, issues);
                 println!("{}", serde_json::to_string_pretty(&response).unwrap());
             } else {
                 eprintln!("error: {}", message);
@@ -76,11 +72,8 @@ pub fn run_validate(
                         line: None,
                         anchor: None,
                     }];
-                    let response: JsonResponse<ValidateData> = JsonResponse::error(
-                        "validate",
-                        ValidateData { files: vec![] },
-                        issues,
-                    );
+                    let response: JsonResponse<ValidateData> =
+                        JsonResponse::error("validate", ValidateData { files: vec![] }, issues);
                     println!("{}", serde_json::to_string_pretty(&response).unwrap());
                 } else {
                     eprintln!("error: {}", message);
@@ -104,11 +97,8 @@ pub fn run_validate(
                             line: None,
                             anchor: None,
                         }];
-                        let response: JsonResponse<ValidateData> = JsonResponse::error(
-                            "validate",
-                            ValidateData { files: vec![] },
-                            issues,
-                        );
+                        let response: JsonResponse<ValidateData> =
+                            JsonResponse::error("validate", ValidateData { files: vec![] }, issues);
                         println!("{}", serde_json::to_string_pretty(&response).unwrap());
                     } else {
                         eprintln!("error: {}", message);

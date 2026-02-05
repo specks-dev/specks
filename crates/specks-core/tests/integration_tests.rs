@@ -2,7 +2,7 @@
 //!
 //! These tests validate the parser and validator against fixture files.
 
-use specks_core::{parse_speck, validate_speck, Severity};
+use specks_core::{Severity, parse_speck, validate_speck};
 use std::fs;
 
 const FIXTURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures");
@@ -17,7 +17,11 @@ fn test_valid_minimal_fixture() {
     let result = validate_speck(&speck);
 
     // Check no errors
-    let errors: Vec<_> = result.issues.iter().filter(|i| i.severity == Severity::Error).collect();
+    let errors: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.severity == Severity::Error)
+        .collect();
     assert!(
         errors.is_empty(),
         "Valid minimal speck should have no errors, got: {:?}",
@@ -44,7 +48,10 @@ fn test_invalid_missing_metadata_fixture() {
         !e002_errors.is_empty(),
         "Missing metadata speck should have E002 errors"
     );
-    assert!(!result.valid, "Speck with missing metadata should be invalid");
+    assert!(
+        !result.valid,
+        "Speck with missing metadata should be invalid"
+    );
 }
 
 #[test]
@@ -88,7 +95,10 @@ fn test_invalid_duplicate_anchors_fixture() {
         !e006_errors.is_empty(),
         "Duplicate anchor speck should have E006 error"
     );
-    assert!(!result.valid, "Speck with duplicate anchors should be invalid");
+    assert!(
+        !result.valid,
+        "Speck with duplicate anchors should be invalid"
+    );
 }
 
 #[test]
@@ -214,7 +224,12 @@ fn test_valid_agent_output_example_fixture() {
     let checked_count: usize = speck
         .steps
         .iter()
-        .flat_map(|s| s.tasks.iter().chain(s.tests.iter()).chain(s.checkpoints.iter()))
+        .flat_map(|s| {
+            s.tasks
+                .iter()
+                .chain(s.tests.iter())
+                .chain(s.checkpoints.iter())
+        })
         .filter(|c| c.checked)
         .count();
     assert!(
@@ -281,9 +296,8 @@ mod golden_tests {
 
     fn load_golden(name: &str) -> Value {
         let path = format!("{}/{}.validated.json", GOLDEN_DIR, name);
-        let content = fs::read_to_string(&path).unwrap_or_else(|_| {
-            panic!("Failed to read golden file: {}", path)
-        });
+        let content = fs::read_to_string(&path)
+            .unwrap_or_else(|_| panic!("Failed to read golden file: {}", path));
         serde_json::from_str(&content).expect("Failed to parse golden JSON")
     }
 
@@ -304,7 +318,11 @@ mod golden_tests {
         );
         assert!(result.valid, "Validation should pass");
         assert_eq!(
-            result.issues.iter().filter(|i| i.severity == Severity::Error).count(),
+            result
+                .issues
+                .iter()
+                .filter(|i| i.severity == Severity::Error)
+                .count(),
             0,
             "Should have no errors"
         );
@@ -396,7 +414,12 @@ mod golden_tests {
 #[test]
 fn test_full_validation_workflow() {
     // Test the complete workflow: parse -> validate -> check results for all fixtures
-    let valid_fixtures = ["minimal", "complete", "with-substeps", "agent-output-example"];
+    let valid_fixtures = [
+        "minimal",
+        "complete",
+        "with-substeps",
+        "agent-output-example",
+    ];
     let invalid_fixtures = [
         "missing-metadata",
         "circular-deps",

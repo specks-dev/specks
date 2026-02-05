@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use specks_core::{find_project_root, parse_speck, speck_name_from_path, Speck};
+use specks_core::{Speck, find_project_root, parse_speck, speck_name_from_path};
 
 use crate::output::{JsonIssue, JsonResponse, Progress, StatusData, StepStatus, SubstepStatus};
 
@@ -176,7 +176,9 @@ fn resolve_file_path(project_root: &Path, file: &str) -> PathBuf {
             as_is
         } else {
             // Try in .specks/ with prefix
-            project_root.join(".specks").join(format!("specks-{}.md", file))
+            project_root
+                .join(".specks")
+                .join(format!("specks-{}.md", file))
         }
     }
 }

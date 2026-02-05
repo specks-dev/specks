@@ -68,8 +68,9 @@ mod patterns {
     pub static ANCHOR_REF: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"#([a-z0-9-]+)").unwrap());
 
-    pub static SECTION_HEADER: LazyLock<regex::Regex> =
-        LazyLock::new(|| regex::Regex::new(r"^(#{1,6})\s+(.+?)\s*(?:\{#([a-z0-9-]+)\})?\s*$").unwrap());
+    pub static SECTION_HEADER: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(r"^(#{1,6})\s+(.+?)\s*(?:\{#([a-z0-9-]+)\})?\s*$").unwrap()
+    });
 }
 
 /// Parse a speck file from its contents
@@ -570,10 +571,7 @@ mod tests {
         assert_eq!(step.number, "0");
         assert_eq!(step.title, "Bootstrap");
         assert_eq!(step.anchor, "step-0");
-        assert_eq!(
-            step.commit_message,
-            Some("feat: initial setup".to_string())
-        );
+        assert_eq!(step.commit_message, Some("feat: initial setup".to_string()));
         assert_eq!(step.references, Some("[D01] Test decision".to_string()));
 
         assert_eq!(step.tasks.len(), 2);
@@ -651,16 +649,14 @@ mod tests {
 
         let speck = parse_speck(content).unwrap();
 
-        assert_eq!(
-            speck.metadata.beads_root_id,
-            Some("bd-root123".to_string())
-        );
+        assert_eq!(speck.metadata.beads_root_id, Some("bd-root123".to_string()));
         assert_eq!(speck.steps[0].bead_id, Some("bd-step0".to_string()));
     }
 
     #[test]
     fn test_parse_beads_hints() {
-        let hints = parse_beads_hints("type=task, priority=2, labels=backend,api, estimate_minutes=60");
+        let hints =
+            parse_beads_hints("type=task, priority=2, labels=backend,api, estimate_minutes=60");
 
         assert_eq!(hints.issue_type, Some("task".to_string()));
         assert_eq!(hints.priority, Some(2));

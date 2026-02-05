@@ -256,7 +256,10 @@ fn test_mock_bd_show_returns_issue_details() {
 
     // Show returns single object (contract allows array or object)
     assert!(json["id"].is_string(), "should have id");
-    assert!(json["dependencies"].is_array(), "should have dependencies array");
+    assert!(
+        json["dependencies"].is_array(),
+        "should have dependencies array"
+    );
 }
 
 #[test]
@@ -409,8 +412,14 @@ fn test_beads_sync_creates_root_and_step_beads() {
     let json: serde_json::Value = serde_json::from_str(&stdout).expect("should be valid JSON");
 
     assert_eq!(json["status"], "ok");
-    assert!(json["data"]["root_bead_id"].is_string(), "should have root bead ID");
-    assert!(json["data"]["steps_synced"].as_u64().unwrap() >= 1, "should sync at least 1 step");
+    assert!(
+        json["data"]["root_bead_id"].is_string(),
+        "should have root bead ID"
+    );
+    assert!(
+        json["data"]["steps_synced"].as_u64().unwrap() >= 1,
+        "should sync at least 1 step"
+    );
 
     // Verify the speck file was updated with bead IDs
     let speck_content = fs::read_to_string(temp.path().join(".specks/specks-test.md"))
@@ -461,7 +470,10 @@ fn test_beads_sync_is_idempotent() {
         .filter(|k| !k.contains('.'))
         .count();
 
-    assert_eq!(root_count, 1, "should have exactly one root bead after idempotent syncs");
+    assert_eq!(
+        root_count, 1,
+        "should have exactly one root bead after idempotent syncs"
+    );
 }
 
 #[test]
@@ -491,9 +503,13 @@ fn test_beads_sync_creates_dependency_edges() {
     // Verify dependencies in mock state
     let deps_file = temp_state.path().join("deps.json");
     let deps_content = fs::read_to_string(&deps_file).expect("failed to read deps");
-    let deps: serde_json::Value = serde_json::from_str(&deps_content).expect("should be valid JSON");
+    let deps: serde_json::Value =
+        serde_json::from_str(&deps_content).expect("should be valid JSON");
 
-    assert!(deps.as_array().unwrap().len() >= 2, "should have at least 2 dependency edges");
+    assert!(
+        deps.as_array().unwrap().len() >= 2,
+        "should have at least 2 dependency edges"
+    );
 }
 
 // =============================================================================
@@ -540,9 +556,18 @@ fn test_beads_status_computes_readiness() {
     let step_1_status = steps.iter().find(|s| s["anchor"] == "step-1").unwrap();
     let step_2_status = steps.iter().find(|s| s["anchor"] == "step-2").unwrap();
 
-    assert_eq!(step_0_status["status"], "ready", "Step 0 has no deps, should be ready");
-    assert_eq!(step_1_status["status"], "blocked", "Step 1 depends on Step 0, should be blocked");
-    assert_eq!(step_2_status["status"], "blocked", "Step 2 depends on Step 0 and 1, should be blocked");
+    assert_eq!(
+        step_0_status["status"], "ready",
+        "Step 0 has no deps, should be ready"
+    );
+    assert_eq!(
+        step_1_status["status"], "blocked",
+        "Step 1 depends on Step 0, should be blocked"
+    );
+    assert_eq!(
+        step_2_status["status"], "blocked",
+        "Step 2 depends on Step 0 and 1, should be blocked"
+    );
 }
 
 // =============================================================================
@@ -666,7 +691,10 @@ fn test_full_beads_workflow_sync_work_pull() {
         serde_json::from_str(&String::from_utf8_lossy(&status_output.stdout)).unwrap();
     let steps = status_json["data"]["files"][0]["steps"].as_array().unwrap();
     let step_0 = steps.iter().find(|s| s["anchor"] == "step-0").unwrap();
-    assert_eq!(step_0["status"], "ready", "Step 0 should be ready initially");
+    assert_eq!(
+        step_0["status"], "ready",
+        "Step 0 should be ready initially"
+    );
 
     // Step 3: Simulate work completion - close Step 0's bead
     let step_0_bead_id = step_0["bead_id"].as_str().unwrap();
@@ -687,13 +715,27 @@ fn test_full_beads_workflow_sync_work_pull() {
 
     let status_after_json: serde_json::Value =
         serde_json::from_str(&String::from_utf8_lossy(&status_after_work.stdout)).unwrap();
-    let steps_after = status_after_json["data"]["files"][0]["steps"].as_array().unwrap();
+    let steps_after = status_after_json["data"]["files"][0]["steps"]
+        .as_array()
+        .unwrap();
 
-    let step_0_after = steps_after.iter().find(|s| s["anchor"] == "step-0").unwrap();
-    let step_1_after = steps_after.iter().find(|s| s["anchor"] == "step-1").unwrap();
+    let step_0_after = steps_after
+        .iter()
+        .find(|s| s["anchor"] == "step-0")
+        .unwrap();
+    let step_1_after = steps_after
+        .iter()
+        .find(|s| s["anchor"] == "step-1")
+        .unwrap();
 
-    assert_eq!(step_0_after["status"], "complete", "Step 0 should be complete after closing bead");
-    assert_eq!(step_1_after["status"], "ready", "Step 1 should be ready after Step 0 complete");
+    assert_eq!(
+        step_0_after["status"], "complete",
+        "Step 0 should be complete after closing bead"
+    );
+    assert_eq!(
+        step_1_after["status"], "ready",
+        "Step 1 should be ready after Step 0 complete"
+    );
 
     // Step 5: Pull completion back to checkboxes
     let pull_output = Command::new(specks_binary())

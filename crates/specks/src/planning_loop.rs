@@ -281,13 +281,13 @@ impl PlanningLoop {
         }
 
         // Build the outcome
-        let speck_path = self
-            .context
-            .speck_path
-            .clone()
-            .ok_or_else(|| SpecksError::AgentInvocationFailed {
-                reason: "No speck path after planning loop".to_string(),
-            })?;
+        let speck_path =
+            self.context
+                .speck_path
+                .clone()
+                .ok_or_else(|| SpecksError::AgentInvocationFailed {
+                    reason: "No speck path after planning loop".to_string(),
+                })?;
 
         let speck_name = self.extract_speck_name(&speck_path);
 
@@ -335,8 +335,8 @@ impl PlanningLoop {
             }
         };
 
-        let config = crate::agent::interviewer_config(&self.project_root)
-            .with_timeout(self.timeout_secs);
+        let config =
+            crate::agent::interviewer_config(&self.project_root).with_timeout(self.timeout_secs);
 
         let result = self.runner.invoke_agent(&config, &prompt)?;
         self.context.requirements = Some(result.output);
@@ -350,7 +350,10 @@ impl PlanningLoop {
             if self.context.iteration == 0 {
                 eprintln!("Creating speck...");
             } else {
-                eprintln!("Revising speck (iteration {})...", self.context.iteration + 1);
+                eprintln!(
+                    "Revising speck (iteration {})...",
+                    self.context.iteration + 1
+                );
             }
         }
 
@@ -390,7 +393,9 @@ impl PlanningLoop {
                     .as_secs();
                 format!("{}", timestamp)
             });
-            self.project_root.join(".specks").join(format!("specks-{}.md", name))
+            self.project_root
+                .join(".specks")
+                .join(format!("specks-{}.md", name))
         };
 
         prompt.push_str(&format!(
@@ -415,15 +420,18 @@ impl PlanningLoop {
             eprintln!("Reviewing speck...");
         }
 
-        let speck_path = self
-            .context
-            .speck_path
-            .as_ref()
-            .ok_or_else(|| SpecksError::AgentInvocationFailed {
-                reason: "No speck path for critic to review".to_string(),
-            })?;
+        let speck_path =
+            self.context
+                .speck_path
+                .as_ref()
+                .ok_or_else(|| SpecksError::AgentInvocationFailed {
+                    reason: "No speck path for critic to review".to_string(),
+                })?;
 
-        let prompt = format!("Review this speck for quality, compliance, and implementability: {}", speck_path.display());
+        let prompt = format!(
+            "Review this speck for quality, compliance, and implementability: {}",
+            speck_path.display()
+        );
 
         let config =
             crate::agent::critic_config(&self.project_root).with_timeout(self.timeout_secs);
@@ -440,13 +448,13 @@ impl PlanningLoop {
             eprintln!("Presenting results...");
         }
 
-        let speck_path = self
-            .context
-            .speck_path
-            .as_ref()
-            .ok_or_else(|| SpecksError::AgentInvocationFailed {
-                reason: "No speck path to present".to_string(),
-            })?;
+        let speck_path =
+            self.context
+                .speck_path
+                .as_ref()
+                .ok_or_else(|| SpecksError::AgentInvocationFailed {
+                    reason: "No speck path to present".to_string(),
+                })?;
 
         let mut prompt = format!(
             "Present the speck at {} and the critic's feedback. ",
@@ -464,8 +472,8 @@ impl PlanningLoop {
         prompt.push_str("If the user says 'abort', 'cancel', 'quit', or similar, return ABORTED. ");
         prompt.push_str("Otherwise, return REVISE: followed by their feedback.");
 
-        let config = crate::agent::interviewer_config(&self.project_root)
-            .with_timeout(self.timeout_secs);
+        let config =
+            crate::agent::interviewer_config(&self.project_root).with_timeout(self.timeout_secs);
 
         let result = self.runner.invoke_agent(&config, &prompt)?;
 
@@ -576,9 +584,15 @@ mod tests {
     #[test]
     fn test_loop_state_transitions() {
         assert_eq!(LoopState::Start.next(), Some(LoopState::InterviewerGather));
-        assert_eq!(LoopState::InterviewerGather.next(), Some(LoopState::Planner));
+        assert_eq!(
+            LoopState::InterviewerGather.next(),
+            Some(LoopState::Planner)
+        );
         assert_eq!(LoopState::Planner.next(), Some(LoopState::Critic));
-        assert_eq!(LoopState::Critic.next(), Some(LoopState::InterviewerPresent));
+        assert_eq!(
+            LoopState::Critic.next(),
+            Some(LoopState::InterviewerPresent)
+        );
         assert_eq!(LoopState::InterviewerPresent.next(), None);
         assert_eq!(LoopState::Revise.next(), Some(LoopState::Planner));
         assert_eq!(LoopState::Approved.next(), None);
@@ -628,10 +642,16 @@ mod tests {
         let project_root = PathBuf::from("/nonexistent/project");
 
         // Plain text is a new idea
-        assert_eq!(detect_input_type("add feature X", &project_root), PlanMode::New);
+        assert_eq!(
+            detect_input_type("add feature X", &project_root),
+            PlanMode::New
+        );
 
         // Non-existent .md file is still treated as new (falls back)
-        assert_eq!(detect_input_type("nonexistent.md", &project_root), PlanMode::New);
+        assert_eq!(
+            detect_input_type("nonexistent.md", &project_root),
+            PlanMode::New
+        );
     }
 
     #[test]
@@ -639,14 +659,7 @@ mod tests {
         let ctx = LoopContext::new_idea("test idea".to_string(), vec![]);
         let project_root = PathBuf::from("/project");
 
-        let loop_instance = PlanningLoop::new(
-            ctx,
-            project_root,
-            300,
-            None,
-            false,
-            false,
-        );
+        let loop_instance = PlanningLoop::new(ctx, project_root, 300, None, false, false);
 
         assert_eq!(*loop_instance.state(), LoopState::Start);
         assert!(!loop_instance.is_complete());
@@ -657,14 +670,7 @@ mod tests {
         let ctx = LoopContext::new_idea("test idea".to_string(), vec![]);
         let project_root = PathBuf::from("/project");
 
-        let mut loop_instance = PlanningLoop::new(
-            ctx,
-            project_root,
-            300,
-            None,
-            false,
-            false,
-        );
+        let mut loop_instance = PlanningLoop::new(ctx, project_root, 300, None, false, false);
 
         // Manual state transitions
         loop_instance.transition(LoopState::InterviewerGather);

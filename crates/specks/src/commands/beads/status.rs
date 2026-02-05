@@ -5,8 +5,8 @@ use std::fs;
 use std::path::Path;
 
 use specks_core::{
-    find_project_root, find_specks, parse_speck, speck_name_from_path, BeadStatus, BeadsCli,
-    Config, Speck,
+    BeadStatus, BeadsCli, Config, Speck, find_project_root, find_specks, parse_speck,
+    speck_name_from_path,
 };
 
 use crate::output::{JsonIssue, JsonResponse};
@@ -49,19 +49,14 @@ pub fn run_beads_status(
     let project_root = match find_project_root() {
         Ok(root) => root,
         Err(_) => {
-            return output_error(
-                json_output,
-                "E009",
-                ".specks directory not initialized",
-                9,
-            );
+            return output_error(json_output, "E009", ".specks directory not initialized", 9);
         }
     };
 
     // Load config
     let config = Config::load_from_project(&project_root).unwrap_or_default();
-    let bd_path = std::env::var("SPECKS_BD_PATH")
-        .unwrap_or_else(|_| config.specks.beads.bd_path.clone());
+    let bd_path =
+        std::env::var("SPECKS_BD_PATH").unwrap_or_else(|_| config.specks.beads.bd_path.clone());
     let beads = BeadsCli::new(bd_path);
 
     // Check if beads CLI is installed
@@ -79,12 +74,7 @@ pub fn run_beads_status(
         Some(f) => {
             let path = resolve_file_path(&project_root, f);
             if !path.exists() {
-                return output_error(
-                    json_output,
-                    "E002",
-                    &format!("file not found: {}", f),
-                    2,
-                );
+                return output_error(json_output, "E002", &format!("file not found: {}", f), 2);
             }
             vec![path]
         }
@@ -188,7 +178,12 @@ fn get_file_beads_status(path: &Path, speck: &Speck, beads: &BeadsCli) -> FileBe
     let mut steps_total = 0;
 
     for step in &speck.steps {
-        let status = compute_step_status(&step.anchor, &step.depends_on, &bead_statuses, &step.bead_id);
+        let status = compute_step_status(
+            &step.anchor,
+            &step.depends_on,
+            &bead_statuses,
+            &step.bead_id,
+        );
         let blocked_by = get_blocked_by(&step.depends_on, &bead_statuses);
 
         if status == BeadStatus::Complete {
@@ -312,15 +307,24 @@ fn resolve_file_path(project_root: &Path, file: &str) -> std::path::PathBuf {
         if as_is.exists() {
             as_is
         } else {
-            project_root.join(".specks").join(format!("specks-{}", file))
+            project_root
+                .join(".specks")
+                .join(format!("specks-{}", file))
         }
     } else {
-        project_root.join(".specks").join(format!("specks-{}.md", file))
+        project_root
+            .join(".specks")
+            .join(format!("specks-{}.md", file))
     }
 }
 
 /// Output an error in JSON or text format
-fn output_error(json_output: bool, code: &str, message: &str, exit_code: i32) -> Result<i32, String> {
+fn output_error(
+    json_output: bool,
+    code: &str,
+    message: &str,
+    exit_code: i32,
+) -> Result<i32, String> {
     if json_output {
         let issues = vec![JsonIssue {
             code: code.to_string(),
@@ -330,11 +334,8 @@ fn output_error(json_output: bool, code: &str, message: &str, exit_code: i32) ->
             line: None,
             anchor: None,
         }];
-        let response: JsonResponse<BeadsStatusData> = JsonResponse::error(
-            "beads status",
-            BeadsStatusData { files: vec![] },
-            issues,
-        );
+        let response: JsonResponse<BeadsStatusData> =
+            JsonResponse::error("beads status", BeadsStatusData { files: vec![] }, issues);
         println!("{}", serde_json::to_string_pretty(&response).unwrap());
     } else {
         eprintln!("error: {}", message);

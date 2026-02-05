@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::output::{JsonIssue, JsonResponse, SetupData, SkillInfo};
 use crate::share::{
-    find_share_dir, install_all_skills, verify_all_skills, SkillInstallStatus, SkillVerifyStatus,
+    SkillInstallStatus, SkillVerifyStatus, find_share_dir, install_all_skills, verify_all_skills,
 };
 
 /// Run the setup claude command.
@@ -23,8 +23,8 @@ pub fn run_setup_claude(
     let share_dir = find_share_dir();
 
     // Get current directory as project directory
-    let project_dir = std::env::current_dir()
-        .map_err(|e| format!("failed to get current directory: {}", e))?;
+    let project_dir =
+        std::env::current_dir().map_err(|e| format!("failed to get current directory: {}", e))?;
 
     if check {
         // Verification mode - just check status
@@ -66,8 +66,12 @@ fn run_check_mode(
         } else {
             eprintln!("error: E025: Skills not found: share directory not found");
             eprintln!();
-            eprintln!("If installed via Homebrew, skills should be at /opt/homebrew/share/specks/skills/");
-            eprintln!("You can set SPECKS_SHARE_DIR environment variable to specify a custom location.");
+            eprintln!(
+                "If installed via Homebrew, skills should be at /opt/homebrew/share/specks/skills/"
+            );
+            eprintln!(
+                "You can set SPECKS_SHARE_DIR environment variable to specify a custom location."
+            );
         }
         return Ok(7);
     };
@@ -156,8 +160,12 @@ fn run_install_mode(
         } else {
             eprintln!("error: E025: Skills not found: share directory not found");
             eprintln!();
-            eprintln!("If installed via Homebrew, skills should be at /opt/homebrew/share/specks/skills/");
-            eprintln!("You can set SPECKS_SHARE_DIR environment variable to specify a custom location.");
+            eprintln!(
+                "If installed via Homebrew, skills should be at /opt/homebrew/share/specks/skills/"
+            );
+            eprintln!(
+                "You can set SPECKS_SHARE_DIR environment variable to specify a custom location."
+            );
         }
         return Ok(7);
     };
@@ -273,11 +281,7 @@ fn run_install_mode(
         }
     }
 
-    if had_errors {
-        Ok(1)
-    } else {
-        Ok(0)
-    }
+    if had_errors { Ok(1) } else { Ok(0) }
 }
 
 #[cfg(test)]
@@ -356,14 +360,18 @@ mod tests {
         assert_eq!(result.unwrap(), 0);
 
         // Verify skills were installed
-        assert!(project
-            .path()
-            .join(".claude/skills/specks-plan/SKILL.md")
-            .exists());
-        assert!(project
-            .path()
-            .join(".claude/skills/specks-execute/SKILL.md")
-            .exists());
+        assert!(
+            project
+                .path()
+                .join(".claude/skills/specks-plan/SKILL.md")
+                .exists()
+        );
+        assert!(
+            project
+                .path()
+                .join(".claude/skills/specks-execute/SKILL.md")
+                .exists()
+        );
     }
 
     #[test]

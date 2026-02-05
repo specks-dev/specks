@@ -5,10 +5,12 @@
 
 use std::path::PathBuf;
 
-use specks_core::{find_project_root, SpecksError};
+use specks_core::{SpecksError, find_project_root};
 
 use crate::output::{JsonIssue, JsonResponse, PlanData, PlanValidation};
-use crate::planning_loop::{detect_input_type, resolve_speck_path, LoopContext, PlanMode, PlanningLoop};
+use crate::planning_loop::{
+    LoopContext, PlanMode, PlanningLoop, detect_input_type, resolve_speck_path,
+};
 
 /// Run the plan command
 ///
@@ -51,11 +53,17 @@ pub fn run_plan(
         Some(i) if !i.is_empty() => i,
         _ => {
             if json_output {
-                output_error_json("plan", "E002", "No input provided. Use `specks plan \"your idea\"` or `specks plan path/to/speck.md`");
+                output_error_json(
+                    "plan",
+                    "E002",
+                    "No input provided. Use `specks plan \"your idea\"` or `specks plan path/to/speck.md`",
+                );
                 return Ok(1);
             } else {
                 // In non-JSON mode, we could prompt interactively, but for now require input
-                eprintln!("error: No input provided. Use `specks plan \"your idea\"` or `specks plan path/to/speck.md`");
+                eprintln!(
+                    "error: No input provided. Use `specks plan \"your idea\"` or `specks plan path/to/speck.md`"
+                );
                 return Ok(1);
             }
         }
@@ -64,15 +72,13 @@ pub fn run_plan(
     // Load context files
     let context_contents: Vec<String> = context_files
         .iter()
-        .filter_map(|path| {
-            match std::fs::read_to_string(path) {
-                Ok(content) => Some(format!("--- {} ---\n{}", path, content)),
-                Err(e) => {
-                    if !quiet {
-                        eprintln!("warning: Failed to read context file {}: {}", path, e);
-                    }
-                    None
+        .filter_map(|path| match std::fs::read_to_string(path) {
+            Ok(content) => Some(format!("--- {} ---\n{}", path, content)),
+            Err(e) => {
+                if !quiet {
+                    eprintln!("warning: Failed to read context file {}: {}", path, e);
                 }
+                None
             }
         })
         .collect();
@@ -135,7 +141,10 @@ pub fn run_plan(
                     let issues = vec![JsonIssue {
                         code: "E001".to_string(),
                         severity: "error".to_string(),
-                        message: format!("Speck has {} validation errors", outcome.validation_errors),
+                        message: format!(
+                            "Speck has {} validation errors",
+                            outcome.validation_errors
+                        ),
                         file: Some(make_relative_path(&project_root, &outcome.speck_path)),
                         line: None,
                         anchor: None,
@@ -145,7 +154,10 @@ pub fn run_plan(
                     let issues = vec![JsonIssue {
                         code: "E023".to_string(),
                         severity: "warning".to_string(),
-                        message: format!("Speck has {} validation warnings", outcome.validation_warnings),
+                        message: format!(
+                            "Speck has {} validation warnings",
+                            outcome.validation_warnings
+                        ),
                         file: Some(make_relative_path(&project_root, &outcome.speck_path)),
                         line: None,
                         anchor: None,
@@ -166,13 +178,21 @@ pub fn run_plan(
                     println!(
                         "Warning: Speck has {} validation error{}",
                         outcome.validation_errors,
-                        if outcome.validation_errors == 1 { "" } else { "s" }
+                        if outcome.validation_errors == 1 {
+                            ""
+                        } else {
+                            "s"
+                        }
                     );
                 } else if outcome.validation_warnings > 0 {
                     println!(
                         "Note: Speck has {} validation warning{}",
                         outcome.validation_warnings,
-                        if outcome.validation_warnings == 1 { "" } else { "s" }
+                        if outcome.validation_warnings == 1 {
+                            ""
+                        } else {
+                            "s"
+                        }
                     );
                 }
             }

@@ -27,13 +27,20 @@ fn setup_test_project() -> tempfile::TempDir {
         .output()
         .expect("failed to run specks init");
 
-    assert!(output.status.success(), "specks init failed: {:?}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "specks init failed: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     temp
 }
 
 /// Create a minimal valid speck in the test project
 fn create_test_speck(temp_dir: &tempfile::TempDir, name: &str, content: &str) {
-    let speck_path = temp_dir.path().join(".specks").join(format!("specks-{}.md", name));
+    let speck_path = temp_dir
+        .path()
+        .join(".specks")
+        .join(format!("specks-{}.md", name));
     fs::write(&speck_path, content).expect("failed to write test speck");
 }
 
@@ -121,9 +128,18 @@ fn test_init_creates_expected_files() {
     // Check files were created
     let specks_dir = temp.path().join(".specks");
     assert!(specks_dir.is_dir(), ".specks directory should exist");
-    assert!(specks_dir.join("specks-skeleton.md").is_file(), "skeleton should exist");
-    assert!(specks_dir.join("config.toml").is_file(), "config should exist");
-    assert!(specks_dir.join("specks-implementation-log.md").is_file(), "implementation log should exist");
+    assert!(
+        specks_dir.join("specks-skeleton.md").is_file(),
+        "skeleton should exist"
+    );
+    assert!(
+        specks_dir.join("config.toml").is_file(),
+        "config should exist"
+    );
+    assert!(
+        specks_dir.join("specks-implementation-log.md").is_file(),
+        "implementation log should exist"
+    );
 }
 
 #[test]
@@ -136,7 +152,10 @@ fn test_init_fails_without_force() {
         .output()
         .expect("failed to run specks init");
 
-    assert!(!output.status.success(), "init without force should fail on existing project");
+    assert!(
+        !output.status.success(),
+        "init without force should fail on existing project"
+    );
 }
 
 #[test]
@@ -166,7 +185,11 @@ fn test_validate_valid_speck() {
         .expect("failed to run specks validate");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "validate should succeed on valid speck: {}", stdout);
+    assert!(
+        output.status.success(),
+        "validate should succeed on valid speck: {}",
+        stdout
+    );
     assert!(stdout.contains("valid"), "output should say valid");
 }
 
@@ -222,7 +245,10 @@ None
         .output()
         .expect("failed to run specks validate");
 
-    assert!(!output.status.success(), "validate should fail on invalid speck");
+    assert!(
+        !output.status.success(),
+        "validate should fail on invalid speck"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("error"), "output should contain error");
 }
@@ -322,7 +348,10 @@ fn test_json_output_validate() {
         .output()
         .expect("failed to run specks validate --json");
 
-    assert!(output.status.success(), "validate --json should succeed on valid speck");
+    assert!(
+        output.status.success(),
+        "validate --json should succeed on valid speck"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Parse JSON
@@ -374,10 +403,19 @@ fn test_execute_dry_run() {
         .output()
         .expect("failed to run specks execute --dry-run");
 
-    assert!(output.status.success(), "execute --dry-run should succeed on active speck");
+    assert!(
+        output.status.success(),
+        "execute --dry-run should succeed on active speck"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Dry run"), "output should contain 'Dry run'");
-    assert!(stdout.contains("step-0"), "output should contain step anchor");
+    assert!(
+        stdout.contains("Dry run"),
+        "output should contain 'Dry run'"
+    );
+    assert!(
+        stdout.contains("step-0"),
+        "output should contain step anchor"
+    );
 }
 
 #[test]
@@ -394,7 +432,10 @@ fn test_execute_dry_run_json() {
         .output()
         .expect("failed to run specks execute --dry-run --json");
 
-    assert!(output.status.success(), "execute --dry-run --json should succeed");
+    assert!(
+        output.status.success(),
+        "execute --dry-run --json should succeed"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Parse JSON
@@ -423,10 +464,19 @@ fn test_execute_rejects_draft_speck() {
         .output()
         .expect("failed to run specks execute");
 
-    assert!(!output.status.success(), "execute should fail on draft speck");
+    assert!(
+        !output.status.success(),
+        "execute should fail on draft speck"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("draft"), "error should mention draft status");
-    assert!(stderr.contains("active"), "error should mention required active status");
+    assert!(
+        stderr.contains("draft"),
+        "error should mention draft status"
+    );
+    assert!(
+        stderr.contains("active"),
+        "error should mention required active status"
+    );
 }
 
 #[test]
@@ -522,11 +572,20 @@ Test context.
         .output()
         .expect("failed to run specks execute with start-step");
 
-    assert!(output.status.success(), "execute with --start-step should succeed");
+    assert!(
+        output.status.success(),
+        "execute with --start-step should succeed"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("step-1"), "output should contain step-1");
-    assert!(stdout.contains("skipped"), "output should show skipped steps");
-    assert!(stdout.contains("step-0"), "output should mention step-0 as skipped");
+    assert!(
+        stdout.contains("skipped"),
+        "output should show skipped steps"
+    );
+    assert!(
+        stdout.contains("step-0"),
+        "output should mention step-0 as skipped"
+    );
 }
 
 #[test]
@@ -542,6 +601,13 @@ fn test_execute_not_initialized() {
         .output()
         .expect("failed to run specks execute");
 
-    assert!(!output.status.success(), "execute should fail when not initialized");
-    assert_eq!(output.status.code(), Some(9), "exit code should be 9 (not initialized)");
+    assert!(
+        !output.status.success(),
+        "execute should fail when not initialized"
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(9),
+        "exit code should be 9 (not initialized)"
+    );
 }

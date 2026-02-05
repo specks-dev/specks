@@ -6,10 +6,10 @@
 use std::fs;
 use std::path::PathBuf;
 
-use specks_core::{find_project_root, parse_speck, validate_speck, Severity, SpecksError};
+use specks_core::{Severity, SpecksError, find_project_root, parse_speck, validate_speck};
 use uuid::Uuid;
 
-use crate::agent::{director_config, AgentRunner};
+use crate::agent::{AgentRunner, director_config};
 use crate::output::{ExecuteData, JsonIssue, JsonResponse};
 
 /// Commit policy for execution
@@ -234,7 +234,11 @@ pub fn run_execute(
             output_error_json("execute", "E001", &message, &speck);
         } else {
             eprintln!("error: {}", message);
-            for issue in validation_result.issues.iter().filter(|i| i.severity == Severity::Error) {
+            for issue in validation_result
+                .issues
+                .iter()
+                .filter(|i| i.severity == Severity::Error)
+            {
                 eprintln!("  {}: {}", issue.code, issue.message);
             }
         }
@@ -242,12 +246,14 @@ pub fn run_execute(
     }
 
     // Verify speck status is "active"
-    let status = parsed_speck.metadata.status.as_deref().unwrap_or("draft").to_lowercase();
+    let status = parsed_speck
+        .metadata
+        .status
+        .as_deref()
+        .unwrap_or("draft")
+        .to_lowercase();
     if status != "active" {
-        let message = format!(
-            "Speck status is '{}', must be 'active' to execute",
-            status
-        );
+        let message = format!("Speck status is '{}', must be 'active' to execute", status);
         if json_output {
             output_error_json("execute", "E003", &message, &speck);
         } else {
@@ -299,7 +305,10 @@ pub fn run_execute(
         });
 
         let invocation_path = run_directory.join("invocation.json");
-        if let Err(e) = fs::write(&invocation_path, serde_json::to_string_pretty(&invocation).unwrap()) {
+        if let Err(e) = fs::write(
+            &invocation_path,
+            serde_json::to_string_pretty(&invocation).unwrap(),
+        ) {
             let message = format!("Failed to write invocation.json: {}", e);
             if json_output {
                 output_error_json("execute", "E002", &message, &speck);
@@ -346,7 +355,8 @@ pub fn run_execute(
     // Check Claude CLI
     let runner = AgentRunner::new(project_root.clone());
     if let Err(_) = runner.check_claude_cli() {
-        let message = "Claude CLI not installed. Install Claude Code from https://claude.ai/download";
+        let message =
+            "Claude CLI not installed. Install Claude Code from https://claude.ai/download";
         if json_output {
             output_error_json("execute", "E019", message, &speck);
         } else {
@@ -383,10 +393,7 @@ pub fn run_execute(
             if json_output {
                 output_success_json(&project_root, &speck_path, &outcome);
             } else if !quiet {
-                println!(
-                    "Execution complete: {}",
-                    outcome.outcome
-                );
+                println!("Execution complete: {}", outcome.outcome);
                 println!("Steps completed: {}", outcome.steps_completed.join(", "));
                 if !outcome.steps_remaining.is_empty() {
                     println!("Steps remaining: {}", outcome.steps_remaining.join(", "));
@@ -405,52 +412,50 @@ pub fn run_execute(
                 ExecutionOutcomeStatus::Partial => Ok(3),
             }
         }
-        Err(e) => {
-            match e {
-                SpecksError::ClaudeCliNotInstalled => {
-                    if json_output {
-                        output_error_json("execute", "E019", &e.to_string(), &speck);
-                    } else {
-                        eprintln!("error: {}", e);
-                    }
-                    Ok(6)
+        Err(e) => match e {
+            SpecksError::ClaudeCliNotInstalled => {
+                if json_output {
+                    output_error_json("execute", "E019", &e.to_string(), &speck);
+                } else {
+                    eprintln!("error: {}", e);
                 }
-                SpecksError::MonitorHalted { reason } => {
-                    if json_output {
-                        output_error_json("execute", "E022", &reason, &speck);
-                    } else {
-                        eprintln!("error: Monitor halted execution: {}", reason);
-                    }
-                    Ok(4)
-                }
-                SpecksError::AgentTimeout { secs } => {
-                    let message = format!("Agent timeout after {} seconds", secs);
-                    if json_output {
-                        output_error_json("execute", "E021", &message, &speck);
-                    } else {
-                        eprintln!("error: {}", message);
-                    }
-                    Ok(1)
-                }
-                SpecksError::AgentInvocationFailed { reason } => {
-                    let message = format!("Agent invocation failed: {}", reason);
-                    if json_output {
-                        output_error_json("execute", "E020", &message, &speck);
-                    } else {
-                        eprintln!("error: {}", message);
-                    }
-                    Ok(1)
-                }
-                _ => {
-                    if json_output {
-                        output_error_json("execute", e.code(), &e.to_string(), &speck);
-                    } else {
-                        eprintln!("error: {}", e);
-                    }
-                    Ok(e.exit_code())
-                }
+                Ok(6)
             }
-        }
+            SpecksError::MonitorHalted { reason } => {
+                if json_output {
+                    output_error_json("execute", "E022", &reason, &speck);
+                } else {
+                    eprintln!("error: Monitor halted execution: {}", reason);
+                }
+                Ok(4)
+            }
+            SpecksError::AgentTimeout { secs } => {
+                let message = format!("Agent timeout after {} seconds", secs);
+                if json_output {
+                    output_error_json("execute", "E021", &message, &speck);
+                } else {
+                    eprintln!("error: {}", message);
+                }
+                Ok(1)
+            }
+            SpecksError::AgentInvocationFailed { reason } => {
+                let message = format!("Agent invocation failed: {}", reason);
+                if json_output {
+                    output_error_json("execute", "E020", &message, &speck);
+                } else {
+                    eprintln!("error: {}", message);
+                }
+                Ok(1)
+            }
+            _ => {
+                if json_output {
+                    output_error_json("execute", e.code(), &e.to_string(), &speck);
+                } else {
+                    eprintln!("error: {}", e);
+                }
+                Ok(e.exit_code())
+            }
+        },
     }
 }
 
@@ -559,7 +564,10 @@ fn handle_dry_run(
         println!("{}", serde_json::to_string_pretty(&response).unwrap());
     } else if !quiet {
         println!("Dry run - execution plan:");
-        println!("  Speck: {}", make_relative_path(project_root, &context.speck_path));
+        println!(
+            "  Speck: {}",
+            make_relative_path(project_root, &context.speck_path)
+        );
         println!("  Commit policy: {}", context.commit_policy);
         println!("  Checkpoint mode: {}", context.checkpoint_mode);
         println!("  Timeout per step: {} seconds", context.timeout);
@@ -862,9 +870,18 @@ mod tests {
     #[test]
     fn test_checkpoint_mode_from_str() {
         assert_eq!(CheckpointMode::from_str("step"), CheckpointMode::Step);
-        assert_eq!(CheckpointMode::from_str("milestone"), CheckpointMode::Milestone);
-        assert_eq!(CheckpointMode::from_str("continuous"), CheckpointMode::Continuous);
-        assert_eq!(CheckpointMode::from_str("MILESTONE"), CheckpointMode::Milestone);
+        assert_eq!(
+            CheckpointMode::from_str("milestone"),
+            CheckpointMode::Milestone
+        );
+        assert_eq!(
+            CheckpointMode::from_str("continuous"),
+            CheckpointMode::Continuous
+        );
+        assert_eq!(
+            CheckpointMode::from_str("MILESTONE"),
+            CheckpointMode::Milestone
+        );
         assert_eq!(CheckpointMode::from_str("unknown"), CheckpointMode::Step);
     }
 

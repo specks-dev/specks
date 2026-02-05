@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use specks_core::{find_project_root, is_valid_bead_id, parse_speck, BeadsCli, Config};
+use specks_core::{BeadsCli, Config, find_project_root, is_valid_bead_id, parse_speck};
 
 use crate::output::{JsonIssue, JsonResponse};
 
@@ -42,8 +42,8 @@ pub fn run_link(
 
     // Load config
     let config = Config::load_from_project(&project_root).unwrap_or_default();
-    let bd_path = std::env::var("SPECKS_BD_PATH")
-        .unwrap_or_else(|_| config.specks.beads.bd_path.clone());
+    let bd_path =
+        std::env::var("SPECKS_BD_PATH").unwrap_or_else(|_| config.specks.beads.bd_path.clone());
 
     // Validate bead ID format
     if !is_valid_bead_id(&bead_id) {
@@ -233,7 +233,10 @@ fn write_bead_to_step(content: &str, anchor: &str, step_line: usize, bead_id: &s
                 }
 
                 // Check for next step/section header
-                if next_line.starts_with("####") || next_line.starts_with("#####") || next_line.starts_with("---") {
+                if next_line.starts_with("####")
+                    || next_line.starts_with("#####")
+                    || next_line.starts_with("---")
+                {
                     insert_before_commit = Some(j);
                     break;
                 }
@@ -280,10 +283,14 @@ fn resolve_file_path(project_root: &Path, file: &str) -> std::path::PathBuf {
         if as_is.exists() {
             as_is
         } else {
-            project_root.join(".specks").join(format!("specks-{}", file))
+            project_root
+                .join(".specks")
+                .join(format!("specks-{}", file))
         }
     } else {
-        project_root.join(".specks").join(format!("specks-{}.md", file))
+        project_root
+            .join(".specks")
+            .join(format!("specks-{}.md", file))
     }
 }
 
