@@ -130,7 +130,7 @@ The current experience has significant gaps. There is no `specks plan <idea>` or
 
 **Resolution:** DECIDED - Same repo with standard `Formula/` directory layout. Users install via:
 ```bash
-brew tap kocienda/specks https://github.com/kocienda/specks && brew install specks
+brew tap specks-dev/specks https://github.com/specks-dev/specks && brew install specks
 ```
 CI automatically updates the formula after each release, so the maintainer only needs to push a tag.
 
@@ -292,7 +292,7 @@ specks plan [idea OR existing-speck-path]
 - Formula lives at `Formula/specks.rb` (standard Homebrew tap layout)
 - Release workflow automatically updates formula with new version and checksums
 - `scripts/update-homebrew-formula.sh` handles formula updates (no manual sed)
-- Users install via: `brew tap kocienda/specks https://github.com/kocienda/specks && brew install specks`
+- Users install via: `brew tap specks-dev/specks https://github.com/specks-dev/specks && brew install specks`
 - Can migrate to homebrew-core once established
 
 ---
@@ -556,7 +556,7 @@ specks-0.2.0-macos-arm64.tar.gz
 
 **User Installation:**
 ```bash
-brew tap kocienda/specks https://github.com/kocienda/specks && brew install specks
+brew tap specks-dev/specks https://github.com/specks-dev/specks && brew install specks
 ```
 
 ---
@@ -1313,7 +1313,7 @@ CI handles everything else:
 
 6. **Gate to real releases only**: Formula update job runs only for release tags (not test/RC tags):
    ```yaml
-   if: github.repository == 'kocienda/specks' && !contains(github.ref, '-')
+   if: github.repository == 'specks-dev/specks' && !contains(github.ref, '-')
    ```
    This matches `v0.2.0` but skips `v0.0.1-test` or `v0.2.0-rc1`.
 
@@ -1321,12 +1321,12 @@ CI handles everything else:
 
 **Tasks:**
 - [x] Move formula from `homebrew/specks.rb` to `Formula/specks.rb` (standard tap layout)
-- [x] Update formula URLs to use `kocienda/specks` consistently
+- [x] Update formula URLs to use `specks-dev/specks` consistently
 - [x] Enhance `.github/workflows/release.yml` (created in Step 3.5):
   - [x] Pin runners: `macos-14` for arm64, `macos-13` for x86_64 (native builds)
   - [x] Fix tarball structure: root contains `bin/` and `share/` directly (no wrapper dir)
   - [x] Add `update-formula` job that runs after release is published
-  - [x] Gate job to real releases only: `if: github.repository == 'kocienda/specks' && !contains(github.ref, '-')`
+  - [x] Gate job to real releases only: `if: github.repository == 'specks-dev/specks' && !contains(github.ref, '-')`
   - [x] Download checksum artifacts from build jobs, extract SHA values
   - [x] Set git identity (`user.name`, `user.email`) for CI commits
   - [x] Sync to main with `git reset --hard origin/main` (avoid merge commits)
@@ -1360,7 +1360,7 @@ CI handles everything else:
 - [ ] Release contains both architecture binaries and checksums.txt
 - [ ] Formula update commit appears on main with correct version/checksums
 - [ ] Downloaded binary runs `specks --version`
-- [ ] `brew tap kocienda/specks https://github.com/kocienda/specks && brew install specks` works
+- [ ] `brew tap specks-dev/specks https://github.com/specks-dev/specks && brew install specks` works
 
 **Rollback:**
 - Delete test tag and release (formula unchanged since test tags skip formula update)
@@ -1452,9 +1452,590 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 
 ---
 
-#### Step 8: Contributor Guide {#step-8}
+### Step 8: Onboarding Infrastructure {#step-8}
+
+**Purpose:** Fix the critical gap in onboarding where fresh projects cannot use `specks plan` because agents are not discoverable. This step ensures that after installation, users can immediately create a new project and start planning.
+
+**Context:** Steps 0-7 built features that don't work for the basic greenfield use case. A user who installs specks and runs `specks plan "idea"` in an empty project gets an error because agents are only looked for in the project's local `agents/` directory, which doesn't exist. This step fixes agent discovery and distribution to enable proper onboarding.
+
+---
+
+#### Step 8.1: Agent Distribution and Discovery {#step-8-1}
 
 **Depends on:** #step-7
+
+**Commit:** `feat(core): add agent distribution and multi-location discovery`
+
+**References:** [D02] Shell out to Claude CLI, (#c01-cli-agent-bridge, #agent-invocation-arch)
+
+**Problem Statement:**
+
+Currently, when a user creates a fresh project:
+```bash
+mkdir py-calc && cd py-calc
+specks init
+specks plan "create a python command-line calculator"
+# ERROR: Agent invocation failed: Failed to read agent definition at py-calc/agents/specks-interviewer.md
+```
+
+The failure occurs because `get_agent_path()` in `agent.rs` only checks `project_root/agents/` with no fallback to the installation's share directory.
+
+**Design Decision: Agents Are Part of the Installation, Not Per-Project**
+
+| Asset | Global Location | Per-Project | Rationale |
+|-------|-----------------|-------------|-----------|
+| Binary | `/opt/homebrew/bin/specks` | Never | It's the tool |
+| Agents | `/opt/homebrew/share/specks/agents/` | Optional per-agent override | Part of the tool, not project data |
+| Skills | Source in share | `.claude/skills/` | Claude Code needs them local (or global) |
+| Skeleton | Embedded | `.specks/specks-skeleton.md` | User edits it |
+| Specks | Never | `.specks/specks-*.md` | Project-specific plans |
+
+**Design Decision: Per-Agent Resolution (Not Directory Selection)**
+
+Agent resolution is per-agent, not per-directory. If a project has `agents/specks-planner.md` but no other agents, the planner comes from the project and the other 10 agents fall back to share.
+
+Rationale:
+- Users who customize one agent shouldn't have to copy and maintain all 11
+- Least surprise: adding a custom agent doesn't break other agents
+- Matches how config layering works in most tools
+
+**Design Decision: Env Var = Share Root**
+
+`SPECKS_SHARE_DIR` points to the share root (e.g., `/opt/homebrew/share/specks`). Code appends subdirectories:
+- Skills: `${SPECKS_SHARE_DIR}/skills/`
+- Agents: `${SPECKS_SHARE_DIR}/agents/`
+
+This is consistent with how `share.rs` already works for skills.
+
+**Per-Agent Resolution Order** (for each agent by name):
+1. `project_root/agents/{agent_name}.md` (if file exists)
+2. `{share_dir}/agents/{agent_name}.md` where `share_dir` comes from existing `find_share_dir()` in `share.rs`
+3. Development fallback: `{specks_repo}/agents/{agent_name}.md` (only when specks workspace detected via Cargo.toml)
+
+**Important**: Reuse `find_share_dir()` as the single source of truth for share directory discovery. Do NOT re-encode env var / binary-relative / standard location logic in `agent.rs`—that would drift from `share.rs` over time.
+
+**Required Agents by Command:**
+- `specks plan`: `specks-interviewer`, `specks-planner`, `specks-critic`
+- `specks execute`: `specks-director`, `specks-architect`, `specks-implementer`, `specks-monitor`, `specks-reviewer`, `specks-auditor`, `specks-committer`, `specks-logger`
+
+**Artifacts:**
+- Updated `crates/specks/src/agent.rs` - Per-agent resolution via `resolve_agent_path()`
+- Updated `crates/specks/src/cli.rs` - Add `--verbose` flag to plan and execute commands
+- New error code E026 (RequiredAgentsMissing) in `crates/specks-core/src/error.rs`
+- Updated `crates/specks/src/planning_loop.rs` - Remove redundant preflight checks (commands own preflight)
+- Updated `crates/specks/src/commands/plan.rs` - Preflight + verbose agent paths
+- Updated `crates/specks/src/commands/execute.rs` - Preflight for execute-required agents
+- Updated `crates/specks/src/commands/init.rs` - Show agent discovery status
+- Updated `.github/workflows/release.yml` - Include agents in tarball
+- Updated `Formula/specks.rb` - Install agents to share directory
+
+**Tasks:**
+
+Per-Agent Resolution:
+- [ ] Implement `resolve_agent_path(agent_name, project_root)` returning `Option<PathBuf>`:
+  - Check `project_root/agents/{agent_name}.md` (if file exists, return it)
+  - Call `find_share_dir()` and check `{share_dir}/agents/{agent_name}.md`
+  - Check dev fallback via `is_specks_workspace()`
+  - Return `None` if not found anywhere
+- [ ] Implement `is_specks_workspace(path)` to detect dev mode (Cargo.toml with specks workspace + agents/ dir present)
+- [ ] Update `get_agent_path()` to call `resolve_agent_path()`
+- [ ] Add E026 `RequiredAgentsMissing` error: lists missing agent names + searched paths
+- [ ] Exit code 8 for missing agents (preflight error, before any invocation)
+
+CLI Flag Plumbing:
+- [ ] Add `--verbose` flag to `specks plan` in `cli.rs`
+- [ ] Add `--verbose` flag to `specks execute` in `cli.rs`
+- [ ] Pass verbose flag through to commands
+
+Agent Version Compatibility:
+- [ ] Add `specks-version` field to agent frontmatter schema
+- [ ] Parse agent frontmatter when loading (extract version if present): best-effort parse of the initial YAML frontmatter block only; on parse failure, warn once and continue
+- [ ] Implement best-effort version check (warn only, don't fail)
+- [ ] If `specks-version` field missing, skip check (back-compat)
+- [ ] Show version mismatch warning once per run (summary), not per agent
+
+Preflight Verification (both plan and execute):
+- [ ] Add `verify_required_agents(command, project_root)` that checks all required agents resolve
+- [ ] Call preflight in `plan.rs` before starting planning loop
+- [ ] Call preflight in `execute.rs` before starting execution
+- [ ] On failure: "Missing required agents for 'specks plan': specks-interviewer, specks-critic. Searched: [paths]"
+- [ ] With `--verbose`: show resolved path for each agent found
+- [ ] Preflight ownership: commands (`plan.rs`, `execute.rs`) are the single place that enforce required-agent checks; `planning_loop.rs` assumes preflight already ran and does not re-check
+
+Init Command Updates:
+- [ ] Update `specks init` output to show agent resolution summary
+- [ ] List agents found and their source (project/share/dev)
+- [ ] Warn if any required agents are missing
+
+Distribution Updates:
+- [ ] Update release workflow to copy `agents/*.md` to `share/specks/agents/`
+- [ ] Update tarball structure to include `share/specks/agents/`
+- [ ] Update homebrew formula to install agents to share directory
+- [ ] Verify agents are installed after `brew install specks`
+
+**Tests:**
+
+Unit tests (in `agent.rs`):
+- [ ] `resolve_agent_path()` finds agent in project when present
+- [ ] `resolve_agent_path()` falls back to share when not in project
+- [ ] `resolve_agent_path()` returns None when agent not found anywhere
+- [ ] Partial override works (project has 1 agent, share has rest)
+- [ ] `is_specks_workspace()` returns true in specks repo
+- [ ] `is_specks_workspace()` returns false in random project
+- [ ] Version compatibility check warns on mismatch, doesn't fail
+- [ ] Missing `specks-version` field doesn't cause error
+
+Integration tests (preflight verification only—no actual agent invocation):
+- [ ] `verify_required_agents("plan", ...)` succeeds when agents in share dir
+- [ ] `verify_required_agents("plan", ...)` fails with E026 when agents missing
+- [ ] `verify_required_agents("execute", ...)` checks execute-required agents
+- [ ] Partial override: project has 1 agent, share has rest, preflight passes
+- [ ] `specks init` shows agent resolution summary (use temp dir with agents copied)
+
+**Test Strategy Note**: Integration tests verify preflight logic only, not full planning loop. Full end-to-end tests (actual `specks plan` producing a speck) are covered in Step 8.3 and Step 10 where `claude-mock` or real invocation is used.
+
+**Test Determinism Note (env vars):** `find_share_dir()` reads `SPECKS_SHARE_DIR`. Rust tests are parallel by default, so env-var-dependent tests must be made deterministic (e.g., run those tests serially, or structure test helpers so env var is set/cleared in a single-threaded context). Avoid any tests that mutate or delete system-managed paths like `/opt/homebrew/...`.
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes (all tests)
+- [ ] Release tarball includes `share/specks/agents/` with all 11 agents
+- [ ] `brew install specks` puts agents in `/opt/homebrew/share/specks/agents/`
+- [ ] Fresh project preflight passes:
+  ```bash
+  mkdir py-calc && cd py-calc
+  specks init
+  specks plan --verbose "test"  # Shows agent paths, preflight passes
+  ```
+- [ ] Missing agents gives clear error:
+  ```bash
+  mkdir empty && cd empty
+  specks init
+  EMPTY_SHARE="$(mktemp -d)"
+  SPECKS_SHARE_DIR="$EMPTY_SHARE" specks plan "test"
+  # ERROR E026: Missing required agents for 'specks plan': specks-interviewer, ...
+  # Searched: ./agents/, $EMPTY_SHARE/agents/ (and any other discovery paths)
+  ```
+- [ ] Development mode works (specks workspace detected, agents from repo)
+- [ ] Partial override works:
+  ```bash
+  mkdir test-override && cd test-override
+  specks init
+  mkdir agents
+  cp /opt/homebrew/share/specks/agents/specks-planner.md agents/
+  specks plan --verbose "test"
+  # Shows: specks-planner from ./agents/, others from share
+  ```
+- [ ] `specks plan --verbose` shows resolved path for each agent
+- [ ] `specks execute --verbose` shows resolved path for each agent
+- [ ] Version mismatch warning appears once (summary), not per-agent
+
+**Rollback:**
+- Revert commits, remove agent discovery changes
+- Agents remain in share directory (no harm)
+
+**Commit after all checkpoints pass.**
+
+---
+
+#### Step 8.2: Global Skills Installation Option {#step-8-2}
+
+**Depends on:** #step-8-1
+
+**Commit:** `feat(cli): add --global option to install skills to ~/.claude/skills/`
+
+**References:** [D10] Dual invocation paths, (#d10-dual-invocation)
+
+**Context:**
+
+Currently, skills are installed per-project to `.claude/skills/`. This means every project needs its own copy. For users who work on many projects, a global installation to `~/.claude/skills/` reduces repetition.
+
+**Artifacts:**
+- Updated `crates/specks/src/share.rs` - Global skill installation
+- Updated `crates/specks/src/commands/setup.rs` - `--global` flag
+- Updated CLI help text
+
+**Tasks:**
+- [ ] Add `install_skills_globally()` function to `share.rs`
+- [ ] Detect home directory using `dirs::home_dir()`
+- [ ] Create `~/.claude/skills/` if it doesn't exist
+- [ ] Add `--global` flag to `specks setup claude`
+- [ ] Update help text to explain global vs per-project
+- [ ] Add `--global` to `specks setup claude --check` for verification
+
+**Command Interface:**
+```bash
+specks setup claude           # Install to .claude/skills/ (per-project)
+specks setup claude --global  # Install to ~/.claude/skills/ (global)
+specks setup claude --check --global  # Check global installation
+```
+
+**Tests:**
+- [ ] Unit test: `install_skills_globally()` creates correct directory structure
+- [ ] Unit test: Global installation doesn't affect per-project installation
+- [ ] Integration test: `specks setup claude --global` installs to home directory
+- [ ] Integration test: `--check --global` reports correct status
+
+**Checkpoint:**
+- [ ] `specks setup claude --global` installs to `~/.claude/skills/`
+- [ ] `/specks-plan` works from any directory after global install
+- [ ] Per-project install still works as before
+- [ ] `--check --global` reports installation status correctly
+
+**Rollback:**
+- Revert commits, remove `--global` flag
+
+**Commit after all checkpoints pass.**
+
+---
+
+#### Step 8.3: Greenfield Project Test (py-calc) {#step-8-3}
+
+**Depends on:** #step-8-2
+
+**Commit:** `test: validate greenfield onboarding with py-calc example`
+
+**References:** (#step-8-1, #step-8-2)
+
+**Context:**
+
+This step validates the complete onboarding experience by creating a real project from scratch. The `py-calc` example becomes the canonical "first project" for documentation.
+
+**Test Scenario:**
+
+```bash
+# 1. Fresh installation
+brew tap specks-dev/specks https://github.com/specks-dev/specks
+brew install specks
+
+# 2. Verify installation
+specks --version
+ls /opt/homebrew/share/specks/agents/  # 11 agents
+ls /opt/homebrew/share/specks/skills/  # 2 skills
+
+# 3. Create greenfield project
+mkdir py-calc
+cd py-calc
+
+# 4. Initialize specks
+specks init
+# Output shows:
+#   Created: .specks/
+#   Created: .claude/skills/specks-plan/
+#   Created: .claude/skills/specks-execute/
+#   Agents available from: /opt/homebrew/share/specks/agents/ (11 agents)
+
+# 5. Run planning (THE CRITICAL TEST)
+specks plan "create a python command-line calculator that supports +, -, *, /"
+# SUCCESS: Planning loop starts, interviewer asks questions
+
+# 6. Alternative: Claude Code internal
+# Open Claude Code in py-calc directory
+/specks-plan "create a python command-line calculator"
+# SUCCESS: Same planning loop works
+```
+
+**Tasks:**
+- [ ] Document the complete test scenario
+- [ ] Run test on fresh macOS system (or VM)
+- [ ] Capture output for documentation
+- [ ] Identify and fix any issues discovered
+- [ ] Create `docs/tutorials/py-calc-example.md` with walkthrough
+- [ ] Update `docs/getting-started.md` to use py-calc example
+
+**Checkpoint:**
+- [ ] Test scenario passes completely on fresh system
+- [ ] Both CLI and Claude Code paths work
+- [ ] Output is clear and helpful
+- [ ] Documentation captures the actual experience
+
+**Rollback:**
+- Document issues, create follow-up tasks
+
+**Commit after all checkpoints pass.**
+
+---
+
+#### Step 8.4: Reserved {#step-8-4}
+
+*Intentionally left blank for future use.*
+
+---
+
+#### Step 8.5: Living On - Using Specks to Develop Specks {#step-8-5}
+
+**Depends on:** #step-8-3
+
+**Purpose:** Enable comfortable self-development where the specks team uses `specks plan` and `specks execute` to add features to specks itself, with appropriate safety mechanisms and clear workflows.
+
+**Context:**
+
+This is the ultimate ergonomics test. If the specks team cannot comfortably use specks for internal development, external users will not have a good experience either. Investigation shows that development mode already works (agents found in `project_root/agents/`, skills found in local `.claude/skills/`), but visibility and safety mechanisms are missing.
+
+**Design Decisions:**
+
+- **[D11] Development Mode is Implicit** {#d11-implicit-dev-mode}: Dev mode is detected automatically based on workspace structure, not via a `--dev` flag. Rationale: reduces cognitive load, more accurate, matches cargo/rustc behavior.
+
+- **[D12] Agent Reload is Manual** {#d12-manual-reload}: Agents are loaded once per invocation. To pick up changes, restart the command. Rationale: hot-reload adds complexity; agent changes should be deliberate.
+
+- **[D13] Infrastructure Warnings are Advisory** {#d13-advisory-warning}: Warnings about self-modification are advisory, not blocking. User can proceed with `--yes`. Rationale: developers know what they're doing; blocking would make development painful.
+
+- **[D14] Touch Set Includes File Classification** {#d14-touch-set-classification}: The architect's expected_touch_set should classify files as "infrastructure" vs "application" to enable targeted warnings.
+
+**Infrastructure File Patterns:**
+- `agents/*.md` - Agent definitions
+- `.claude/skills/**/SKILL.md` - Skill definitions
+- `crates/specks/src/*.rs` - CLI implementation
+- `crates/specks-core/src/*.rs` - Core library
+
+---
+
+##### Step 8.5.1: Development Mode Detection {#step-8-5-1}
+
+**Depends on:** #step-8-3
+
+**Commit:** `feat(core): add development mode detection for specks workspace`
+
+**References:** [D11] Development mode is implicit, (#d11-implicit-dev-mode)
+
+**Artifacts:**
+- `crates/specks/src/dev_mode.rs` - Development mode detection module
+- Updated `agent.rs` - Use dev_mode for agent discovery
+- Updated `share.rs` - Use dev_mode for skill discovery
+
+**Detection Heuristics:**
+1. Check if `Cargo.toml` exists in project root with specks workspace package
+2. Check if `agents/` directory contains `specks-*.md` files matching expected set
+3. Check if `.claude/skills/specks-plan/` exists locally
+
+**Tasks:**
+- [ ] Create `dev_mode.rs` module with `is_development_mode()` function
+- [ ] Implement detection: check for specks workspace Cargo.toml
+- [ ] Implement detection: check for local agents matching expected set
+- [ ] Add `--verbose` output showing development mode status
+- [ ] Update `agent.rs` to log agent discovery path in verbose mode
+- [ ] Update `share.rs` to log skill discovery path in verbose mode
+- [ ] Add development mode indicator to JSON output
+
+**Tests:**
+- [ ] Unit test: `is_development_mode()` returns true in specks repo
+- [ ] Unit test: `is_development_mode()` returns false in fresh project
+- [ ] Integration test: verbose output shows agent/skill paths
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] `specks plan --verbose "test"` shows development mode indicator
+- [ ] `specks plan --verbose "test"` shows agent source path
+
+**Rollback:**
+- Revert commit, remove dev_mode.rs
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.5.2: Agent Version Tracking {#step-8-5-2}
+
+**Depends on:** #step-8-5-1
+
+**Commit:** `feat(agents): add version tracking and modification detection`
+
+**References:** [D12] Manual reload, (#d12-manual-reload)
+
+**Artifacts:**
+- Updated agent frontmatter with `specks-version` and `last-modified`
+- Updated `agent.rs` - Content hashing and modification detection
+- Agent modification warning system
+
+**Agent Frontmatter Addition:**
+```yaml
+---
+name: specks-planner
+description: Creates structured plans
+tools: Read, Grep, Glob, Bash, Write, Edit
+model: opus
+specks-version: 0.2.0
+last-modified: 2026-02-05
+---
+```
+
+**Tasks:**
+- [ ] Add `specks-version: 0.2.0` to all agent frontmatter
+- [ ] Add `last-modified: YYYY-MM-DD` to all agent frontmatter
+- [ ] Implement agent content hashing at load time
+- [ ] Store hash in AgentConfig struct
+- [ ] Before invocation, check if file hash has changed
+- [ ] If changed, warn user: "Agent X has been modified since loading"
+- [ ] Add `--reload-agents` flag to force re-read of agent files
+
+**Tests:**
+- [ ] Unit test: Agent frontmatter parsing includes version fields
+- [ ] Unit test: Content hash changes when file is modified
+- [ ] Integration test: Modification warning displayed when agent changes
+
+**Checkpoint:**
+- [ ] All 11 agents have `specks-version` and `last-modified` in frontmatter
+- [ ] `cargo nextest run` passes
+- [ ] Modifying an agent mid-execution produces warning
+
+**Rollback:**
+- Revert commit, restore original agent files
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.5.3: Infrastructure Modification Warnings {#step-8-5-3}
+
+**Depends on:** #step-8-5-2
+
+**Commit:** `feat(execute): add infrastructure modification warnings`
+
+**References:** [D13] Advisory warning, [D14] Touch set classification, (#d13-advisory-warning, #d14-touch-set-classification)
+
+**Artifacts:**
+- Updated `execute.rs` - Infrastructure file detection
+- Updated architect prompt - Request file classification
+- Warning display and confirmation system
+
+**Warning Example:**
+```
+WARNING: This step modifies specks infrastructure:
+  - agents/specks-planner.md (agent definition)
+  - crates/specks/src/agent.rs (agent invocation code)
+
+These changes may affect the currently running specks process.
+Recommendation: Complete this step, then restart specks for subsequent steps.
+
+Continue? [y/N]
+```
+
+**Tasks:**
+- [ ] Define infrastructure file patterns in constants
+- [ ] Implement `classify_touch_set()` to identify infrastructure files
+- [ ] Add classification field to architect expected_touch_set
+- [ ] Before step execution, check if touch set includes infrastructure
+- [ ] Display warning with affected files and recommendation
+- [ ] Add `--yes` flag to skip confirmation
+- [ ] After infrastructure modification, display rebuild recommendation
+
+**Tests:**
+- [ ] Unit test: Infrastructure pattern matching is correct
+- [ ] Unit test: Classification correctly identifies specks files
+- [ ] Integration test: Warning displayed before modifying agent
+- [ ] Integration test: `--yes` flag skips confirmation
+
+**Checkpoint:**
+- [ ] `cargo nextest run` passes
+- [ ] Executing a step that modifies `agent.rs` shows warning
+- [ ] Warning includes rebuild recommendation
+- [ ] `--yes` flag works correctly
+
+**Rollback:**
+- Revert commit
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.5.4: Self-Development Documentation {#step-8-5-4}
+
+**Depends on:** #step-8-5-3
+
+**Commit:** `docs: add self-development workflow documentation`
+
+**Artifacts:**
+- `docs/self-development.md` - Complete self-development guide
+- Updated `CONTRIBUTING.md` - Link to self-development guide
+- Updated `CLAUDE.md` - Self-development section
+
+**Self-Development Workflow:**
+```bash
+# 1. Create a speck for the change
+specks plan "add --verbose flag to agent invocation"
+
+# 2. Review the generated speck
+specks validate .specks/specks-verbose-flag.md
+
+# 3. Execute the speck (builds the feature)
+specks execute .specks/specks-verbose-flag.md
+
+# 4. Rebuild specks with the changes
+cargo build
+
+# 5. Verify the feature works by using it
+specks plan --verbose "verify verbose flag works"
+```
+
+**Tasks:**
+- [ ] Create `docs/self-development.md` with:
+  - [ ] Overview: "Using specks to develop specks"
+  - [ ] Prerequisites: Development environment setup
+  - [ ] Workflow: Plan -> Execute -> Rebuild -> Verify
+  - [ ] Safety: Infrastructure modification warnings
+  - [ ] Troubleshooting: Common issues and solutions
+  - [ ] Best practices: When to use specks vs manual changes
+- [ ] Document the modify -> rebuild -> restart cycle
+- [ ] Add examples of self-development specks
+- [ ] Update CONTRIBUTING.md with link
+- [ ] Add self-development section to CLAUDE.md
+
+**Tests:**
+- [ ] Manual test: Follow documented workflow for simple change
+- [ ] Manual test: Workflow handles infrastructure modification correctly
+
+**Checkpoint:**
+- [ ] `docs/self-development.md` exists and is comprehensive
+- [ ] All links in documentation work
+- [ ] Example workflow can be followed successfully
+
+**Rollback:**
+- Remove documentation files
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.5.5: Self-Development Integration Test {#step-8-5-5}
+
+**Depends on:** #step-8-5-4
+
+**Commit:** `test: add self-development integration test`
+
+**Artifacts:**
+- `tests/integration/self_dev_test.rs` - Self-development integration test
+- Test fixtures for self-development scenario
+
+**Tasks:**
+- [ ] Create integration test that:
+  - [ ] Runs `specks plan "add test command flag"` in specks repo
+  - [ ] Verifies speck is created and valid
+  - [ ] Verifies development mode is detected
+  - [ ] Verifies agent paths are from local repo
+- [ ] Create test fixture: simple self-development speck
+- [ ] Add to CI workflow
+
+**Tests:**
+- [ ] Integration test: Self-dev workflow produces valid speck
+- [ ] Integration test: Development mode detected in specks repo
+- [ ] Integration test: Infrastructure warnings work correctly
+
+**Checkpoint:**
+- [ ] `cargo nextest run` passes
+- [ ] Integration test passes in CI
+- [ ] Test verifies development mode detection
+
+**Rollback:**
+- Remove test files
+
+**Commit after all checkpoints pass.**
+
+---
+
+#### Step 9: Contributor Guide {#step-9}
+
+**Depends on:** #step-8-5-5
 
 **Commit:** `docs: add contributor guide and development setup`
 
@@ -1491,9 +2072,9 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 
 ---
 
-#### Step 9: End-to-End Validation {#step-9}
+#### Step 10: End-to-End Validation {#step-10}
 
-**Depends on:** #step-8
+**Depends on:** #step-9
 
 **Commit:** `test: validate end-to-end workflow with real agent invocation`
 
@@ -1515,9 +2096,9 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 - [ ] Test `/specks-execute` inside Claude Code session
 - [ ] Verify both invocation paths produce equivalent outcomes
 - [ ] Test homebrew installation on clean macOS system
-- [ ] Verify homebrew installation includes skills in share directory
-- [ ] Test `specks init` installs skills from homebrew share directory
-- [ ] Test `specks setup claude` on existing project without skills
+- [ ] Verify homebrew installation includes agents and skills in share directory
+- [ ] Test `specks init` shows agent discovery status
+- [ ] Test `specks setup claude --global` installs to home directory
 - [ ] Document any issues found and fixes applied
 - [ ] Update README if workflow differs from documentation
 
@@ -1527,7 +2108,8 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 - [ ] E2E test: `/specks-plan` inside Claude Code produces valid speck
 - [ ] E2E test: `/specks-execute` inside Claude Code completes step
 - [ ] E2E test: `specks setup claude` installs skills from homebrew share
-- [ ] E2E test: homebrew installation works
+- [ ] E2E test: `specks setup claude --global` installs to ~/.claude/skills/
+- [ ] E2E test: homebrew installation works with agents
 - [ ] E2E test: all CLI commands work as documented
 
 **Checkpoint:**
@@ -1537,6 +2119,7 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 - [ ] `specks execute` completes at least one step with commit
 - [ ] `/specks-execute` completes at least one step inside Claude Code
 - [ ] `brew install specks` works on fresh macOS system
+- [ ] Agents discovered from share directory
 - [ ] All success criteria met
 
 **Rollback:**
@@ -1553,26 +2136,39 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 #### Phase Exit Criteria {#exit-criteria}
 
 - [ ] `agents/specks-interviewer.md` exists with proper agent definition
+- [ ] Agents distributed in share directory and discoverable at runtime
 - [ ] `specks plan "<idea>"` invokes interviewer, planner, critic in loop
 - [ ] `specks plan <existing-speck>` enters revision mode
 - [ ] `specks execute <speck>` invokes director and completes step
 - [ ] `/specks-plan` slash command works inside Claude Code sessions
 - [ ] `/specks-execute` slash command works inside Claude Code sessions
 - [ ] `specks setup claude` installs skills to project
+- [ ] `specks setup claude --global` installs skills to ~/.claude/skills/
 - [ ] `specks init` installs skills as part of initialization
-- [ ] GitHub Releases contains macOS binaries with skills in share/
-- [ ] Homebrew formula installs working binary and skills
+- [ ] GitHub Releases contains macOS binaries with agents and skills in share/
+- [ ] Homebrew formula installs working binary, agents, and skills
+- [ ] Greenfield project test passes (py-calc scenario)
+- [ ] Development mode detection works in specks repo
+- [ ] Agent version tracking with modification warnings
+- [ ] Infrastructure modification warnings functional
+- [ ] Self-development workflow documented
 - [ ] docs/getting-started.md exists and is accurate
+- [ ] docs/self-development.md exists and is accurate
 - [ ] CONTRIBUTING.md exists and is accurate
 - [ ] README documents all new commands and both invocation paths
 
 **Acceptance tests:**
 - [ ] Integration test: plan command with mock agents
 - [ ] Integration test: execute command with mock agent
+- [ ] Integration test: agent discovery from share directory
+- [ ] Integration test: development mode detection
+- [ ] Integration test: infrastructure modification warnings
 - [ ] E2E test: full iterative planning workflow with real agents
 - [ ] E2E test: revision mode on existing speck
 - [ ] E2E test: `/specks-plan` inside Claude Code produces valid speck
 - [ ] E2E test: `/specks-execute` inside Claude Code completes step
+- [ ] E2E test: greenfield py-calc project creation
+- [ ] E2E test: self-development workflow in specks repo
 - [ ] Manual test: homebrew installation on clean system
 
 #### Milestones {#milestones}
@@ -1580,6 +2176,7 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 **Milestone M01: Agent Infrastructure Complete** {#m01-agent-infra}
 - [ ] specks-interviewer agent defined
 - [ ] Agent invocation infrastructure implemented
+- [ ] Agent discovery with multi-location fallback
 
 **Milestone M02: CLI and Skills Complete** {#m02-cli-complete}
 - [ ] specks plan implemented with iterative loop
@@ -1587,15 +2184,30 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 - [ ] /specks-plan slash command skill created
 - [ ] /specks-execute slash command skill created
 - [ ] specks setup claude command installs skills
+- [ ] specks setup claude --global option works
 - [ ] specks init installs skills automatically
 
 **Milestone M03: Distribution Ready** {#m03-distribution-ready}
-- [ ] GitHub Releases workflow produces binaries with skills
-- [ ] Homebrew formula installs working binary and skills
+- [ ] GitHub Releases workflow produces binaries with agents and skills
+- [ ] Homebrew formula installs working binary, agents, and skills
+- [ ] Agents discoverable via share directory
 - [ ] Skills discoverable via share directory
 
-**Milestone M04: Documentation Complete** {#m04-docs-complete}
-- [ ] Getting started guide written
+**Milestone M04: Onboarding Complete** {#m04-onboarding-complete}
+- [ ] Greenfield project test passes (py-calc)
+- [ ] Both CLI and Claude Code paths work from fresh install
+- [ ] Clear error messages when agents not found
+
+**Milestone M05: Living On Complete** {#m05-living-on-complete}
+- [ ] Development mode detection works in specks repo
+- [ ] Agent version tracking and modification warnings functional
+- [ ] Infrastructure modification warnings work correctly
+- [ ] Self-development workflow documented
+- [ ] Integration tests for self-development pass
+
+**Milestone M06: Documentation Complete** {#m06-docs-complete}
+- [ ] Getting started guide written with py-calc example
+- [ ] Self-development guide written
 - [ ] Tutorials written
 - [ ] Contributor guide written
 - [ ] Both invocation paths documented
@@ -1611,10 +2223,16 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 | Checkpoint | Verification |
 |------------|--------------|
 | Interviewer agent defined | `agents/specks-interviewer.md` exists |
+| Agent discovery works | Agents found from share directory in fresh project |
 | CLI commands work | `cargo test` passes |
 | Slash command skills work | `/specks-plan` and `/specks-execute` invocable in Claude Code |
 | Skills distribution works | `specks setup claude` installs skills from share dir |
-| Binaries build | Release workflow succeeds with skills in tarball |
+| Global skills work | `specks setup claude --global` installs to ~/.claude/skills/ |
+| Binaries build | Release workflow succeeds with agents and skills in tarball |
+| Greenfield test passes | py-calc scenario completes successfully |
+| Development mode works | `specks plan --verbose` shows agent source in specks repo |
+| Infrastructure warnings work | Warning displayed before modifying agent files |
+| Living On workflow works | Can use specks to plan/execute changes to specks |
 | Docs complete | Manual review |
 | E2E validated | Real agent test passes (both paths) |
 

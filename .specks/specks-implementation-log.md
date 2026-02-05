@@ -6,6 +6,54 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8: Onboarding Infrastructure Planning | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `crates/specks/src/agent.rs` - Current agent discovery (hardcoded project_root/agents/)
+- `crates/specks/src/share.rs` - Existing share directory discovery model
+- `Formula/specks.rb` - Homebrew formula (authoritative URL: specks-dev/specks)
+- `agents/` directory - All 11 agent definitions
+- `.claude/skills/` - Skill structure
+
+**Work Completed:**
+
+This session focused on **plan refinement** for Phase 2.0 Onboarding Infrastructure.
+
+| Task | Status |
+|------|--------|
+| Add Step 8.1: Agent Distribution and Discovery | Done |
+| Add Step 8.2: Global Skills Installation Option | Done |
+| Add Step 8.3: Greenfield Project Test (py-calc) | Done |
+| Add Step 8.4: Reserved (intentionally blank) | Done |
+| Add Step 8.5: Living On - Using Specks to Develop Specks | Done |
+| Add Steps 8.5.1-8.5.5 substeps for self-development workflow | Done |
+| Fix URLs from kocienda/specks to specks-dev/specks | Done |
+| Change "dogfooding" terminology to "Living On" | Done |
+| Refine Step 8.1 with per-agent resolution design | Done |
+| Clarify env var = share root semantics | Done |
+| Update milestones (M05 Living On, M06 Documentation) | Done |
+
+**Files Modified:**
+- `.specks/specks-2.md` - Added Steps 8.1-8.5 with full task/test/checkpoint specifications; updated milestones and exit criteria
+- `README.md` - Fixed all URLs to use specks-dev/specks
+- `docs/getting-started.md` - Fixed all URLs to use specks-dev/specks
+
+**Key Design Decisions:**
+- **Per-agent resolution**: Agents resolve individually (project → share → dev fallback), not directory-level. Partial overrides work.
+- **Env var = share root**: `SPECKS_SHARE_DIR` points to share root; code appends `/agents/` or `/skills/`
+- **Reuse find_share_dir()**: Agent discovery uses existing share.rs discovery, not duplicated logic
+- **E026 RequiredAgentsMissing**: Single error code for preflight failures, lists all missing agents
+- **Living On terminology**: Replaced "dogfooding" with "Living On" throughout
+
+**Notes:**
+- This was planning work, not implementation. No code was written.
+- Step 8.1 is now ready for implementation with all ambiguities resolved.
+- Required agents by command: plan needs 3 (interviewer, planner, critic), execute needs 8 (director + 7 others)
+
+---
+
 ## [specks-2.md] Step 7: Getting Started Documentation | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

@@ -27,21 +27,21 @@ Or follow the instructions at the [Claude Code documentation](https://docs.anthr
 The easiest way to install specks on macOS:
 
 ```bash
-brew tap kocienda/specks https://github.com/kocienda/specks
+brew tap specks-dev/specks https://github.com/specks-dev/specks
 brew install specks
 ```
 
 ### Option 2: Download Binary
 
-Download prebuilt binaries from [GitHub Releases](https://github.com/kocienda/specks/releases):
+Download prebuilt binaries from [GitHub Releases](https://github.com/specks-dev/specks/releases):
 
 ```bash
 # For Apple Silicon (M1/M2/M3)
-curl -L https://github.com/kocienda/specks/releases/latest/download/specks-latest-macos-arm64.tar.gz | tar xz
+curl -L https://github.com/specks-dev/specks/releases/latest/download/specks-latest-macos-arm64.tar.gz | tar xz
 sudo mv bin/specks /usr/local/bin/
 
 # For Intel Mac
-curl -L https://github.com/kocienda/specks/releases/latest/download/specks-latest-macos-x86_64.tar.gz | tar xz
+curl -L https://github.com/specks-dev/specks/releases/latest/download/specks-latest-macos-x86_64.tar.gz | tar xz
 sudo mv bin/specks /usr/local/bin/
 ```
 
@@ -50,7 +50,7 @@ sudo mv bin/specks /usr/local/bin/
 Requires Rust 1.70+ and Cargo:
 
 ```bash
-git clone https://github.com/kocienda/specks.git
+git clone https://github.com/specks-dev/specks.git
 cd specks
 cargo install --path crates/specks
 ```
