@@ -16,11 +16,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Pin to specific macOS versions for native builds
           - target: aarch64-apple-darwin
-            os: macos-latest
+            os: macos-14  # ARM64 native runner
             arch: arm64
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-13  # x86_64 native runner
             arch: x86_64
 
     steps:
@@ -28,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -37,8 +38,9 @@ jobs:
           cargo build --release --target ${{ matrix.target }}
           strip target/${{ matrix.target }}/release/specks
 
-      - name: Create release directory
+      - name: Create release directory structure
         run: |
+          # Create directory structure at root level (no wrapper directory)
           mkdir -p release/bin
           mkdir -p release/share/specks/skills/specks-plan
           mkdir -p release/share/specks/skills/specks-execute
@@ -54,8 +56,11 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           TARBALL_NAME="specks-${VERSION}-macos-${{ matrix.arch }}"
-          mv release "${TARBALL_NAME}"
-          tar -czvf "${TARBALL_NAME}.tar.gz" "${TARBALL_NAME}"
+
+          # Create tarball with bin/ and share/ at root (no wrapper directory)
+          cd release
+          tar -czvf "../${TARBALL_NAME}.tar.gz" bin share
+          cd ..
 
           # Create checksum
           shasum -a 256 "${TARBALL_NAME}.tar.gz" > "${TARBALL_NAME}.tar.gz.sha256"
@@ -98,3 +103,65 @@ jobs:
             release-files/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-formula:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    # Only run for real releases (not test tags like v0.0.1-test)
+    # Only run on the main repository
+    if: github.repository == 'kocienda/specks' && !contains(github.ref, '-')
+    concurrency:
+      group: formula-update
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git operations
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Extract checksums
+        id: checksums
+        run: |
+          # Find and extract checksums from .sha256 files
+          ARM64_SHA=$(awk '{print $1}' artifacts/specks-macos-arm64/specks-*-macos-arm64.tar.gz.sha256)
+          X86_64_SHA=$(awk '{print $1}' artifacts/specks-macos-x86_64/specks-*-macos-x86_64.tar.gz.sha256)
+
+          echo "arm64_sha=$ARM64_SHA" >> "$GITHUB_OUTPUT"
+          echo "x86_64_sha=$X86_64_SHA" >> "$GITHUB_OUTPUT"
+
+          echo "ARM64 SHA256: $ARM64_SHA"
+          echo "X86_64 SHA256: $X86_64_SHA"
+
+      - name: Update formula
+        run: |
+          # Set git identity for CI commits
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Sync to latest main (fast-forward only to avoid merge commits)
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+          # Update the formula
+          ./scripts/update-homebrew-formula.sh \
+            "${{ github.ref_name }}" \
+            "${{ steps.checksums.outputs.arm64_sha }}" \
+            "${{ steps.checksums.outputs.x86_64_sha }}"
+
+          # Commit only if there are changes
+          git add Formula/specks.rb
+          if ! git diff --cached --quiet; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            git commit -m "Update formula to $VERSION"
+            git push origin main
+            echo "Formula updated and pushed to main"
+          else
+            echo "Formula already up to date, no commit needed"
+          fi

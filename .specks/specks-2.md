@@ -1320,29 +1320,29 @@ CI handles everything else:
 7. **Permissions**: The workflow already has `permissions: contents: write`. This allows the `GITHUB_TOKEN` to push to `main` (assuming main is unprotected).
 
 **Tasks:**
-- [ ] Move formula from `homebrew/specks.rb` to `Formula/specks.rb` (standard tap layout)
-- [ ] Update formula URLs to use `kocienda/specks` consistently
-- [ ] Enhance `.github/workflows/release.yml` (created in Step 3.5):
-  - [ ] Pin runners: `macos-14` for arm64, `macos-13` for x86_64 (native builds)
-  - [ ] Fix tarball structure: root contains `bin/` and `share/` directly (no wrapper dir)
-  - [ ] Add `update-formula` job that runs after release is published
-  - [ ] Gate job to real releases only: `if: github.repository == 'kocienda/specks' && !contains(github.ref, '-')`
-  - [ ] Download checksum artifacts from build jobs, extract SHA values
-  - [ ] Set git identity (`user.name`, `user.email`) for CI commits
-  - [ ] Sync to main with `git reset --hard origin/main` (avoid merge commits)
-  - [ ] Add concurrency group to serialize formula updates
-- [ ] Create `scripts/update-homebrew-formula.sh`:
-  - [ ] Accept tag (e.g., `v0.2.0`), arm64 checksum, and x86_64 checksum as arguments
-  - [ ] Strip `v` prefix from tag to get version number
-  - [ ] Update version string in formula
-  - [ ] Update both SHA256 checksums in formula
-  - [ ] Exit 0 with no changes if formula already has correct values (idempotent)
-  - [ ] Use proper file manipulation (not sed one-liners)
-- [ ] Update `Formula/specks.rb`:
-  - [ ] Ensure checksums are on clearly marked lines for script to update
-  - [ ] Add comments identifying arm64 vs x86_64 checksums
-  - [ ] Verify `install` block works with new tarball structure
-- [ ] Delete `homebrew/` directory (replaced by `Formula/`)
+- [x] Move formula from `homebrew/specks.rb` to `Formula/specks.rb` (standard tap layout)
+- [x] Update formula URLs to use `kocienda/specks` consistently
+- [x] Enhance `.github/workflows/release.yml` (created in Step 3.5):
+  - [x] Pin runners: `macos-14` for arm64, `macos-13` for x86_64 (native builds)
+  - [x] Fix tarball structure: root contains `bin/` and `share/` directly (no wrapper dir)
+  - [x] Add `update-formula` job that runs after release is published
+  - [x] Gate job to real releases only: `if: github.repository == 'kocienda/specks' && !contains(github.ref, '-')`
+  - [x] Download checksum artifacts from build jobs, extract SHA values
+  - [x] Set git identity (`user.name`, `user.email`) for CI commits
+  - [x] Sync to main with `git reset --hard origin/main` (avoid merge commits)
+  - [x] Add concurrency group to serialize formula updates
+- [x] Create `scripts/update-homebrew-formula.sh`:
+  - [x] Accept tag (e.g., `v0.2.0`), arm64 checksum, and x86_64 checksum as arguments
+  - [x] Strip `v` prefix from tag to get version number
+  - [x] Update version string in formula
+  - [x] Update both SHA256 checksums in formula
+  - [x] Exit 0 with no changes if formula already has correct values (idempotent)
+  - [x] Use proper file manipulation (not sed one-liners)
+- [x] Update `Formula/specks.rb`:
+  - [x] Ensure checksums are on clearly marked lines for script to update
+  - [x] Add comments identifying arm64 vs x86_64 checksums
+  - [x] Verify `install` block works with new tarball structure
+- [x] Delete `homebrew/` directory (replaced by `Formula/`)
 - [ ] Test end-to-end release flow with a test tag (v0.0.1-test or similar)
 
 **Tests:**

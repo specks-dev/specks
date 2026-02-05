@@ -3,7 +3,7 @@ DATABASE MISMATCH DETECTED!
 
 This database belongs to a different repository:
   Database repo ID:  89332bf2
-  Current repo ID:   4e57be2d
+  Current repo ID:   bc824981
 
 This usually means:
   1. You copied a .beads directory from another repo (don't do this!)

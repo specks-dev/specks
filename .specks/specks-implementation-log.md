@@ -6,6 +6,75 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 5: GitHub Releases Workflow | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- [D05] Prebuilt binaries via GitHub Releases
+- [D06] Homebrew tap for installation
+- [Q02] Homebrew tap location (resolved: Formula/ directory, kocienda/specks repo)
+- Concept C03: Automated Release Pipeline
+- Existing `homebrew/specks.rb` formula
+- Existing `.github/workflows/release.yml`
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Move formula from `homebrew/specks.rb` to `Formula/specks.rb` | Done |
+| Update formula URLs to use `kocienda/specks` consistently | Done |
+| Pin runners: `macos-14` for arm64, `macos-13` for x86_64 | Done |
+| Fix tarball structure: root contains `bin/` and `share/` directly | Done |
+| Add `update-formula` job that runs after release is published | Done |
+| Gate job to real releases only | Done |
+| Download checksum artifacts, extract SHA values | Done |
+| Set git identity for CI commits | Done |
+| Sync to main with `git reset --hard origin/main` | Done |
+| Add concurrency group to serialize formula updates | Done |
+| Create `scripts/update-homebrew-formula.sh` | Done |
+| Script accepts tag, arm64 checksum, x86_64 checksum | Done |
+| Script strips `v` prefix from tag | Done |
+| Script updates version and checksums | Done |
+| Script is idempotent (exits 0 if no changes needed) | Done |
+| Add SHA256 comment markers in formula for script parsing | Done |
+| Delete `homebrew/` directory | Done |
+| Fix CI workflow action name (rust-action → rust-toolchain) | Done |
+
+**Files Created:**
+- `Formula/specks.rb` - Homebrew formula with standard tap layout, SHA256 comment markers for automated updates, install block for bin/ and share/ structure
+- `scripts/update-homebrew-formula.sh` - Fully automated formula updater that accepts tag and checksums, strips v prefix, updates formula idempotently
+
+**Files Modified:**
+- `.github/workflows/release.yml` - Enhanced with pinned runners (macos-14/macos-13), no-wrapper tarball structure, update-formula job with concurrency control, git identity setup, conditional commit logic, fixed rust-toolchain action name
+- `.github/workflows/ci.yml` - Fixed action name from `dtolnay/rust-action` to `dtolnay/rust-toolchain`
+
+**Files Deleted:**
+- `homebrew/specks.rb` - Replaced by `Formula/specks.rb`
+
+**Test Results:**
+- `cargo build`: Success
+- `cargo nextest run`: 196 tests passed
+- Script idempotency test: Verified (runs twice, second reports "already up to date")
+- Script update test: Verified (updates version and checksums correctly)
+
+**Checkpoints Verified:**
+- Formula moved to standard tap location (`Formula/specks.rb`): PASS
+- Script creates proper formula updates: PASS
+- Script is idempotent: PASS
+- Tarball structure fixed in workflow (cd release && tar): PASS
+- Update-formula job gated to real releases: PASS
+- CI action names fixed: PASS
+
+**Key Decisions/Notes:**
+- CI was failing due to incorrect action name `dtolnay/rust-action` (doesn't exist) - fixed to `dtolnay/rust-toolchain`
+- Formula uses SHA256 comment markers (`# SHA256 ARM64:` and `# SHA256 X86_64:`) above each sha256 line to enable reliable script parsing
+- Tarball structure changed from wrapper directory to root-level bin/ and share/ by using `cd release && tar` instead of `tar` from parent
+- Update-formula job uses `git reset --hard origin/main` to avoid merge commits and ensure clean fast-forward
+- Manual testing of full release flow (push tags) deferred to user
+
+---
+
 ## [specks-2.md] Step 4: Implement specks execute Command | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

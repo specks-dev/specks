@@ -38,7 +38,9 @@
       "Bash(ruby -c:*)",
       "Bash(/Users/kocienda/Mounts/u/src/specks/target/debug/specks:*)",
       "Bash(git remote:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(./scripts/update-homebrew-formula.sh:*)",
+      "Bash(gh run view:*)"
     ]
   }
 }

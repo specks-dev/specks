@@ -1,14 +1,11 @@
 # Homebrew formula for specks
 #
-# To install from a local tap:
-#   brew tap username/specks path/to/homebrew
+# To install:
+#   brew tap kocienda/specks https://github.com/kocienda/specks
 #   brew install specks
 #
-# Or install directly from the formula file:
-#   brew install --build-from-source path/to/specks.rb
-#
 # This formula downloads prebuilt binaries from GitHub Releases.
-# Update the version, url, and sha256 values when releasing new versions.
+# The version and checksums are automatically updated by CI on each release.
 
 class Specks < Formula
   desc "From ideas to implementation via multi-agent orchestration"
@@ -16,14 +13,15 @@ class Specks < Formula
   version "0.1.0"
   license "MIT"
 
-  # Update these URLs and checksums for each release
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/kocienda/specks/releases/download/v#{version}/specks-#{version}-macos-arm64.tar.gz"
-      # sha256 "UPDATE_ARM64_SHA256_HERE"
+      # SHA256 ARM64: PLACEHOLDER_ARM64_SHA256
+      sha256 "PLACEHOLDER_ARM64_SHA256"
     else
       url "https://github.com/kocienda/specks/releases/download/v#{version}/specks-#{version}-macos-x86_64.tar.gz"
-      # sha256 "UPDATE_X86_64_SHA256_HERE"
+      # SHA256 X86_64: PLACEHOLDER_X86_64_SHA256
+      sha256 "PLACEHOLDER_X86_64_SHA256"
     end
   end
 
