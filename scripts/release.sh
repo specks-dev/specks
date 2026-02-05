@@ -37,33 +37,7 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     error "Invalid version format: '$VERSION'. Expected X.Y.Z (e.g., 0.1.1)"
 fi
 
-# --- Git state validation ---
-
-# Must be on main branch
-BRANCH=$(git branch --show-current)
-if [[ "$BRANCH" != "main" ]]; then
-    error "Must be on main branch (currently on '$BRANCH')"
-fi
-
-# Working directory must be clean
-if ! git diff --quiet HEAD; then
-    error "Working directory has uncommitted changes. Commit or stash them first."
-fi
-
-# Must be up to date with origin
-git fetch origin main --quiet
-LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse origin/main)
-if [[ "$LOCAL" != "$REMOTE" ]]; then
-    error "Local main is not up to date with origin. Run 'git pull' first."
-fi
-
-# Tag must not already exist
-if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-    error "Tag v$VERSION already exists"
-fi
-
-# --- Version validation ---
+# --- Version validation (check BEFORE git state) ---
 
 CURRENT_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
 
@@ -82,6 +56,32 @@ version_gt() {
 
 if ! version_gt; then
     error "New version ($VERSION) must be greater than current version ($CURRENT_VERSION)"
+fi
+
+# --- Git state validation ---
+
+# Must be on main branch
+BRANCH=$(git branch --show-current)
+if [[ "$BRANCH" != "main" ]]; then
+    error "Must be on main branch (currently on '$BRANCH')"
+fi
+
+# Working directory must be clean
+if ! git diff --quiet HEAD; then
+    error "Working directory has uncommitted changes. Commit or stash them first."
+fi
+
+# Must be up to date with origin
+git fetch origin main --quiet
+LOCAL=$(git rev-parse HEAD)
+REMOTE=$(git rev-parse origin/main)
+if [[ "$LOCAL" != "$REMOTE" ]]; then
+    error "Local main is not up to date with origin. Run 'git pull' or 'git push' first."
+fi
+
+# Tag must not already exist
+if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+    error "Tag v$VERSION already exists"
 fi
 
 # --- Confirmation ---
