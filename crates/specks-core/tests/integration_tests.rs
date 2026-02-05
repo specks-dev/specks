@@ -111,7 +111,7 @@ fn test_parser_handles_all_fixtures() {
         if let Ok(entries) = fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |e| e == "md") {
+                if path.extension().is_some_and(|e| e == "md") {
                     let content = fs::read_to_string(&path)
                         .unwrap_or_else(|_| panic!("Failed to read {:?}", path));
                     let result = parse_speck(&content);
@@ -433,7 +433,8 @@ fn test_full_validation_workflow() {
     for name in valid_fixtures {
         let path = format!("{}/valid/{}.md", FIXTURES_DIR, name);
         if let Ok(content) = fs::read_to_string(&path) {
-            let speck = parse_speck(&content).expect(&format!("Failed to parse {}", name));
+            let speck = parse_speck(&content)
+                .unwrap_or_else(|_| panic!("Failed to parse {}", name));
             let result = validate_speck(&speck);
 
             let errors: Vec<_> = result
@@ -455,7 +456,8 @@ fn test_full_validation_workflow() {
     for name in invalid_fixtures {
         let path = format!("{}/invalid/{}.md", FIXTURES_DIR, name);
         if let Ok(content) = fs::read_to_string(&path) {
-            let speck = parse_speck(&content).expect(&format!("Failed to parse {}", name));
+            let speck = parse_speck(&content)
+                .unwrap_or_else(|_| panic!("Failed to parse {}", name));
             let result = validate_speck(&speck);
 
             assert!(

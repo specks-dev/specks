@@ -63,15 +63,15 @@ release VERSION:
         exit 1
     fi
 
-    # Version must be greater than current
+    # Version must be >= current (equal allowed for retry)
     CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
     IFS='.' read -r CUR_MAJ CUR_MIN CUR_PAT <<< "$CURRENT"
     IFS='.' read -r NEW_MAJ NEW_MIN NEW_PAT <<< "$VERSION"
 
     if [[ $NEW_MAJ -lt $CUR_MAJ ]] || \
        [[ $NEW_MAJ -eq $CUR_MAJ && $NEW_MIN -lt $CUR_MIN ]] || \
-       [[ $NEW_MAJ -eq $CUR_MAJ && $NEW_MIN -eq $CUR_MIN && $NEW_PAT -le $CUR_PAT ]]; then
-        echo "Error: $VERSION must be greater than current ($CURRENT)" >&2
+       [[ $NEW_MAJ -eq $CUR_MAJ && $NEW_MIN -eq $CUR_MIN && $NEW_PAT -lt $CUR_PAT ]]; then
+        echo "Error: $VERSION must be >= current ($CURRENT)" >&2
         exit 1
     fi
 
@@ -89,9 +89,14 @@ release VERSION:
     git add -A
     git diff --cached --quiet || git commit -m "Release $VERSION"
 
-    # Auto-fix: delete existing tag if present (failed release retry)
+    # Check if tag exists on remote (successful release - don't overwrite)
+    if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION$"; then
+        echo "Error: v$VERSION already released. Bump version number." >&2
+        exit 1
+    fi
+
+    # Delete local tag if present (failed release retry)
     git tag -d "v$VERSION" 2>/dev/null || true
-    git push origin ":refs/tags/v$VERSION" 2>/dev/null || true
 
     # Sync with origin
     git pull --rebase origin main || true
