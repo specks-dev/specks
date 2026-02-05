@@ -215,7 +215,6 @@ fn write_bead_to_step(content: &str, anchor: &str, step_line: usize, bead_id: &s
                 .take(std::cmp::min(i + 20, lines.len()))
                 .skip(i + 1)
             {
-
                 // Track **Depends on:** line
                 if next_line.starts_with("**Depends on:**") {
                     depends_on_line = Some(j);

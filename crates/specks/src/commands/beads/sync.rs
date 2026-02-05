@@ -219,13 +219,7 @@ fn sync_speck_to_beads(
     let speck_path = path.to_string_lossy();
 
     // Step 1: Ensure root bead exists
-    let root_id = ensure_root_bead(
-        speck,
-        &phase_title,
-        &speck_path,
-        ctx,
-        &mut updated_content,
-    )?;
+    let root_id = ensure_root_bead(speck, &phase_title, &speck_path, ctx, &mut updated_content)?;
 
     // Build a map of step anchors to bead IDs (existing)
     let mut anchor_to_bead: HashMap<String, String> = HashMap::new();
