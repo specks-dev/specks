@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::output::{InitData, JsonIssue, JsonResponse};
+use crate::share::{find_share_dir, install_all_skills, SkillInstallStatus};
 
 /// Embedded skeleton content
 const SKELETON_CONTENT: &str = include_str!("../../../../.specks/specks-skeleton.md");
@@ -160,12 +161,49 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
             .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
     }
 
-    let files_created = vec![
+    let mut files_created = vec![
         "specks-skeleton.md".to_string(),
         "config.toml".to_string(),
         "specks-implementation-log.md".to_string(),
         "runs/".to_string(),
     ];
+
+    // Try to install Claude Code skills (optional - warn but continue if not available)
+    let project_dir = std::env::current_dir()
+        .map_err(|e| format!("failed to get current directory: {}", e))?;
+    let skills_installed = if let Some(share_dir) = find_share_dir() {
+        let results = install_all_skills(&share_dir, &project_dir, false);
+        let mut installed_skills: Vec<String> = vec![];
+        let mut skill_warnings: Vec<String> = vec![];
+
+        for (skill_name, result) in results {
+            match result {
+                Ok(SkillInstallStatus::Installed) | Ok(SkillInstallStatus::Updated) => {
+                    let path = format!(".claude/skills/{}/SKILL.md", skill_name);
+                    files_created.push(path.clone());
+                    installed_skills.push(skill_name);
+                }
+                Ok(SkillInstallStatus::Unchanged) => {
+                    // Skill already exists and is up to date - still count it
+                    let path = format!(".claude/skills/{}/SKILL.md", skill_name);
+                    files_created.push(path);
+                    installed_skills.push(skill_name);
+                }
+                Ok(SkillInstallStatus::SourceMissing) => {
+                    skill_warnings.push(format!(
+                        "Skill {} not found in share directory",
+                        skill_name
+                    ));
+                }
+                Err(e) => {
+                    skill_warnings.push(format!("Failed to install skill {}: {}", skill_name, e));
+                }
+            }
+        }
+        Some((installed_skills, skill_warnings))
+    } else {
+        None
+    };
 
     if json_output {
         let response = JsonResponse::ok(
@@ -184,6 +222,29 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
         println!("  Created: runs/");
         if should_add_entry {
             println!("  Updated: .gitignore (added .specks/runs/)");
+        }
+
+        // Report skill installation status
+        match skills_installed {
+            Some((installed, warnings)) => {
+                if !installed.is_empty() {
+                    println!();
+                    println!("Claude Code skills installed:");
+                    for skill in &installed {
+                        println!("  Created: .claude/skills/{}/SKILL.md", skill);
+                    }
+                }
+                for warning in warnings {
+                    eprintln!("  Warning: {}", warning);
+                }
+            }
+            None => {
+                println!();
+                println!(
+                    "Note: Claude Code skills not installed (share directory not found)."
+                );
+                println!("      Run `specks setup claude` after ensuring specks is properly installed.");
+            }
         }
     }
 

@@ -228,3 +228,28 @@ pub struct PlanValidation {
     /// Number of validation warnings
     pub warnings: usize,
 }
+
+/// Data payload for setup command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupData {
+    /// Subcommand that was run (e.g., "claude")
+    pub subcommand: String,
+    /// Action performed (e.g., "install" or "check")
+    pub action: String,
+    /// Share directory path, if found
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub share_dir: Option<String>,
+    /// Skills that were installed/checked
+    pub skills_installed: Vec<SkillInfo>,
+}
+
+/// Information about a skill installation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillInfo {
+    /// Skill name (e.g., "specks-plan")
+    pub name: String,
+    /// Project-relative path to skill file
+    pub path: String,
+    /// Installation status (installed, updated, unchanged, missing, source_missing)
+    pub status: String,
+}

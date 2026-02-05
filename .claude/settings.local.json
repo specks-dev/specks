@@ -30,7 +30,12 @@
       "Bash(kill:*)",
       "Bash(bd delete:*)",
       "Bash(tests/bin/claude-mock:*)",
-      "Bash(SPECKS_CLAUDE_MOCK_OUTPUT=\"test output\" tests/bin/claude-mock:*)"
+      "Bash(SPECKS_CLAUDE_MOCK_OUTPUT=\"test output\" tests/bin/claude-mock:*)",
+      "Bash(test:*)",
+      "Bash(SPECKS_SHARE_DIR=/Users/kocienda/Mounts/u/src/specks /Users/kocienda/Mounts/u/src/specks/target/debug/specks setup claude:*)",
+      "Bash(SPECKS_SHARE_DIR=/Users/kocienda/Mounts/u/src/specks /Users/kocienda/Mounts/u/src/specks/target/debug/specks:*)",
+      "Bash(python3:*)",
+      "Bash(ruby -c:*)"
     ]
   }
 }

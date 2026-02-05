@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            arch: arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            arch: x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build binary
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          strip target/${{ matrix.target }}/release/specks
+
+      - name: Create release directory
+        run: |
+          mkdir -p release/bin
+          mkdir -p release/share/specks/skills/specks-plan
+          mkdir -p release/share/specks/skills/specks-execute
+
+          # Copy binary
+          cp target/${{ matrix.target }}/release/specks release/bin/
+
+          # Copy skills
+          cp .claude/skills/specks-plan/SKILL.md release/share/specks/skills/specks-plan/
+          cp .claude/skills/specks-execute/SKILL.md release/share/specks/skills/specks-execute/
+
+      - name: Create tarball
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          TARBALL_NAME="specks-${VERSION}-macos-${{ matrix.arch }}"
+          mv release "${TARBALL_NAME}"
+          tar -czvf "${TARBALL_NAME}.tar.gz" "${TARBALL_NAME}"
+
+          # Create checksum
+          shasum -a 256 "${TARBALL_NAME}.tar.gz" > "${TARBALL_NAME}.tar.gz.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: specks-macos-${{ matrix.arch }}
+          path: |
+            specks-*.tar.gz
+            specks-*.tar.gz.sha256
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release files
+        run: |
+          mkdir release-files
+          find artifacts -name "*.tar.gz" -exec mv {} release-files/ \;
+          find artifacts -name "*.sha256" -exec mv {} release-files/ \;
+
+          # Create combined checksums file
+          cd release-files
+          cat *.sha256 > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: false
+          generate_release_notes: true
+          files: |
+            release-files/*.tar.gz
+            release-files/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

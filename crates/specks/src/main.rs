@@ -5,10 +5,11 @@ mod cli;
 mod commands;
 mod output;
 mod planning_loop;
+mod share;
 
 use std::process::ExitCode;
 
-use cli::Commands;
+use cli::{Commands, SetupCommands};
 use commands::BeadsCommands;
 
 fn main() -> ExitCode {
@@ -70,6 +71,11 @@ fn main() -> ExitCode {
             context_files,
             timeout,
         }) => commands::run_plan(input, name, context_files, timeout, cli.json, cli.quiet),
+        Some(Commands::Setup(setup_cmd)) => match setup_cmd {
+            SetupCommands::Claude { check, force } => {
+                commands::run_setup_claude(check, force, cli.json, cli.quiet)
+            }
+        },
         None => {
             // No subcommand - print version info
             if !cli.quiet {

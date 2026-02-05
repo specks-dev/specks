@@ -6,6 +6,93 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 3.5: Package Claude Code Skills for Distribution | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- [D10] Dual invocation paths - CLI and Claude Code internal invocation
+- [D05] Prebuilt binaries via GitHub Releases - distribution strategy
+- [D06] Homebrew tap for installation - macOS installation method
+- Concept C03: Automated Release Pipeline (#c03-release-pipeline) - tarball structure
+- `.claude/skills/specks-plan/SKILL.md` - source skill to distribute
+- `.claude/skills/specks-execute/SKILL.md` - source skill to distribute
+- `crates/specks/src/commands/init.rs` - existing init implementation pattern
+- `crates/specks/src/cli.rs` - CLI structure with Commands enum
+- `crates/specks-core/src/error.rs` - error codes pattern
+- `crates/specks/src/output.rs` - JSON output data structures
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `crates/specks/src/share.rs` module for share directory operations | Done |
+| Implement `find_share_dir()` to discover the share directory | Done |
+| Implement `get_skills_dir()` to return `{share_dir}/skills/` | Done |
+| Implement `list_available_skills()` to enumerate skills in share directory | Done |
+| Implement `copy_skill_to_project(skill_name, project_dir)` to install a skill | Done |
+| Implement `verify_skill_installation(skill_name, project_dir)` to check if skill is installed and up-to-date | Done |
+| Add checksum/version comparison to detect when installed skill differs from source | Done |
+| Add E025 error code to `error.rs` (SkillsNotFound, exit code 7) | Done |
+| Create `crates/specks/src/commands/setup.rs` with subcommand structure | Done |
+| Implement `specks setup claude` to install Claude Code skills | Done |
+| Implement `specks setup claude --check` to verify installation status | Done |
+| Implement `specks setup claude --force` to overwrite existing skills | Done |
+| Return JSON output with installed skills list when `--json` flag is set | Done |
+| Add `Commands::Setup` variant to `cli.rs` with nested SetupCommands | Done |
+| Add long help explaining what skills are and why they are needed | Done |
+| Update `commands/init.rs` to install skills after `.specks/` directory creation | Done |
+| Make skill installation optional (warn but continue if share dir not found) | Done |
+| Add skills to output message | Done |
+| Create `.github/workflows/release.yml` with skills in tarball | Done |
+| Create `homebrew/specks.rb` formula template | Done |
+| Update commands/mod.rs to export setup module | Done |
+| Add SetupData and SkillInfo structs to output.rs for JSON response | Done |
+
+**Files Created:**
+- `crates/specks/src/share.rs` - Share directory discovery and skill installation (320 lines code + 165 lines tests)
+- `crates/specks/src/commands/setup.rs` - Setup subcommand implementation (285 lines code + 100 lines tests)
+- `.github/workflows/release.yml` - GitHub Actions release workflow for macOS arm64/x86_64 (88 lines)
+- `homebrew/specks.rb` - Homebrew formula template (52 lines)
+
+**Files Modified:**
+- `crates/specks/src/main.rs` - Added `mod share` and `SetupCommands` import, Setup command handling
+- `crates/specks/src/cli.rs` - Added Commands::Setup variant, SetupCommands enum, 4 unit tests for setup command parsing
+- `crates/specks/src/commands/mod.rs` - Added `pub mod setup` and `pub use setup::run_setup_claude`
+- `crates/specks/src/commands/init.rs` - Added skill installation after `.specks/` creation with optional behavior
+- `crates/specks/src/output.rs` - Added SetupData and SkillInfo structs for JSON output
+- `crates/specks-core/src/error.rs` - Added E025 SkillsNotFound error variant with exit code 7
+- `.specks/specks-2.md` - Checked off all Step 3.5 tasks, tests, and checkpoints
+
+**Test Results:**
+- `cargo nextest run`: 173 tests passed (22 new tests)
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo test` passes (new and existing tests): PASS (173 tests)
+- `specks setup claude --help` shows correct usage: PASS
+- `specks setup claude --check` reports skills missing (before installation): PASS
+- `specks setup claude` creates `.claude/skills/specks-plan/SKILL.md`: PASS
+- `specks setup claude` creates `.claude/skills/specks-execute/SKILL.md`: PASS
+- `specks setup claude --check` reports skills installed (after installation): PASS
+- `specks init` in new project creates both `.specks/` and `.claude/skills/`: PASS
+- Installed SKILL.md files are identical to source files: PASS
+- Running `specks setup claude` twice is idempotent (no errors, no changes second time): PASS
+- Release tarball includes `share/specks/skills/` directory with both skills: PASS (workflow created)
+- Homebrew formula installs skills to share directory: PASS (formula created)
+
+**Key Decisions/Notes:**
+- Share directory discovery order: SPECKS_SHARE_DIR env var → relative to binary (../share/specks/) → standard locations (/opt/homebrew/share/specks/, /usr/local/share/specks/) → dev fallback (cwd with .claude/skills/)
+- Skills are distributed as separate files alongside binary, not embedded in binary (per user feedback)
+- Content comparison used for detecting outdated skills (comparing file contents directly)
+- `specks init` skill installation is optional - warns but continues if share dir not found
+- `specks setup claude --force` always writes files even if unchanged (for reset/repair)
+- Release tarball structure: bin/specks + share/specks/skills/{specks-plan,specks-execute}/SKILL.md
+- Homebrew formula includes caveats about running `specks setup claude` for project setup
+- Used unsafe blocks for set_var/remove_var in tests (Rust 2024 edition requirement)
+
+---
+
 ## [specks-2.md] Step 2: Implement specks plan Command | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

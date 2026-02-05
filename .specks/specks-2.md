@@ -670,6 +670,7 @@ Exit codes:
 | E022 | error | Monitor halted execution: {reason} | 4 |
 | E023 | warning | Created speck has validation warnings | 0 |
 | E024 | info | User aborted planning loop | 5 |
+| E025 | error | Skills not found in share directory: {path} | 7 |
 
 #### 2.0.1.6 JSON Output Schema {#json-schema}
 
@@ -716,6 +717,34 @@ Exit codes:
 }
 ```
 
+**Setup Command Response:**
+
+```json
+{
+  "schema_version": "1",
+  "command": "setup",
+  "status": "ok",
+  "data": {
+    "subcommand": "claude",
+    "action": "install" | "check",
+    "share_dir": "/opt/homebrew/share/specks",
+    "skills_installed": [
+      {
+        "name": "specks-plan",
+        "path": ".claude/skills/specks-plan/SKILL.md",
+        "status": "installed" | "updated" | "unchanged" | "missing"
+      },
+      {
+        "name": "specks-execute",
+        "path": ".claude/skills/specks-execute/SKILL.md",
+        "status": "installed" | "updated" | "unchanged" | "missing"
+      }
+    ]
+  },
+  "issues": []
+}
+```
+
 ---
 
 ### 2.0.2 Symbol Inventory {#symbol-inventory}
@@ -727,8 +756,10 @@ Exit codes:
 | `agents/specks-interviewer.md` | Interviewer agent definition |
 | `crates/specks/src/commands/plan.rs` | Plan command implementation |
 | `crates/specks/src/commands/execute.rs` | Execute command implementation |
+| `crates/specks/src/commands/setup.rs` | Setup subcommand implementation |
 | `crates/specks/src/agent.rs` | Agent invocation via claude CLI |
 | `crates/specks/src/planning_loop.rs` | Iterative planning loop state machine |
+| `crates/specks/src/share.rs` | Share directory discovery and skill installation |
 | `.claude/skills/specks-plan/SKILL.md` | Slash command skill for planning inside Claude Code |
 | `.claude/skills/specks-execute/SKILL.md` | Slash command skill for execution inside Claude Code |
 | `.github/workflows/release.yml` | Release workflow for binaries |
@@ -744,16 +775,25 @@ Exit codes:
 |--------|------|----------|-------|
 | `Commands::Plan` | variant | `cli.rs` | New subcommand |
 | `Commands::Execute` | variant | `cli.rs` | New subcommand |
+| `Commands::Setup` | variant | `cli.rs` | New subcommand with nested SetupCommands |
+| `SetupCommands` | enum | `cli.rs` | Nested subcommands for setup |
 | `run_plan()` | fn | `commands/plan.rs` | Plan command entry point |
 | `run_execute()` | fn | `commands/execute.rs` | Execute command entry point |
+| `run_setup()` | fn | `commands/setup.rs` | Setup command entry point |
 | `AgentRunner` | struct | `agent.rs` | Manages agent invocation |
 | `AgentResult` | struct | `agent.rs` | Agent invocation result |
 | `invoke_agent()` | fn | `agent.rs` | Shell out to claude CLI |
 | `PlanningLoop` | struct | `planning_loop.rs` | State machine for iterative planning |
 | `LoopState` | enum | `planning_loop.rs` | Planning loop states |
 | `LoopOutcome` | enum | `planning_loop.rs` | Approved, Aborted |
+| `find_share_dir()` | fn | `share.rs` | Discover share directory location |
+| `get_skills_dir()` | fn | `share.rs` | Get skills directory path |
+| `copy_skill_to_project()` | fn | `share.rs` | Install skill to project |
+| `verify_skill_installation()` | fn | `share.rs` | Check skill installation status |
 | `PlanData` | struct | `output.rs` | JSON response data for plan |
 | `ExecuteData` | struct | `output.rs` | JSON response data for execute |
+| `SetupData` | struct | `output.rs` | JSON response data for setup |
+| `SkillsNotFound` | variant | `error.rs` | E025 error for missing skills |
 
 ---
 
@@ -982,35 +1022,162 @@ tests/fixtures/
 - `.claude/skills/specks-execute/SKILL.md` - Execution slash command skill
 
 **Tasks:**
-- [ ] Create `.claude/skills/specks-plan/` directory
-- [ ] Create `SKILL.md` with YAML frontmatter (name, description, argument-hint)
-- [ ] Document skill invocation: `/specks-plan "idea"` or `/specks-plan path/to/speck.md`
-- [ ] Skill invokes director agent with mode=plan
-- [ ] Skill has access to AskUserQuestion tool for interactive dialogue
-- [ ] Document input modes: fresh idea vs revision of existing speck
-- [ ] Document the iterative loop behavior inside Claude Code
-- [ ] Create `.claude/skills/specks-execute/` directory
-- [ ] Create `SKILL.md` with YAML frontmatter
-- [ ] Document skill invocation: `/specks-execute path/to/speck.md [options]`
-- [ ] Skill invokes director agent with mode=execute
-- [ ] Document supported options (start-step, end-step, commit-policy, checkpoint-mode)
-- [ ] Document run directory creation and artifact collection
-- [ ] Ensure both skills reference the director agent definition
+- [x] Create `.claude/skills/specks-plan/` directory
+- [x] Create `SKILL.md` with YAML frontmatter (name, description, argument-hint)
+- [x] Document skill invocation: `/specks-plan "idea"` or `/specks-plan path/to/speck.md`
+- [x] Skill invokes director agent with mode=plan
+- [x] Skill has access to AskUserQuestion tool for interactive dialogue
+- [x] Document input modes: fresh idea vs revision of existing speck
+- [x] Document the iterative loop behavior inside Claude Code
+- [x] Create `.claude/skills/specks-execute/` directory
+- [x] Create `SKILL.md` with YAML frontmatter
+- [x] Document skill invocation: `/specks-execute path/to/speck.md [options]`
+- [x] Skill invokes director agent with mode=execute
+- [x] Document supported options (start-step, end-step, commit-policy, checkpoint-mode)
+- [x] Document run directory creation and artifact collection
+- [x] Ensure both skills reference the director agent definition
 
 **Tests:**
-- [ ] Manual test: `/specks-plan "test idea"` enters iterative loop inside Claude Code
-- [ ] Manual test: `/specks-plan .specks/specks-existing.md` enters revision mode
-- [ ] Manual test: `/specks-execute` with test speck creates run directory
-- [ ] Manual test: Interactive dialogue works via AskUserQuestion tool
+- [x] Manual test: `/specks-plan "test idea"` enters iterative loop inside Claude Code
+- [x] Manual test: `/specks-plan .specks/specks-existing.md` enters revision mode
+- [x] Manual test: `/specks-execute` with test speck creates run directory
+- [x] Manual test: Interactive dialogue works via AskUserQuestion tool
 
 **Checkpoint:**
-- [ ] `.claude/skills/specks-plan/SKILL.md` exists with proper structure
-- [ ] `.claude/skills/specks-execute/SKILL.md` exists with proper structure
-- [ ] Skills follow same patterns as existing skills (implement-plan, etc.)
-- [ ] YAML frontmatter includes name, description, argument-hint
+- [x] `.claude/skills/specks-plan/SKILL.md` exists with proper structure
+- [x] `.claude/skills/specks-execute/SKILL.md` exists with proper structure
+- [x] Skills follow same patterns as existing skills (implement-plan, etc.)
+- [x] YAML frontmatter includes name, description, argument-hint
 
 **Rollback:**
 - Remove `.claude/skills/specks-plan/` and `.claude/skills/specks-execute/` directories
+
+**Commit after all checkpoints pass.**
+
+---
+
+#### Step 3.5: Package Claude Code Skills for Distribution {#step-3-5}
+
+**Depends on:** #step-3
+
+**Commit:** `feat(dist): package skills for distribution and add setup command`
+
+**References:** [D10] Dual invocation paths, [D05] Prebuilt binaries via GitHub Releases, [D06] Homebrew tap for installation, (#d10-dual-invocation, #c03-release-pipeline, #new-files)
+
+**Artifacts:**
+- `crates/specks/src/share.rs` - Share directory discovery and skill installation
+- `crates/specks/src/commands/setup.rs` - Setup subcommand implementation
+- Updated `commands/init.rs` - Skill installation during init
+- Updated cli.rs with Setup variant
+- Updated release workflow to include skills in tarball
+- Updated homebrew formula to install share files
+- Error code E025 (Skills not found in share directory)
+
+**Context:**
+
+The skills created in Step 3 (`.claude/skills/specks-plan/SKILL.md` and `.claude/skills/specks-execute/SKILL.md`) exist only in the specks repository itself. When users install specks via homebrew or binary download, they need these skills installed into their own projects to use `/specks-plan` and `/specks-execute` inside Claude Code sessions.
+
+**Distribution Model:**
+
+Skills are distributed as separate files alongside the binary (not embedded in the binary). This allows skills to be updated independently of the binary.
+
+1. **Release tarball structure:**
+   ```
+   specks-v0.x.x-macos-arm64/
+   ├── bin/specks           # The binary
+   └── share/specks/
+       └── skills/
+           ├── specks-plan/SKILL.md
+           └── specks-execute/SKILL.md
+   ```
+
+2. **Homebrew installation locations:**
+   - Binary: `/opt/homebrew/bin/specks` (ARM) or `/usr/local/bin/specks` (x86_64)
+   - Skills: `/opt/homebrew/share/specks/skills/` (ARM) or `/usr/local/share/specks/skills/`
+
+3. **Share directory discovery order:**
+   - Environment variable: `SPECKS_SHARE_DIR`
+   - Relative to binary: `../share/specks/` (works for both homebrew and tarball extraction)
+   - Standard locations: `/opt/homebrew/share/specks/`, `/usr/local/share/specks/`
+   - Development fallback: `./` (when running from source with skills in repo)
+
+**Tasks:**
+
+- [x] Create `crates/specks/src/share.rs` module for share directory operations:
+  - [x] Implement `find_share_dir()` to discover the share directory using the discovery order above
+  - [x] Implement `get_skills_dir()` to return `{share_dir}/skills/`
+  - [x] Implement `list_available_skills()` to enumerate skills in share directory
+  - [x] Implement `copy_skill_to_project(skill_name, project_dir)` to install a skill
+  - [x] Implement `verify_skill_installation(skill_name, project_dir)` to check if skill is installed and up-to-date
+  - [x] Add checksum/version comparison to detect when installed skill differs from source
+- [x] Add E025 error code to `error.rs`:
+  - [x] `SkillsNotFound { share_dir: String }` - Skills directory not found in share location
+  - [x] Exit code: 7
+- [x] Create `crates/specks/src/commands/setup.rs` with subcommand structure:
+  - [x] `specks setup claude` - Install Claude Code skills to project
+  - [x] `specks setup claude --check` - Verify skill installation status without installing
+  - [x] `specks setup claude --force` - Overwrite existing skills even if up-to-date
+  - [x] Return JSON output with installed skills list when `--json` flag is set
+- [x] Add `Commands::Setup` variant to `cli.rs`:
+  - [x] Nested subcommand: `SetupCommands::Claude { check: bool, force: bool }`
+  - [x] Long help explaining what skills are and why they are needed
+- [x] Update `commands/init.rs` to install skills:
+  - [x] After creating `.specks/` directory, call skill installation
+  - [x] Create `.claude/skills/specks-plan/` and `.claude/skills/specks-execute/` directories
+  - [x] Copy SKILL.md files from share directory to project
+  - [x] Add `.claude/skills/` creation to `files_created` output
+  - [x] Make skill installation optional (warn but continue if share dir not found)
+  - [x] Add skills to output message: "Created: .claude/skills/specks-plan/SKILL.md"
+- [x] Update `.github/workflows/release.yml` (Step 5 artifact):
+  - [x] Add step to copy `.claude/skills/` to `share/specks/skills/` in build directory
+  - [x] Update tarball creation to include `share/` directory
+  - [x] Verify tarball structure includes both `bin/` and `share/`
+- [x] Update `homebrew/specks.rb` formula (Step 6 artifact):
+  - [x] Add `share.install "share/specks" => "specks"` to install share files
+  - [x] Skills end up at `#{HOMEBREW_PREFIX}/share/specks/skills/`
+- [x] Update commands/mod.rs to export setup module
+- [x] Add SetupData struct to output.rs for JSON response
+
+**Tests:**
+
+- [x] Unit test: `find_share_dir()` returns correct path when SPECKS_SHARE_DIR is set
+- [x] Unit test: `find_share_dir()` falls back to relative path when env var not set
+- [x] Unit test: `find_share_dir()` returns None when no share directory exists
+- [x] Unit test: `copy_skill_to_project()` creates correct directory structure
+- [x] Unit test: `copy_skill_to_project()` preserves file contents exactly
+- [x] Unit test: `verify_skill_installation()` detects missing skills
+- [x] Unit test: `verify_skill_installation()` detects outdated skills
+- [x] Unit test: setup command parses arguments correctly
+- [x] Unit test: setup --check returns correct status without modifying files
+- [x] Integration test: `specks init` creates `.claude/skills/` when share dir exists
+- [x] Integration test: `specks init` succeeds with warning when share dir missing
+- [x] Integration test: `specks setup claude` installs skills to empty project
+- [x] Integration test: `specks setup claude` is idempotent (safe to re-run)
+- [x] Integration test: `specks setup claude --check` reports installed/missing status
+- [x] Integration test: `specks setup claude --force` overwrites existing skills
+- [x] Golden test: JSON output for setup command matches schema
+
+**Checkpoint:**
+
+- [x] `cargo build` succeeds
+- [x] `cargo test` passes (new and existing tests)
+- [x] `specks setup claude --help` shows correct usage
+- [x] `specks setup claude --check` reports skills missing (before installation)
+- [x] `specks setup claude` creates `.claude/skills/specks-plan/SKILL.md`
+- [x] `specks setup claude` creates `.claude/skills/specks-execute/SKILL.md`
+- [x] `specks setup claude --check` reports skills installed (after installation)
+- [x] `specks init` in new project creates both `.specks/` and `.claude/skills/`
+- [x] Installed SKILL.md files are identical to source files
+- [x] Running `specks setup claude` twice is idempotent (no errors, no changes second time)
+- [x] Release tarball includes `share/specks/skills/` directory with both skills
+- [x] Homebrew formula installs skills to share directory
+
+**Rollback:**
+
+- Revert commit
+- Remove `share.rs` and `commands/setup.rs`
+- Remove skill installation code from `commands/init.rs`
+- Revert changes to release workflow and homebrew formula
 
 **Commit after all checkpoints pass.**
 
@@ -1252,6 +1419,9 @@ tests/fixtures/
 - [ ] Test `/specks-execute` inside Claude Code session
 - [ ] Verify both invocation paths produce equivalent outcomes
 - [ ] Test homebrew installation on clean macOS system
+- [ ] Verify homebrew installation includes skills in share directory
+- [ ] Test `specks init` installs skills from homebrew share directory
+- [ ] Test `specks setup claude` on existing project without skills
 - [ ] Document any issues found and fixes applied
 - [ ] Update README if workflow differs from documentation
 
@@ -1260,6 +1430,7 @@ tests/fixtures/
 - [ ] E2E test: plan with existing speck enters revision mode
 - [ ] E2E test: `/specks-plan` inside Claude Code produces valid speck
 - [ ] E2E test: `/specks-execute` inside Claude Code completes step
+- [ ] E2E test: `specks setup claude` installs skills from homebrew share
 - [ ] E2E test: homebrew installation works
 - [ ] E2E test: all CLI commands work as documented
 
@@ -1291,8 +1462,10 @@ tests/fixtures/
 - [ ] `specks execute <speck>` invokes director and completes step
 - [ ] `/specks-plan` slash command works inside Claude Code sessions
 - [ ] `/specks-execute` slash command works inside Claude Code sessions
-- [ ] GitHub Releases contains macOS binaries
-- [ ] Homebrew formula installs working binary
+- [ ] `specks setup claude` installs skills to project
+- [ ] `specks init` installs skills as part of initialization
+- [ ] GitHub Releases contains macOS binaries with skills in share/
+- [ ] Homebrew formula installs working binary and skills
 - [ ] docs/getting-started.md exists and is accurate
 - [ ] CONTRIBUTING.md exists and is accurate
 - [ ] README documents all new commands and both invocation paths
@@ -1317,10 +1490,13 @@ tests/fixtures/
 - [ ] specks execute implemented and tested
 - [ ] /specks-plan slash command skill created
 - [ ] /specks-execute slash command skill created
+- [ ] specks setup claude command installs skills
+- [ ] specks init installs skills automatically
 
 **Milestone M03: Distribution Ready** {#m03-distribution-ready}
-- [ ] GitHub Releases workflow produces binaries
-- [ ] Homebrew formula installs successfully
+- [ ] GitHub Releases workflow produces binaries with skills
+- [ ] Homebrew formula installs working binary and skills
+- [ ] Skills discoverable via share directory
 
 **Milestone M04: Documentation Complete** {#m04-docs-complete}
 - [ ] Getting started guide written
@@ -1341,7 +1517,8 @@ tests/fixtures/
 | Interviewer agent defined | `agents/specks-interviewer.md` exists |
 | CLI commands work | `cargo test` passes |
 | Slash command skills work | `/specks-plan` and `/specks-execute` invocable in Claude Code |
-| Binaries build | Release workflow succeeds |
+| Skills distribution works | `specks setup claude` installs skills from share dir |
+| Binaries build | Release workflow succeeds with skills in tarball |
 | Docs complete | Manual review |
 | E2E validated | Real agent test passes (both paths) |
 

@@ -118,6 +118,31 @@ pub enum Commands {
         #[arg(long, default_value = "300")]
         timeout: u64,
     },
+
+    /// Setup specks integrations
+    ///
+    /// Configure external tool integrations like Claude Code.
+    #[command(subcommand, long_about = "Setup specks integrations with external tools.\n\nSubcommands:\n  claude   Install Claude Code skills for /specks-plan and /specks-execute\n\nSkills are pre-packaged configurations that enable specks functionality\nwithin Claude Code sessions. They must be installed to each project\nwhere you want to use the slash commands.")]
+    Setup(SetupCommands),
+}
+
+/// Setup subcommands
+#[derive(Subcommand)]
+pub enum SetupCommands {
+    /// Install Claude Code skills for slash commands
+    ///
+    /// Installs /specks-plan and /specks-execute skills to the current project.
+    /// These skills enable using specks from within Claude Code sessions.
+    #[command(long_about = "Install Claude Code skills for specks slash commands.\n\nThis command copies skill files from the specks distribution to your\nproject's .claude/skills/ directory. Once installed, you can use:\n\n  /specks-plan \"idea\"           Create a new speck from an idea\n  /specks-plan path/to/speck.md Revise an existing speck\n  /specks-execute path/to/speck Execute a speck's steps\n\nOptions:\n  --check   Verify installation status without making changes\n  --force   Overwrite existing skills even if unchanged\n\nSkill source locations (in order of precedence):\n  1. SPECKS_SHARE_DIR environment variable\n  2. ../share/specks/ relative to the specks binary\n  3. /opt/homebrew/share/specks/ (macOS ARM)\n  4. /usr/local/share/specks/ (macOS x86_64)\n\nIf skills are missing or share directory not found, verify your\nspecks installation or set SPECKS_SHARE_DIR explicitly.")]
+    Claude {
+        /// Verify installation status without installing
+        #[arg(long)]
+        check: bool,
+
+        /// Overwrite existing skills even if unchanged
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 /// Get the command args for use in the application
@@ -254,6 +279,60 @@ mod tests {
                 assert_eq!(input, Some("add feature".to_string()));
             }
             _ => panic!("Expected Plan command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_claude_command() {
+        let cli = Cli::try_parse_from(["specks", "setup", "claude"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Setup(SetupCommands::Claude { check, force })) => {
+                assert!(!check);
+                assert!(!force);
+            }
+            _ => panic!("Expected Setup Claude command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_claude_with_check() {
+        let cli = Cli::try_parse_from(["specks", "setup", "claude", "--check"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Setup(SetupCommands::Claude { check, force })) => {
+                assert!(check);
+                assert!(!force);
+            }
+            _ => panic!("Expected Setup Claude command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_claude_with_force() {
+        let cli = Cli::try_parse_from(["specks", "setup", "claude", "--force"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Setup(SetupCommands::Claude { check, force })) => {
+                assert!(!check);
+                assert!(force);
+            }
+            _ => panic!("Expected Setup Claude command"),
+        }
+    }
+
+    #[test]
+    fn test_setup_claude_with_global_flags() {
+        let cli =
+            Cli::try_parse_from(["specks", "--json", "setup", "claude", "--check"]).unwrap();
+
+        assert!(cli.json);
+        match cli.command {
+            Some(Commands::Setup(SetupCommands::Claude { check, force })) => {
+                assert!(check);
+                assert!(!force);
+            }
+            _ => panic!("Expected Setup Claude command"),
         }
     }
 }

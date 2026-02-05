@@ -126,6 +126,11 @@ pub enum SpecksError {
     /// E024: User aborted planning loop
     #[error("E024: User aborted planning loop")]
     UserAborted,
+
+    // === Distribution errors (E025) ===
+    /// E025: Skills not found in share directory
+    #[error("E025: Skills not found in share directory: {path}")]
+    SkillsNotFound { path: String },
 }
 
 impl SpecksError {
@@ -158,6 +163,7 @@ impl SpecksError {
             SpecksError::AgentTimeout { .. } => "E021",
             SpecksError::SpeckValidationWarnings { .. } => "E023",
             SpecksError::UserAborted => "E024",
+            SpecksError::SkillsNotFound { .. } => "E025",
         }
     }
 
@@ -217,6 +223,8 @@ impl SpecksError {
             SpecksError::SpeckValidationWarnings { .. } => 0, // Warnings are not failures
 
             SpecksError::UserAborted => 5, // User aborted planning loop
+
+            SpecksError::SkillsNotFound { .. } => 7, // Skills not found
         }
     }
 }
@@ -286,5 +294,16 @@ mod tests {
         assert_eq!(err.code(), "E024");
         assert_eq!(err.exit_code(), 5);
         assert!(err.to_string().contains("aborted"));
+    }
+
+    #[test]
+    fn test_skills_not_found_error() {
+        let err = SpecksError::SkillsNotFound {
+            path: "/some/path".to_string(),
+        };
+        assert_eq!(err.code(), "E025");
+        assert_eq!(err.exit_code(), 7);
+        assert!(err.to_string().contains("/some/path"));
+        assert!(err.to_string().contains("Skills not found"));
     }
 }
