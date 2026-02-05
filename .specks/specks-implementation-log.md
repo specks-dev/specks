@@ -6,6 +6,76 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.1: Agent Distribution and Discovery | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `crates/specks/src/agent.rs` - Agent invocation infrastructure
+- `crates/specks/src/share.rs` - Share directory discovery (reused for agents)
+- `crates/specks-core/src/error.rs` - Error type definitions
+- `crates/specks/src/cli.rs` - CLI argument parsing
+- `crates/specks/src/commands/plan.rs` - Plan command implementation
+- `crates/specks/src/commands/execute.rs` - Execute command implementation
+- `crates/specks/src/commands/init.rs` - Init command implementation
+- `.github/workflows/release.yml` - Release workflow
+- `Formula/specks.rb` - Homebrew formula
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Implement `resolve_agent_path()` with per-agent resolution | Done |
+| Implement `is_specks_workspace()` for dev mode detection | Done |
+| Update `get_agent_path()` to use `resolve_agent_path()` | Done |
+| Add E026 `RequiredAgentsMissing` error with exit code 8 | Done |
+| Add `--verbose-agents` flag to plan command | Done |
+| Add `--verbose-agents` flag to execute command | Done |
+| Add `verify_required_agents()` preflight function | Done |
+| Call preflight in `plan.rs` before planning loop | Done |
+| Call preflight in `execute.rs` before execution | Done |
+| Update `specks init` to show agent resolution summary | Done |
+| Update release workflow to include agents in tarball | Done |
+| Update homebrew formula to install agents | Done |
+| Update CLI integration tests to copy agents | Done |
+
+**Files Created:**
+- None (all modifications to existing files)
+
+**Files Modified:**
+- `crates/specks/src/agent.rs` - Added per-agent resolution, workspace detection, preflight verification
+- `crates/specks-core/src/error.rs` - Added E026 RequiredAgentsMissing error
+- `crates/specks/src/cli.rs` - Added `--verbose-agents` flag to plan and execute
+- `crates/specks/src/main.rs` - Pass verbose_agents to commands
+- `crates/specks/src/commands/plan.rs` - Added preflight verification
+- `crates/specks/src/commands/execute.rs` - Added preflight verification
+- `crates/specks/src/commands/init.rs` - Added agent resolution summary
+- `.github/workflows/release.yml` - Added agents to tarball
+- `Formula/specks.rb` - Added agents installation
+- `crates/specks/tests/cli_integration_tests.rs` - Copy agents to test projects
+- `.specks/specks-2.md` - Updated task/test/checkpoint checkboxes
+
+**Test Results:**
+- `cargo nextest run`: 212 tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS (no warnings)
+- `cargo nextest run` passes: PASS (212 tests)
+- Release tarball includes agents: PASS (workflow updated)
+- Missing agents gives E026 error: PASS
+- Development mode works: PASS
+- `specks plan --verbose-agents` shows paths: PASS
+- `specks execute --verbose-agents` shows paths: PASS
+
+**Key Decisions/Notes:**
+- Per-agent resolution order: project → share → dev fallback
+- Agents resolved individually, enabling partial overrides
+- Removed deprecated `find_agents_dir()` function (no external users)
+- CLI flag named `--verbose-agents` to avoid confusion with global `--verbose`
+- Integration tests now copy agents from workspace to test projects
+
+---
+
 ## [specks-2.md] Step 8: Onboarding Infrastructure Planning | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

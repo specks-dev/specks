@@ -135,10 +135,18 @@ pub enum SpecksError {
     #[error("E022: Monitor halted execution: {reason}")]
     MonitorHalted { reason: String },
 
-    // === Distribution errors (E025) ===
+    // === Distribution errors (E025-E026) ===
     /// E025: Skills not found in share directory
     #[error("E025: Skills not found in share directory: {path}")]
     SkillsNotFound { path: String },
+
+    /// E026: Required agents missing for command
+    #[error("E026: Missing required agents for 'specks {command}': {}", missing.join(", "))]
+    RequiredAgentsMissing {
+        command: String,
+        missing: Vec<String>,
+        searched: Vec<String>,
+    },
 }
 
 impl SpecksError {
@@ -173,6 +181,7 @@ impl SpecksError {
             SpecksError::SpeckValidationWarnings { .. } => "E023",
             SpecksError::UserAborted => "E024",
             SpecksError::SkillsNotFound { .. } => "E025",
+            SpecksError::RequiredAgentsMissing { .. } => "E026",
         }
     }
 
@@ -236,6 +245,8 @@ impl SpecksError {
             SpecksError::UserAborted => 5, // User aborted planning loop
 
             SpecksError::SkillsNotFound { .. } => 7, // Skills not found
+
+            SpecksError::RequiredAgentsMissing { .. } => 8, // Required agents missing
         }
     }
 }
@@ -327,5 +338,22 @@ mod tests {
         assert_eq!(err.exit_code(), 4);
         assert!(err.to_string().contains("drift detected"));
         assert!(err.to_string().contains("Monitor halted"));
+    }
+
+    #[test]
+    fn test_required_agents_missing_error() {
+        let err = SpecksError::RequiredAgentsMissing {
+            command: "plan".to_string(),
+            missing: vec![
+                "specks-interviewer".to_string(),
+                "specks-critic".to_string(),
+            ],
+            searched: vec!["./agents/".to_string(), "/opt/homebrew/share/specks/agents/".to_string()],
+        };
+        assert_eq!(err.code(), "E026");
+        assert_eq!(err.exit_code(), 8);
+        assert!(err.to_string().contains("specks plan"));
+        assert!(err.to_string().contains("specks-interviewer"));
+        assert!(err.to_string().contains("specks-critic"));
     }
 }

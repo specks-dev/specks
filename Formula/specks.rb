@@ -31,10 +31,17 @@ class Specks < Formula
     # Install skills to share directory
     # Skills end up at #{HOMEBREW_PREFIX}/share/specks/skills/
     (share/"specks").install "share/specks/skills"
+
+    # Install agents to share directory
+    # Agents end up at #{HOMEBREW_PREFIX}/share/specks/agents/
+    (share/"specks").install "share/specks/agents"
   end
 
   def caveats
     <<~EOS
+      Specks agents have been installed to:
+        #{HOMEBREW_PREFIX}/share/specks/agents/
+
       Claude Code skills have been installed to:
         #{HOMEBREW_PREFIX}/share/specks/skills/
 

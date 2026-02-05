@@ -134,6 +134,10 @@ pub enum Commands {
         /// Timeout per agent invocation in seconds (default: 300)
         #[arg(long, default_value = "300")]
         timeout: u64,
+
+        /// Show verbose output including resolved agent paths
+        #[arg(long = "verbose-agents")]
+        verbose_agents: bool,
     },
 
     /// Setup specks integrations
@@ -179,6 +183,10 @@ pub enum Commands {
         /// Timeout per step in seconds (default: 600)
         #[arg(long, default_value = "600")]
         timeout: u64,
+
+        /// Show verbose output including resolved agent paths
+        #[arg(long = "verbose-agents")]
+        verbose_agents: bool,
     },
 }
 
@@ -258,11 +266,13 @@ mod tests {
                 name,
                 context_files,
                 timeout,
+                verbose_agents,
             }) => {
                 assert_eq!(input, Some("add a new feature".to_string()));
                 assert!(name.is_none());
                 assert!(context_files.is_empty());
                 assert_eq!(timeout, 300);
+                assert!(!verbose_agents);
             }
             _ => panic!("Expected Plan command"),
         }
@@ -412,6 +422,7 @@ mod tests {
                 checkpoint_mode,
                 dry_run,
                 timeout,
+                verbose_agents,
             }) => {
                 assert_eq!(speck, ".specks/specks-1.md");
                 assert!(start_step.is_none());
@@ -420,6 +431,7 @@ mod tests {
                 assert_eq!(checkpoint_mode, "step");
                 assert!(!dry_run);
                 assert_eq!(timeout, 600);
+                assert!(!verbose_agents);
             }
             _ => panic!("Expected Execute command"),
         }
@@ -525,6 +537,37 @@ mod tests {
         match cli.command {
             Some(Commands::Execute { speck, .. }) => {
                 assert_eq!(speck, ".specks/specks-1.md");
+            }
+            _ => panic!("Expected Execute command"),
+        }
+    }
+
+    #[test]
+    fn test_plan_command_with_verbose_agents() {
+        let cli =
+            Cli::try_parse_from(["specks", "plan", "add feature", "--verbose-agents"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Plan { verbose_agents, .. }) => {
+                assert!(verbose_agents);
+            }
+            _ => panic!("Expected Plan command"),
+        }
+    }
+
+    #[test]
+    fn test_execute_command_with_verbose_agents() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "execute",
+            ".specks/specks-1.md",
+            "--verbose-agents",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::Execute { verbose_agents, .. }) => {
+                assert!(verbose_agents);
             }
             _ => panic!("Expected Execute command"),
         }

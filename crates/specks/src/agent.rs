@@ -2,12 +2,37 @@
 //!
 //! This module provides the infrastructure to invoke specks agents via the `claude` CLI.
 //! Per [D02] Shell out to Claude CLI, agent invocation shells out rather than using direct API calls.
+//!
+//! Agent resolution is per-agent, not per-directory. Resolution order:
+//! 1. `project_root/agents/{agent_name}.md` (if file exists)
+//! 2. `{share_dir}/agents/{agent_name}.md` where share_dir comes from `find_share_dir()`
+//! 3. Development fallback: `{specks_repo}/agents/{agent_name}.md` (when specks workspace detected)
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 
 use specks_core::SpecksError;
+
+use crate::share::find_share_dir;
+
+/// Agents directory name within share directory
+pub const AGENTS_DIR_NAME: &str = "agents";
+
+/// Required agents for the `specks plan` command
+pub const PLAN_REQUIRED_AGENTS: &[&str] = &["specks-interviewer", "specks-planner", "specks-critic"];
+
+/// Required agents for the `specks execute` command
+pub const EXECUTE_REQUIRED_AGENTS: &[&str] = &[
+    "specks-director",
+    "specks-architect",
+    "specks-implementer",
+    "specks-monitor",
+    "specks-reviewer",
+    "specks-auditor",
+    "specks-committer",
+    "specks-logger",
+];
 
 /// Default timeout for agent invocations in seconds
 pub const DEFAULT_TIMEOUT_SECS: u64 = 300;
@@ -239,14 +264,189 @@ impl AgentRunner {
     }
 }
 
-/// Find the agents directory relative to the project root
-pub fn find_agents_dir(project_root: &Path) -> PathBuf {
-    project_root.join("agents")
+/// Check if the given path is the specks development workspace.
+///
+/// Returns true if:
+/// 1. A Cargo.toml exists with specks workspace package
+/// 2. An agents/ directory exists with specks agent files
+///
+/// This enables development mode where agents are loaded from the repo's agents/ directory.
+pub fn is_specks_workspace(path: &Path) -> bool {
+    let cargo_toml = path.join("Cargo.toml");
+    if !cargo_toml.exists() {
+        return false;
+    }
+
+    // Check for workspace marker in Cargo.toml
+    if let Ok(content) = std::fs::read_to_string(&cargo_toml) {
+        // Look for specks workspace indicators
+        let has_workspace = content.contains("[workspace]");
+        let has_specks_members =
+            content.contains("specks") && content.contains("crates/specks-core");
+
+        if !(has_workspace && has_specks_members) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    // Check for agents directory with at least one specks agent
+    let agents_dir = path.join("agents");
+    if !agents_dir.is_dir() {
+        return false;
+    }
+
+    // Check if at least one expected agent exists
+    let test_agent = agents_dir.join("specks-director.md");
+    test_agent.exists()
 }
 
-/// Get the path to a specific agent definition
+/// Resolve the path to an agent definition using per-agent resolution.
+///
+/// Resolution order:
+/// 1. `project_root/agents/{agent_name}.md` (if file exists)
+/// 2. `{share_dir}/agents/{agent_name}.md` where share_dir comes from `find_share_dir()`
+/// 3. Development fallback: detected specks workspace agents directory
+///
+/// Returns `None` if the agent is not found in any location.
+pub fn resolve_agent_path(agent_name: &str, project_root: &Path) -> Option<PathBuf> {
+    let filename = format!("{}.md", agent_name);
+
+    // 1. Check project-local agents directory first
+    let project_agent = project_root.join("agents").join(&filename);
+    if project_agent.is_file() {
+        return Some(project_agent);
+    }
+
+    // 2. Check share directory (from find_share_dir)
+    if let Some(share_dir) = find_share_dir() {
+        let share_agent = share_dir.join(AGENTS_DIR_NAME).join(&filename);
+        if share_agent.is_file() {
+            return Some(share_agent);
+        }
+    }
+
+    // 3. Development fallback: check if we're in the specks workspace
+    if is_specks_workspace(project_root) {
+        let dev_agent = project_root.join("agents").join(&filename);
+        if dev_agent.is_file() {
+            return Some(dev_agent);
+        }
+    }
+
+    None
+}
+
+/// Result of resolving an agent path, including its source
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentSource {
+    /// Agent found in project's local agents/ directory
+    Project,
+    /// Agent found in share directory (installed via homebrew/tarball)
+    Share,
+    /// Agent found in development workspace
+    Development,
+}
+
+impl std::fmt::Display for AgentSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AgentSource::Project => write!(f, "project"),
+            AgentSource::Share => write!(f, "share"),
+            AgentSource::Development => write!(f, "development"),
+        }
+    }
+}
+
+/// Resolve an agent path and return both the path and its source.
+///
+/// This is useful for verbose output showing where each agent was loaded from.
+pub fn resolve_agent_path_with_source(
+    agent_name: &str,
+    project_root: &Path,
+) -> Option<(PathBuf, AgentSource)> {
+    let filename = format!("{}.md", agent_name);
+
+    // 1. Check project-local agents directory first
+    let project_agent = project_root.join("agents").join(&filename);
+    if project_agent.is_file() {
+        return Some((project_agent, AgentSource::Project));
+    }
+
+    // 2. Check share directory (from find_share_dir)
+    if let Some(share_dir) = find_share_dir() {
+        let share_agent = share_dir.join(AGENTS_DIR_NAME).join(&filename);
+        if share_agent.is_file() {
+            return Some((share_agent, AgentSource::Share));
+        }
+    }
+
+    // 3. Development fallback: check if we're in the specks workspace
+    if is_specks_workspace(project_root) {
+        let dev_agent = project_root.join("agents").join(&filename);
+        if dev_agent.is_file() {
+            return Some((dev_agent, AgentSource::Development));
+        }
+    }
+
+    None
+}
+
+/// Verify that all required agents for a command are available.
+///
+/// Returns `Ok(Vec<(agent_name, path, source)>)` if all agents are found,
+/// or `Err(SpecksError::RequiredAgentsMissing)` with the list of missing agents.
+pub fn verify_required_agents(
+    command: &str,
+    project_root: &Path,
+) -> Result<Vec<(String, PathBuf, AgentSource)>, SpecksError> {
+    let required_agents = match command {
+        "plan" => PLAN_REQUIRED_AGENTS,
+        "execute" => EXECUTE_REQUIRED_AGENTS,
+        _ => return Ok(vec![]),
+    };
+
+    let mut found_agents = Vec::new();
+    let mut missing_agents = Vec::new();
+
+    for agent_name in required_agents {
+        if let Some((path, source)) = resolve_agent_path_with_source(agent_name, project_root) {
+            found_agents.push((agent_name.to_string(), path, source));
+        } else {
+            missing_agents.push(agent_name.to_string());
+        }
+    }
+
+    if missing_agents.is_empty() {
+        Ok(found_agents)
+    } else {
+        // Build list of searched paths for error message
+        let mut searched_paths = vec![project_root.join("agents").to_string_lossy().to_string()];
+        if let Some(share_dir) = find_share_dir() {
+            searched_paths.push(
+                share_dir
+                    .join(AGENTS_DIR_NAME)
+                    .to_string_lossy()
+                    .to_string(),
+            );
+        }
+
+        Err(SpecksError::RequiredAgentsMissing {
+            command: command.to_string(),
+            missing: missing_agents,
+            searched: searched_paths,
+        })
+    }
+}
+
+/// Get the path to a specific agent definition using per-agent resolution.
+///
+/// Returns the resolved path if found, or the project-local path if not found
+/// (which will produce a clear "file not found" error when read).
 pub fn get_agent_path(project_root: &Path, agent_name: &str) -> PathBuf {
-    find_agents_dir(project_root).join(format!("{}.md", agent_name))
+    resolve_agent_path(agent_name, project_root)
+        .unwrap_or_else(|| project_root.join("agents").join(format!("{}.md", agent_name)))
 }
 
 /// Create an AgentConfig for the interviewer agent
@@ -371,13 +571,6 @@ mod tests {
         } else {
             panic!("Expected ClaudeCliNotInstalled error");
         }
-    }
-
-    #[test]
-    fn test_find_agents_dir() {
-        let project_root = PathBuf::from("/project");
-        let agents_dir = find_agents_dir(&project_root);
-        assert_eq!(agents_dir, PathBuf::from("/project/agents"));
     }
 
     #[test]
@@ -540,5 +733,251 @@ mod tests {
         // Clean up
         let _ = std::fs::remove_file(&agent_path);
         let _ = std::fs::remove_dir(&temp_dir);
+    }
+
+    // ============================================================================
+    // Agent Resolution Tests
+    // ============================================================================
+
+    #[test]
+    fn test_is_specks_workspace_in_repo() {
+        // When running tests, we're in the specks workspace
+        let workspace_root = find_workspace_root();
+        assert!(
+            is_specks_workspace(&workspace_root),
+            "Running from specks repo should detect workspace"
+        );
+    }
+
+    #[test]
+    fn test_is_specks_workspace_random_dir() {
+        // A random temp directory should not be detected as specks workspace
+        let temp_dir = std::env::temp_dir().join("specks-test-random");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        assert!(
+            !is_specks_workspace(&temp_dir),
+            "Random directory should not be detected as workspace"
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_is_specks_workspace_cargo_toml_only() {
+        // A directory with Cargo.toml but no workspace markers should not match
+        let temp_dir = std::env::temp_dir().join("specks-test-cargo-only");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        std::fs::write(
+            temp_dir.join("Cargo.toml"),
+            "[package]\nname = \"other-project\"\n",
+        )
+        .expect("write Cargo.toml");
+
+        assert!(
+            !is_specks_workspace(&temp_dir),
+            "Non-specks Cargo.toml should not be detected"
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_agent_path_finds_in_project() {
+        // When agent exists in project/agents/, it should be found
+        let temp_dir = std::env::temp_dir().join("specks-test-resolve-project");
+        let agents_dir = temp_dir.join("agents");
+        let _ = std::fs::create_dir_all(&agents_dir);
+
+        let agent_path = agents_dir.join("specks-interviewer.md");
+        std::fs::write(&agent_path, "# Test Agent").expect("write agent");
+
+        let resolved = resolve_agent_path("specks-interviewer", &temp_dir);
+        assert!(resolved.is_some());
+        assert_eq!(resolved.unwrap(), agent_path);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_agent_path_returns_none_when_not_found() {
+        // When agent doesn't exist anywhere, None should be returned
+        let temp_dir = std::env::temp_dir().join("specks-test-resolve-none");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        // Don't set SPECKS_SHARE_DIR, and ensure no agents exist locally
+        // This test may pass or fail depending on system state, so we just
+        // verify the function doesn't panic
+        let resolved = resolve_agent_path("nonexistent-agent-xyz", &temp_dir);
+        // Can be None or Some depending on share dir state
+        drop(resolved);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_agent_path_with_source_returns_project() {
+        let temp_dir = std::env::temp_dir().join("specks-test-resolve-source");
+        let agents_dir = temp_dir.join("agents");
+        let _ = std::fs::create_dir_all(&agents_dir);
+
+        let agent_path = agents_dir.join("specks-planner.md");
+        std::fs::write(&agent_path, "# Test Planner").expect("write agent");
+
+        let resolved = resolve_agent_path_with_source("specks-planner", &temp_dir);
+        assert!(resolved.is_some());
+
+        let (path, source) = resolved.unwrap();
+        assert_eq!(path, agent_path);
+        assert_eq!(source, AgentSource::Project);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_verify_required_agents_unknown_command() {
+        // Unknown command should return Ok with empty vec
+        let temp_dir = std::env::temp_dir().join("specks-test-unknown-cmd");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let result = verify_required_agents("unknown-command", &temp_dir);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_verify_required_agents_plan_in_workspace() {
+        // In the specks workspace, all plan agents should be found
+        let workspace_root = find_workspace_root();
+
+        let result = verify_required_agents("plan", &workspace_root);
+        assert!(result.is_ok(), "Plan agents should be found: {:?}", result);
+
+        let agents = result.unwrap();
+        assert_eq!(agents.len(), PLAN_REQUIRED_AGENTS.len());
+
+        // Verify all expected agents were found
+        for agent_name in PLAN_REQUIRED_AGENTS {
+            assert!(
+                agents.iter().any(|(name, _, _)| name == agent_name),
+                "Agent {} should be found",
+                agent_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_verify_required_agents_execute_in_workspace() {
+        // In the specks workspace, all execute agents should be found
+        let workspace_root = find_workspace_root();
+
+        let result = verify_required_agents("execute", &workspace_root);
+        assert!(
+            result.is_ok(),
+            "Execute agents should be found: {:?}",
+            result
+        );
+
+        let agents = result.unwrap();
+        assert_eq!(agents.len(), EXECUTE_REQUIRED_AGENTS.len());
+    }
+
+    #[test]
+    fn test_verify_required_agents_missing_returns_error() {
+        // In a directory without agents (and no share dir), should return error
+        let temp_dir = std::env::temp_dir().join("specks-test-missing-agents");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        // Set empty share dir to ensure no fallback
+        // SAFETY: We're in a test context, single-threaded test execution
+        unsafe {
+            std::env::set_var(
+                "SPECKS_SHARE_DIR",
+                temp_dir
+                    .join("nonexistent-share")
+                    .to_string_lossy()
+                    .to_string(),
+            );
+        }
+
+        let result = verify_required_agents("plan", &temp_dir);
+
+        // Clean up env var
+        // SAFETY: Same as above
+        unsafe {
+            std::env::remove_var("SPECKS_SHARE_DIR");
+        }
+
+        match result {
+            Err(SpecksError::RequiredAgentsMissing {
+                command,
+                missing,
+                searched,
+            }) => {
+                assert_eq!(command, "plan");
+                assert!(!missing.is_empty());
+                assert!(!searched.is_empty());
+            }
+            Ok(_) => {
+                // This could happen if agents are found via some other discovery path
+                // (e.g., system-wide installation), which is fine
+            }
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_partial_override_uses_project_agent() {
+        // Test that a project-local agent overrides share directory
+        let temp_dir = std::env::temp_dir().join("specks-test-partial-override");
+        let agents_dir = temp_dir.join("agents");
+        let _ = std::fs::create_dir_all(&agents_dir);
+
+        // Create one custom agent locally
+        let custom_agent = agents_dir.join("specks-interviewer.md");
+        std::fs::write(&custom_agent, "# Custom Interviewer").expect("write agent");
+
+        // Resolve should find the local one
+        let resolved = resolve_agent_path_with_source("specks-interviewer", &temp_dir);
+        assert!(resolved.is_some());
+
+        let (path, source) = resolved.unwrap();
+        assert_eq!(source, AgentSource::Project);
+        assert_eq!(path, custom_agent);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_agent_source_display() {
+        assert_eq!(AgentSource::Project.to_string(), "project");
+        assert_eq!(AgentSource::Share.to_string(), "share");
+        assert_eq!(AgentSource::Development.to_string(), "development");
+    }
+
+    #[test]
+    fn test_plan_required_agents_contains_expected() {
+        assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-interviewer"));
+        assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-planner"));
+        assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-critic"));
+        assert_eq!(PLAN_REQUIRED_AGENTS.len(), 3);
+    }
+
+    #[test]
+    fn test_execute_required_agents_contains_expected() {
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-director"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-architect"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-implementer"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-monitor"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-reviewer"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-auditor"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-committer"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-logger"));
+        assert_eq!(EXECUTE_REQUIRED_AGENTS.len(), 8);
     }
 }

@@ -44,6 +44,7 @@ jobs:
           mkdir -p release/bin
           mkdir -p release/share/specks/skills/specks-plan
           mkdir -p release/share/specks/skills/specks-execute
+          mkdir -p release/share/specks/agents
 
           # Copy binary
           cp target/${{ matrix.target }}/release/specks release/bin/
@@ -51,6 +52,9 @@ jobs:
           # Copy skills
           cp .claude/skills/specks-plan/SKILL.md release/share/specks/skills/specks-plan/
           cp .claude/skills/specks-execute/SKILL.md release/share/specks/skills/specks-execute/
+
+          # Copy agents
+          cp agents/*.md release/share/specks/agents/
 
       - name: Create tarball
         run: |

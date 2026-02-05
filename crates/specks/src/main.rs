@@ -62,7 +62,16 @@ fn main() -> ExitCode {
             name,
             context_files,
             timeout,
-        }) => commands::run_plan(input, name, context_files, timeout, cli.json, cli.quiet),
+            verbose_agents,
+        }) => commands::run_plan(
+            input,
+            name,
+            context_files,
+            timeout,
+            cli.json,
+            cli.quiet,
+            verbose_agents,
+        ),
         Some(Commands::Setup(setup_cmd)) => match setup_cmd {
             SetupCommands::Claude { check, force } => {
                 commands::run_setup_claude(check, force, cli.json, cli.quiet)
@@ -76,6 +85,7 @@ fn main() -> ExitCode {
             checkpoint_mode,
             dry_run,
             timeout,
+            verbose_agents,
         }) => commands::run_execute(commands::execute::ExecuteOptions {
             speck,
             start_step,
@@ -86,6 +96,7 @@ fn main() -> ExitCode {
             timeout,
             json_output: cli.json,
             quiet: cli.quiet,
+            verbose_agents,
         }),
         None => {
             // No subcommand - print version info

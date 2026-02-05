@@ -1532,20 +1532,20 @@ This is consistent with how `share.rs` already works for skills.
 **Tasks:**
 
 Per-Agent Resolution:
-- [ ] Implement `resolve_agent_path(agent_name, project_root)` returning `Option<PathBuf>`:
+- [x] Implement `resolve_agent_path(agent_name, project_root)` returning `Option<PathBuf>`:
   - Check `project_root/agents/{agent_name}.md` (if file exists, return it)
   - Call `find_share_dir()` and check `{share_dir}/agents/{agent_name}.md`
   - Check dev fallback via `is_specks_workspace()`
   - Return `None` if not found anywhere
-- [ ] Implement `is_specks_workspace(path)` to detect dev mode (Cargo.toml with specks workspace + agents/ dir present)
-- [ ] Update `get_agent_path()` to call `resolve_agent_path()`
-- [ ] Add E026 `RequiredAgentsMissing` error: lists missing agent names + searched paths
-- [ ] Exit code 8 for missing agents (preflight error, before any invocation)
+- [x] Implement `is_specks_workspace(path)` to detect dev mode (Cargo.toml with specks workspace + agents/ dir present)
+- [x] Update `get_agent_path()` to call `resolve_agent_path()`
+- [x] Add E026 `RequiredAgentsMissing` error: lists missing agent names + searched paths
+- [x] Exit code 8 for missing agents (preflight error, before any invocation)
 
 CLI Flag Plumbing:
-- [ ] Add `--verbose` flag to `specks plan` in `cli.rs`
-- [ ] Add `--verbose` flag to `specks execute` in `cli.rs`
-- [ ] Pass verbose flag through to commands
+- [x] Add `--verbose` flag to `specks plan` in `cli.rs`
+- [x] Add `--verbose` flag to `specks execute` in `cli.rs`
+- [x] Pass verbose flag through to commands
 
 Agent Version Compatibility:
 - [ ] Add `specks-version` field to agent frontmatter schema
@@ -1555,51 +1555,51 @@ Agent Version Compatibility:
 - [ ] Show version mismatch warning once per run (summary), not per agent
 
 Preflight Verification (both plan and execute):
-- [ ] Add `verify_required_agents(command, project_root)` that checks all required agents resolve
-- [ ] Call preflight in `plan.rs` before starting planning loop
-- [ ] Call preflight in `execute.rs` before starting execution
-- [ ] On failure: "Missing required agents for 'specks plan': specks-interviewer, specks-critic. Searched: [paths]"
-- [ ] With `--verbose`: show resolved path for each agent found
-- [ ] Preflight ownership: commands (`plan.rs`, `execute.rs`) are the single place that enforce required-agent checks; `planning_loop.rs` assumes preflight already ran and does not re-check
+- [x] Add `verify_required_agents(command, project_root)` that checks all required agents resolve
+- [x] Call preflight in `plan.rs` before starting planning loop
+- [x] Call preflight in `execute.rs` before starting execution
+- [x] On failure: "Missing required agents for 'specks plan': specks-interviewer, specks-critic. Searched: [paths]"
+- [x] With `--verbose`: show resolved path for each agent found
+- [x] Preflight ownership: commands (`plan.rs`, `execute.rs`) are the single place that enforce required-agent checks; `planning_loop.rs` assumes preflight already ran and does not re-check
 
 Init Command Updates:
-- [ ] Update `specks init` output to show agent resolution summary
-- [ ] List agents found and their source (project/share/dev)
-- [ ] Warn if any required agents are missing
+- [x] Update `specks init` output to show agent resolution summary
+- [x] List agents found and their source (project/share/dev)
+- [x] Warn if any required agents are missing
 
 Distribution Updates:
-- [ ] Update release workflow to copy `agents/*.md` to `share/specks/agents/`
-- [ ] Update tarball structure to include `share/specks/agents/`
-- [ ] Update homebrew formula to install agents to share directory
+- [x] Update release workflow to copy `agents/*.md` to `share/specks/agents/`
+- [x] Update tarball structure to include `share/specks/agents/`
+- [x] Update homebrew formula to install agents to share directory
 - [ ] Verify agents are installed after `brew install specks`
 
 **Tests:**
 
 Unit tests (in `agent.rs`):
-- [ ] `resolve_agent_path()` finds agent in project when present
-- [ ] `resolve_agent_path()` falls back to share when not in project
-- [ ] `resolve_agent_path()` returns None when agent not found anywhere
-- [ ] Partial override works (project has 1 agent, share has rest)
-- [ ] `is_specks_workspace()` returns true in specks repo
-- [ ] `is_specks_workspace()` returns false in random project
+- [x] `resolve_agent_path()` finds agent in project when present
+- [x] `resolve_agent_path()` falls back to share when not in project
+- [x] `resolve_agent_path()` returns None when agent not found anywhere
+- [x] Partial override works (project has 1 agent, share has rest)
+- [x] `is_specks_workspace()` returns true in specks repo
+- [x] `is_specks_workspace()` returns false in random project
 - [ ] Version compatibility check warns on mismatch, doesn't fail
 - [ ] Missing `specks-version` field doesn't cause error
 
 Integration tests (preflight verification only—no actual agent invocation):
-- [ ] `verify_required_agents("plan", ...)` succeeds when agents in share dir
-- [ ] `verify_required_agents("plan", ...)` fails with E026 when agents missing
-- [ ] `verify_required_agents("execute", ...)` checks execute-required agents
-- [ ] Partial override: project has 1 agent, share has rest, preflight passes
-- [ ] `specks init` shows agent resolution summary (use temp dir with agents copied)
+- [x] `verify_required_agents("plan", ...)` succeeds when agents in share dir
+- [x] `verify_required_agents("plan", ...)` fails with E026 when agents missing
+- [x] `verify_required_agents("execute", ...)` checks execute-required agents
+- [x] Partial override: project has 1 agent, share has rest, preflight passes
+- [x] `specks init` shows agent resolution summary (use temp dir with agents copied)
 
 **Test Strategy Note**: Integration tests verify preflight logic only, not full planning loop. Full end-to-end tests (actual `specks plan` producing a speck) are covered in Step 8.3 and Step 10 where `claude-mock` or real invocation is used.
 
 **Test Determinism Note (env vars):** `find_share_dir()` reads `SPECKS_SHARE_DIR`. Rust tests are parallel by default, so env-var-dependent tests must be made deterministic (e.g., run those tests serially, or structure test helpers so env var is set/cleared in a single-threaded context). Avoid any tests that mutate or delete system-managed paths like `/opt/homebrew/...`.
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes (all tests)
-- [ ] Release tarball includes `share/specks/agents/` with all 11 agents
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes (all tests)
+- [x] Release tarball includes `share/specks/agents/` with all 11 agents
 - [ ] `brew install specks` puts agents in `/opt/homebrew/share/specks/agents/`
 - [ ] Fresh project preflight passes:
   ```bash
@@ -1607,7 +1607,7 @@ Integration tests (preflight verification only—no actual agent invocation):
   specks init
   specks plan --verbose "test"  # Shows agent paths, preflight passes
   ```
-- [ ] Missing agents gives clear error:
+- [x] Missing agents gives clear error:
   ```bash
   mkdir empty && cd empty
   specks init
@@ -1616,7 +1616,7 @@ Integration tests (preflight verification only—no actual agent invocation):
   # ERROR E026: Missing required agents for 'specks plan': specks-interviewer, ...
   # Searched: ./agents/, $EMPTY_SHARE/agents/ (and any other discovery paths)
   ```
-- [ ] Development mode works (specks workspace detected, agents from repo)
+- [x] Development mode works (specks workspace detected, agents from repo)
 - [ ] Partial override works:
   ```bash
   mkdir test-override && cd test-override
@@ -1626,8 +1626,8 @@ Integration tests (preflight verification only—no actual agent invocation):
   specks plan --verbose "test"
   # Shows: specks-planner from ./agents/, others from share
   ```
-- [ ] `specks plan --verbose` shows resolved path for each agent
-- [ ] `specks execute --verbose` shows resolved path for each agent
+- [x] `specks plan --verbose` shows resolved path for each agent
+- [x] `specks execute --verbose` shows resolved path for each agent
 - [ ] Version mismatch warning appears once (summary), not per-agent
 
 **Rollback:**

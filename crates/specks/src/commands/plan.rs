@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use specks_core::{SpecksError, find_project_root};
 
+use crate::agent::verify_required_agents;
 use crate::output::{JsonIssue, JsonResponse, PlanData, PlanValidation};
 use crate::planning_loop::{
     LoopContext, PlanMode, PlanningLoop, detect_input_type, resolve_speck_path,
@@ -23,10 +24,11 @@ use crate::planning_loop::{
 /// * `timeout` - Timeout per agent invocation in seconds
 /// * `json_output` - Whether to output in JSON format
 /// * `quiet` - Whether to suppress progress messages
+/// * `verbose_agents` - Whether to show agent resolution paths
 ///
 /// # Returns
 ///
-/// Exit code: 0 = success, 1 = error, 3 = validation error, 5 = aborted, 6 = claude not installed
+/// Exit code: 0 = success, 1 = error, 3 = validation error, 5 = aborted, 6 = claude not installed, 8 = agents missing
 pub fn run_plan(
     input: Option<String>,
     name: Option<String>,
@@ -34,6 +36,7 @@ pub fn run_plan(
     timeout: u64,
     json_output: bool,
     quiet: bool,
+    verbose_agents: bool,
 ) -> Result<i32, String> {
     // Find project root
     let project_root = match find_project_root() {
@@ -48,6 +51,45 @@ pub fn run_plan(
             return Ok(9);
         }
     };
+
+    // Preflight: verify required agents are available
+    match verify_required_agents("plan", &project_root) {
+        Ok(agents) => {
+            if verbose_agents && !quiet {
+                eprintln!("Resolved agents for 'specks plan':");
+                for (agent_name, path, source) in &agents {
+                    eprintln!("  {} ({}) -> {}", agent_name, source, path.display());
+                }
+            }
+        }
+        Err(SpecksError::RequiredAgentsMissing {
+            command,
+            missing,
+            searched,
+        }) => {
+            let message = format!(
+                "Missing required agents for 'specks {}': {}\nSearched: {}",
+                command,
+                missing.join(", "),
+                searched.join(", ")
+            );
+            if json_output {
+                output_error_json("plan", "E026", &message);
+            } else {
+                eprintln!("error: {}", message);
+            }
+            return Ok(8);
+        }
+        Err(e) => {
+            let message = e.to_string();
+            if json_output {
+                output_error_json("plan", e.code(), &message);
+            } else {
+                eprintln!("error: {}", message);
+            }
+            return Ok(e.exit_code());
+        }
+    }
 
     // Get input from user if not provided
     let input = match input {

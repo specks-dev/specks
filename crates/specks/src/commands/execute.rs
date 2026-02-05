@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use specks_core::{Severity, SpecksError, find_project_root, parse_speck, validate_speck};
 use uuid::Uuid;
 
-use crate::agent::{AgentRunner, director_config};
+use crate::agent::{AgentRunner, director_config, verify_required_agents};
 use crate::output::{ExecuteData, JsonIssue, JsonResponse};
 
 /// Commit policy for execution
@@ -148,6 +148,7 @@ pub struct ExecuteOptions {
     pub timeout: u64,
     pub json_output: bool,
     pub quiet: bool,
+    pub verbose_agents: bool,
 }
 
 /// Run the execute command
@@ -172,6 +173,7 @@ pub fn run_execute(opts: ExecuteOptions) -> Result<i32, String> {
         timeout,
         json_output,
         quiet,
+        verbose_agents,
     } = opts;
     // Find project root
     let project_root = match find_project_root() {
@@ -186,6 +188,45 @@ pub fn run_execute(opts: ExecuteOptions) -> Result<i32, String> {
             return Ok(9);
         }
     };
+
+    // Preflight: verify required agents are available
+    match verify_required_agents("execute", &project_root) {
+        Ok(agents) => {
+            if verbose_agents && !quiet {
+                eprintln!("Resolved agents for 'specks execute':");
+                for (agent_name, path, source) in &agents {
+                    eprintln!("  {} ({}) -> {}", agent_name, source, path.display());
+                }
+            }
+        }
+        Err(SpecksError::RequiredAgentsMissing {
+            command,
+            missing,
+            searched,
+        }) => {
+            let message = format!(
+                "Missing required agents for 'specks {}': {}\nSearched: {}",
+                command,
+                missing.join(", "),
+                searched.join(", ")
+            );
+            if json_output {
+                output_error_json("execute", "E026", &message, &speck);
+            } else {
+                eprintln!("error: {}", message);
+            }
+            return Ok(8);
+        }
+        Err(e) => {
+            let message = e.to_string();
+            if json_output {
+                output_error_json("execute", e.code(), &message, &speck);
+            } else {
+                eprintln!("error: {}", message);
+            }
+            return Ok(e.exit_code());
+        }
+    }
 
     // Resolve speck path
     let speck_path = resolve_speck_path(&speck, &project_root);

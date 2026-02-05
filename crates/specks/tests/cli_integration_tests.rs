@@ -32,7 +32,47 @@ fn setup_test_project() -> tempfile::TempDir {
         "specks init failed: {:?}",
         String::from_utf8_lossy(&output.stderr)
     );
+
+    // Copy agents from the workspace to the test project
+    // This ensures execute preflight checks pass
+    copy_test_agents(temp.path());
+
     temp
+}
+
+/// Find the workspace root (where agents/ directory exists)
+fn find_workspace_root() -> std::path::PathBuf {
+    // Start from the manifest directory and walk up until we find agents/
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    loop {
+        if path.join("agents").is_dir() {
+            return path;
+        }
+        if !path.pop() {
+            panic!("Could not find workspace root with agents/ directory");
+        }
+    }
+}
+
+/// Copy agents to test project directory
+fn copy_test_agents(project_path: &std::path::Path) {
+    let workspace = find_workspace_root();
+    let source_agents = workspace.join("agents");
+    let dest_agents = project_path.join("agents");
+
+    // Create agents directory
+    fs::create_dir_all(&dest_agents).expect("failed to create agents directory");
+
+    // Copy all .md files from source to dest
+    for entry in fs::read_dir(&source_agents).expect("failed to read agents directory") {
+        let entry = entry.expect("failed to read entry");
+        let path = entry.path();
+        if path.extension().map_or(false, |ext| ext == "md") {
+            let filename = path.file_name().unwrap();
+            let dest_path = dest_agents.join(filename);
+            fs::copy(&path, &dest_path).expect("failed to copy agent file");
+        }
+    }
 }
 
 /// Create a minimal valid speck in the test project
