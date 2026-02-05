@@ -115,20 +115,24 @@ The current experience has significant gaps. There is no `specks plan <idea>` or
 
 **Resolution:** DECIDED - Shell out to `claude` CLI. See [D02].
 
-#### [Q02] Homebrew Tap Location (OPEN) {#q02-homebrew-tap}
+#### [Q02] Homebrew Tap Location (DECIDED) {#q02-homebrew-tap}
 
 **Question:** Should the Homebrew formula live in the main repo or a separate tap?
 
 **Why it matters:** Affects maintenance overhead and installation UX.
 
 **Options:**
-- Same repo under `homebrew/` directory
+- Same repo with standard `Formula/` directory (Homebrew tap convention)
 - Separate `homebrew-specks` repository
 - Submit to homebrew-core (requires popularity threshold)
 
 **Plan to resolve:** Decide during Step 4 based on Homebrew best practices.
 
-**Resolution:** OPEN
+**Resolution:** DECIDED - Same repo with standard `Formula/` directory layout. Users install via:
+```bash
+brew tap kocienda/specks https://github.com/kocienda/specks && brew install specks
+```
+CI automatically updates the formula after each release, so the maintainer only needs to push a tag.
 
 ---
 
@@ -276,17 +280,20 @@ specks plan [idea OR existing-speck-path]
 
 #### [D06] Homebrew Tap for Installation (DECIDED) {#d06-homebrew-tap}
 
-**Decision:** Create a Homebrew tap for easy macOS installation.
+**Decision:** Create a Homebrew tap in the main repo with fully automated formula updates.
 
 **Rationale:**
 - `brew install` is the expected installation method on macOS
 - Tap allows rapid iteration without homebrew-core review
-- Can migrate to homebrew-core once established
+- Same-repo tap simplifies maintenance (one repo, not two)
+- CI automation means maintainer only pushes a tag to release
 
 **Implications:**
-- Need separate repository or subdirectory for tap
-- Formula must update with each release
-- Document tap installation in README
+- Formula lives at `Formula/specks.rb` (standard Homebrew tap layout)
+- Release workflow automatically updates formula with new version and checksums
+- `scripts/update-homebrew-formula.sh` handles formula updates (no manual sed)
+- Users install via: `brew tap kocienda/specks https://github.com/kocienda/specks && brew install specks`
+- Can migrate to homebrew-core once established
 
 ---
 
@@ -505,46 +512,51 @@ When given an existing speck path instead of an idea string:
 
 **Concept C03: Automated Release Pipeline** {#c03-release-pipeline}
 
-Release workflow triggered by version tags:
+Fully automated release workflow triggered by version tags. Maintainer only runs:
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+CI handles everything else:
 
 ```
-┌──────────────┐    ┌───────────────┐    ┌─────────────────┐
-│  git tag     │───>│  GitHub       │───>│  Build Matrix   │
-│  v0.2.0      │    │  Actions      │    │  - macos-arm64  │
-└──────────────┘    └───────────────┘    │  - macos-x86_64 │
-                                          └─────────────────┘
+┌──────────────┐    ┌───────────────┐    ┌───────────────────────┐
+│  git tag     │───>│  GitHub       │───>│  Build Matrix         │
+│  v0.2.0      │    │  Actions      │    │  - macos-14 (arm64)   │
+└──────────────┘    └───────────────┘    │  - macos-13 (x86_64)  │
+                                          └───────────────────────┘
                                                    │
                                                    v
                            ┌─────────────────────────────────────┐
                            │  GitHub Release                     │
-                           │  - specks-v0.2.0-macos-arm64.tar.gz │
-                           │  - specks-v0.2.0-macos-x86_64.tar.gz│
+                           │  - specks-0.2.0-macos-arm64.tar.gz  │
+                           │  - specks-0.2.0-macos-x86_64.tar.gz │
                            │  - checksums.txt                    │
+                           └─────────────────────────────────────┘
+                                                   │
+                                                   v
+                           ┌─────────────────────────────────────┐
+                           │  Update Formula (automatic)         │
+                           │  1. scripts/update-homebrew-        │
+                           │     formula.sh v0.2.0 <sha> <sha>   │
+                           │  2. git commit Formula/specks.rb    │
+                           │  3. git push to main                │
                            └─────────────────────────────────────┘
 ```
 
-**Homebrew Formula Update:**
+**Tarball Structure (no wrapper directory):**
+```
+specks-0.2.0-macos-arm64.tar.gz
+├── bin/specks
+└── share/specks/skills/
+    ├── specks-plan/SKILL.md
+    └── specks-execute/SKILL.md
+```
 
-```ruby
-class Specks < Formula
-  desc "From ideas to implementation via multi-agent orchestration"
-  homepage "https://github.com/yourusername/specks"
-  version "0.2.0"
-
-  on_macos do
-    if Hardware::CPU.arm?
-      url "https://github.com/.../specks-v0.2.0-macos-arm64.tar.gz"
-      sha256 "..."
-    else
-      url "https://github.com/.../specks-v0.2.0-macos-x86_64.tar.gz"
-      sha256 "..."
-    end
-  end
-
-  def install
-    bin.install "specks"
-  end
-end
+**User Installation:**
+```bash
+brew tap kocienda/specks https://github.com/kocienda/specks && brew install specks
 ```
 
 ---
@@ -763,7 +775,8 @@ Exit codes:
 | `.claude/skills/specks-plan/SKILL.md` | Slash command skill for planning inside Claude Code |
 | `.claude/skills/specks-execute/SKILL.md` | Slash command skill for execution inside Claude Code |
 | `.github/workflows/release.yml` | Release workflow for binaries |
-| `homebrew/specks.rb` | Homebrew formula template |
+| `scripts/update-homebrew-formula.sh` | Script to update formula version and checksums |
+| `Formula/specks.rb` | Homebrew formula (standard tap layout) |
 | `docs/getting-started.md` | Getting started guide |
 | `docs/tutorials/first-speck.md` | Tutorial: Create your first speck |
 | `docs/tutorials/execute-plan.md` | Tutorial: Execute a plan |
@@ -1081,9 +1094,9 @@ The skills created in Step 3 (`.claude/skills/specks-plan/SKILL.md` and `.claude
 
 Skills are distributed as separate files alongside the binary (not embedded in the binary). This allows skills to be updated independently of the binary.
 
-1. **Release tarball structure:**
+1. **Release tarball structure** (no wrapper directory - root contains bin/ and share/ directly):
    ```
-   specks-v0.x.x-macos-arm64/
+   specks-0.x.0-macos-arm64.tar.gz
    ├── bin/specks           # The binary
    └── share/specks/
        └── skills/
@@ -1132,7 +1145,7 @@ Skills are distributed as separate files alongside the binary (not embedded in t
   - [x] Add step to copy `.claude/skills/` to `share/specks/skills/` in build directory
   - [x] Update tarball creation to include `share/` directory
   - [x] Verify tarball structure includes both `bin/` and `share/`
-- [x] Update `homebrew/specks.rb` formula (Step 6 artifact):
+- [x] Update `homebrew/specks.rb` formula (moved to `Formula/specks.rb` in Step 5):
   - [x] Add `share.install "share/specks" => "specks"` to install share files
   - [x] Skills end up at `#{HOMEBREW_PREFIX}/share/specks/skills/`
 - [x] Update commands/mod.rs to export setup module
@@ -1239,76 +1252,159 @@ Skills are distributed as separate files alongside the binary (not embedded in t
 
 **Depends on:** #step-4
 
-**Commit:** `ci: add release workflow for prebuilt macOS binaries`
+**Commit:** `ci: add fully automated release workflow with formula updates`
 
-**References:** [D05] Prebuilt binaries via GitHub Releases, Concept C03, (#c03-release-pipeline, #new-files)
+**References:** [D05] Prebuilt binaries via GitHub Releases, [D06] Homebrew tap for installation, [Q02] Homebrew tap location, Concept C03, (#c03-release-pipeline, #new-files)
 
 **Artifacts:**
-- `.github/workflows/release.yml` - Release workflow
+- `.github/workflows/release.yml` - Release workflow (enhance existing)
+- `scripts/update-homebrew-formula.sh` - Formula update script
 - Binary artifacts on GitHub Releases
 
+**Context:**
+
+The release process must be fully automated. The maintainer's workflow is:
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+CI handles everything else:
+1. Build binaries on native runners (macos-14 for arm64, macos-13 for x86_64)
+2. Create tarballs with `bin/` and `share/specks/skills/` at root (no wrapper directory)
+3. Calculate SHA256 checksums
+4. Create GitHub Release with artifacts
+5. Update `Formula/specks.rb` with new version and checksums
+6. Commit and push the formula update to main
+
+**Operational Details:**
+
+1. **Version normalization**: Script accepts tag format `v0.2.0` and strips the `v` prefix internally. Workflow passes `${{ github.ref_name }}` directly.
+
+2. **Checksum extraction**: The build jobs create `.sha256` files alongside tarballs. The formula update job downloads these artifacts and extracts checksums:
+   ```bash
+   ARM64_SHA=$(awk '{print $1}' specks-*-macos-arm64.tar.gz.sha256)
+   X86_64_SHA=$(awk '{print $1}' specks-*-macos-x86_64.tar.gz.sha256)
+   ```
+
+3. **Formula update job sequence**:
+   ```bash
+   # Set git identity for CI
+   git config user.name "github-actions[bot]"
+   git config user.email "github-actions[bot]@users.noreply.github.com"
+
+   # Sync to latest main (FF-only to avoid merge commits)
+   git fetch origin main
+   git checkout main
+   git reset --hard origin/main
+
+   # Update formula
+   ./scripts/update-homebrew-formula.sh "$TAG" "$ARM64_SHA" "$X86_64_SHA"
+
+   # Commit only if there are changes
+   git add Formula/specks.rb
+   git diff --cached --quiet || git commit -m "Update formula to $VERSION"
+   git push origin main
+   ```
+
+4. **Avoiding empty commits**: The `git diff --cached --quiet ||` pattern ensures commit only happens if there are staged changes.
+
+5. **Concurrency control**: Add `concurrency: { group: formula-update, cancel-in-progress: false }` to the formula update job. This serializes formula updates if two tags are pushed close together.
+
+6. **Gate to real releases only**: Formula update job runs only for release tags (not test/RC tags):
+   ```yaml
+   if: github.repository == 'kocienda/specks' && !contains(github.ref, '-')
+   ```
+   This matches `v0.2.0` but skips `v0.0.1-test` or `v0.2.0-rc1`.
+
+7. **Permissions**: The workflow already has `permissions: contents: write`. This allows the `GITHUB_TOKEN` to push to `main` (assuming main is unprotected).
+
 **Tasks:**
-- [ ] Create .github/workflows/release.yml
-- [ ] Configure trigger on version tags (v*)
-- [ ] Add macOS arm64 build job
-- [ ] Add macOS x86_64 build job
-- [ ] Strip debug symbols for smaller binaries
-- [ ] Create checksums.txt with SHA256 hashes
-- [ ] Upload artifacts to GitHub Release
-- [ ] Test workflow with draft release
+- [ ] Move formula from `homebrew/specks.rb` to `Formula/specks.rb` (standard tap layout)
+- [ ] Update formula URLs to use `kocienda/specks` consistently
+- [ ] Enhance `.github/workflows/release.yml` (created in Step 3.5):
+  - [ ] Pin runners: `macos-14` for arm64, `macos-13` for x86_64 (native builds)
+  - [ ] Fix tarball structure: root contains `bin/` and `share/` directly (no wrapper dir)
+  - [ ] Add `update-formula` job that runs after release is published
+  - [ ] Gate job to real releases only: `if: github.repository == 'kocienda/specks' && !contains(github.ref, '-')`
+  - [ ] Download checksum artifacts from build jobs, extract SHA values
+  - [ ] Set git identity (`user.name`, `user.email`) for CI commits
+  - [ ] Sync to main with `git reset --hard origin/main` (avoid merge commits)
+  - [ ] Add concurrency group to serialize formula updates
+- [ ] Create `scripts/update-homebrew-formula.sh`:
+  - [ ] Accept tag (e.g., `v0.2.0`), arm64 checksum, and x86_64 checksum as arguments
+  - [ ] Strip `v` prefix from tag to get version number
+  - [ ] Update version string in formula
+  - [ ] Update both SHA256 checksums in formula
+  - [ ] Exit 0 with no changes if formula already has correct values (idempotent)
+  - [ ] Use proper file manipulation (not sed one-liners)
+- [ ] Update `Formula/specks.rb`:
+  - [ ] Ensure checksums are on clearly marked lines for script to update
+  - [ ] Add comments identifying arm64 vs x86_64 checksums
+  - [ ] Verify `install` block works with new tarball structure
+- [ ] Delete `homebrew/` directory (replaced by `Formula/`)
+- [ ] Test end-to-end release flow with a test tag (v0.0.1-test or similar)
 
 **Tests:**
-- [ ] Manual test: workflow triggers on tag push
-- [ ] Manual test: binaries download and run on macOS arm64
-- [ ] Manual test: binaries download and run on macOS x86_64
-- [ ] Manual test: checksums match downloaded files
+- [ ] Manual test: push test tag (e.g., `v0.0.1-test`) triggers build but skips formula update
+- [ ] Manual test: push release tag (e.g., `v0.1.0`) triggers full workflow including formula update
+- [ ] Manual test: binaries build on correct native runners
+- [ ] Manual test: tarballs have correct structure (no wrapper directory)
+- [ ] Manual test: formula is automatically updated with correct checksums
+- [ ] Manual test: updated formula commit appears on main branch
+- [ ] Manual test: `brew install` works after release completes
 
 **Checkpoint:**
-- [ ] Push test tag triggers workflow
-- [ ] Workflow completes without errors
-- [ ] Release contains both binaries and checksums
+- [ ] Push test tag (e.g., `v0.0.1-test`) builds release but does NOT update formula
+- [ ] Push release tag (e.g., `v0.1.0`) triggers full workflow
+- [ ] Release contains both architecture binaries and checksums.txt
+- [ ] Formula update commit appears on main with correct version/checksums
 - [ ] Downloaded binary runs `specks --version`
+- [ ] `brew tap kocienda/specks https://github.com/kocienda/specks && brew install specks` works
 
 **Rollback:**
-- Delete release workflow, delete test tag and release
+- Delete test tag and release (formula unchanged since test tags skip formula update)
+- For release tags: delete tag/release, revert formula commit if needed
 
 **Commit after all checkpoints pass.**
 
 ---
 
-#### Step 6: Homebrew Formula {#step-6}
+#### Step 6: Homebrew Installation Documentation {#step-6}
 
 **Depends on:** #step-5
 
-**Commit:** `docs: add Homebrew formula for macOS installation`
+**Commit:** `docs: add Homebrew installation instructions to README`
 
-**References:** [D06] Homebrew tap for installation, (#q02-homebrew-tap, #new-files)
+**References:** [D06] Homebrew tap for installation, [Q02] Homebrew tap location, (#q02-homebrew-tap)
 
 **Artifacts:**
-- `homebrew/specks.rb` - Homebrew formula template
-- Documentation for tap setup
+- Updated README.md with installation instructions
+
+**Context:**
+
+The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5 and 5. This step documents the installation experience for users.
 
 **Tasks:**
-- [ ] Create homebrew/ directory
-- [ ] Create specks.rb formula template
-- [ ] Configure formula to download from GitHub Releases
-- [ ] Handle arm64 and x86_64 architecture selection
-- [ ] Add installation instructions to README
-- [ ] Document tap creation process
-- [ ] Test formula installation locally
+- [ ] Add "Installation" section to README with:
+  - [ ] Homebrew installation (tap + install commands)
+  - [ ] Direct binary download option (from GitHub Releases)
+  - [ ] Building from source option
+- [ ] Add post-install setup instructions (`specks init`, `specks setup claude`)
+- [ ] Verify formula caveats message is helpful
 
 **Tests:**
-- [ ] Manual test: formula installs from local tap
-- [ ] Manual test: installed binary runs correctly
-- [ ] Manual test: formula works on both architectures
+- [ ] Manual test: follow README instructions on fresh system
+- [ ] Manual test: `specks --version` works after brew install
+- [ ] Manual test: `specks setup claude` works after brew install
 
 **Checkpoint:**
-- [ ] `brew install --build-from-source homebrew/specks.rb` works locally
-- [ ] README documents Homebrew installation
-- [ ] Tap setup instructions are complete
+- [ ] README has clear installation section
+- [ ] All three installation methods documented
+- [ ] Post-install steps are clear
 
 **Rollback:**
-- Remove homebrew/ directory, revert README changes
+- Revert README changes
 
 **Commit after all checkpoints pass.**
 
