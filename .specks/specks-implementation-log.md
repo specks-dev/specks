@@ -6,6 +6,52 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 7: Getting Started Documentation | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- [D07] Documentation structure
+- (#documentation-plan, #new-files)
+- Existing docs/getting-started.md
+- Existing docs/tutorials/first-speck.md
+- README.md current state
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create docs/ directory structure | Done (pre-existing) |
+| Write getting-started.md covering installation and first steps | Done (pre-existing) |
+| Document iterative planning workflow in getting-started.md | Done (pre-existing) |
+| Write first-speck.md tutorial walking through planning loop | Done (pre-existing) |
+| Write execute-plan.md tutorial for execution workflow | Done |
+| Update README.md with links to docs | Done |
+| Update README.md with new command documentation | Done |
+| Add troubleshooting section for common issues | Done |
+| Review and edit all documentation for clarity | Done |
+
+**Files Created:**
+- `docs/tutorials/execute-plan.md` - Comprehensive tutorial covering execution workflow, architect-implementer-monitor flow, checkpoints, commit policies, and troubleshooting
+
+**Files Modified:**
+- `README.md` - Added Documentation section with links to guides; added `specks plan`, `specks execute`, and `specks setup` command documentation; added Troubleshooting section; updated error codes table (E019-E022); fixed URLs to use `kocienda/specks` consistently
+- `.specks/specks-2.md` - Checked off all tasks and checkpoints for Step 7
+
+**Checkpoints Verified:**
+- docs/ directory contains all planned files: PASS (getting-started.md, tutorials/first-speck.md, tutorials/execute-plan.md)
+- README links to all documentation: PASS
+- `cargo build` succeeds: PASS
+
+**Key Decisions/Notes:**
+- docs/getting-started.md and docs/tutorials/first-speck.md already existed with comprehensive content
+- Created execute-plan.md following the same style as first-speck.md
+- Updated README URLs from `specks-dev/specks` to `kocienda/specks` for consistency with getting-started.md
+- Added new error codes E019-E022 to the Error Codes table in README
+- Manual tests (follow docs on fresh system, time-to-first-command) remain for user verification
+
+---
+
 ## [specks-2.md] Step 6: Homebrew Installation Documentation | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

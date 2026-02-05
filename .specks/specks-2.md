@@ -1425,15 +1425,15 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 - Updated README.md
 
 **Tasks:**
-- [ ] Create docs/ directory structure
-- [ ] Write getting-started.md covering installation and first steps
-- [ ] Document iterative planning workflow in getting-started.md
-- [ ] Write first-speck.md tutorial walking through planning loop
-- [ ] Write execute-plan.md tutorial for execution workflow
-- [ ] Update README.md with links to docs
-- [ ] Update README.md with new command documentation
-- [ ] Add troubleshooting section for common issues
-- [ ] Review and edit all documentation for clarity
+- [x] Create docs/ directory structure
+- [x] Write getting-started.md covering installation and first steps
+- [x] Document iterative planning workflow in getting-started.md
+- [x] Write first-speck.md tutorial walking through planning loop
+- [x] Write execute-plan.md tutorial for execution workflow
+- [x] Update README.md with links to docs
+- [x] Update README.md with new command documentation
+- [x] Add troubleshooting section for common issues
+- [x] Review and edit all documentation for clarity
 
 **Tests:**
 - [ ] Manual test: follow getting-started.md on fresh system
@@ -1441,8 +1441,8 @@ The formula (`Formula/specks.rb`) and release workflow were created in Steps 3.5
 - [ ] Manual test: all links in README work
 
 **Checkpoint:**
-- [ ] docs/ directory contains all planned files
-- [ ] README links to all documentation
+- [x] docs/ directory contains all planned files
+- [x] README links to all documentation
 - [ ] Time from clone to first command under 5 minutes
 
 **Rollback:**

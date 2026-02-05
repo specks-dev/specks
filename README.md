@@ -9,21 +9,21 @@ Go from ideas to implementation via multi-agent orchestration. Specks transforms
 The easiest way to install specks on macOS:
 
 ```bash
-brew tap specks-dev/specks https://github.com/specks-dev/specks
+brew tap kocienda/specks https://github.com/kocienda/specks
 brew install specks
 ```
 
 ### Download Binary
 
-Download prebuilt binaries from [GitHub Releases](https://github.com/specks-dev/specks/releases):
+Download prebuilt binaries from [GitHub Releases](https://github.com/kocienda/specks/releases):
 
 ```bash
 # For Apple Silicon (M1/M2/M3)
-curl -L https://github.com/specks-dev/specks/releases/latest/download/specks-0.1.3-macos-arm64.tar.gz | tar xz
+curl -L https://github.com/kocienda/specks/releases/latest/download/specks-latest-macos-arm64.tar.gz | tar xz
 sudo mv bin/specks /usr/local/bin/
 
 # For Intel Mac
-curl -L https://github.com/specks-dev/specks/releases/latest/download/specks-0.1.3-macos-x86_64.tar.gz | tar xz
+curl -L https://github.com/kocienda/specks/releases/latest/download/specks-latest-macos-x86_64.tar.gz | tar xz
 sudo mv bin/specks /usr/local/bin/
 ```
 
@@ -32,7 +32,7 @@ sudo mv bin/specks /usr/local/bin/
 Requires Rust 1.70+ and Cargo:
 
 ```bash
-git clone https://github.com/specks-dev/specks.git
+git clone https://github.com/kocienda/specks.git
 cd specks
 cargo install --path crates/specks
 ```
@@ -135,6 +135,40 @@ specks status specks-1.md -v   # Verbose (show tasks)
 specks status specks-1.md --json  # Output as JSON
 ```
 
+### `specks plan`
+
+Create or revise a speck through an iterative planning loop.
+
+```bash
+specks plan "add a health check endpoint"  # Create from idea
+specks plan .specks/specks-existing.md     # Revise existing speck
+specks plan --name myfeature "add caching" # Specify speck name
+specks plan --context design.md "new API"  # Include context files
+```
+
+The planning loop: interviewer gathers requirements, planner creates speck, critic reviews, interviewer presents results. Loop continues until you approve.
+
+### `specks execute`
+
+Execute a speck step-by-step with agent orchestration.
+
+```bash
+specks execute .specks/specks-1.md                    # Execute all steps
+specks execute .specks/specks-1.md --start-step "#step-2"  # Start from step
+specks execute .specks/specks-1.md --dry-run          # Preview without executing
+specks execute .specks/specks-1.md --commit-policy auto    # Auto-commit after steps
+```
+
+### `specks setup`
+
+Manage Claude Code integration.
+
+```bash
+specks setup claude          # Install Claude Code skills to project
+specks setup claude --check  # Check skill installation status
+specks setup claude --force  # Force reinstall skills
+```
+
 ## Agent Workflow
 
 Specks uses a multi-agent architecture for creating and implementing specifications:
@@ -193,7 +227,7 @@ Specks follow a structured markdown format. See `.specks/specks-skeleton.md` for
 
 ## Beads Integration
 
-Specks integrates with [Beads](https://github.com/specks-dev/beads) for issue/task tracking. This enables two-way synchronization between speck steps and external work items.
+Specks integrates with [Beads](https://github.com/kocienda/beads) for issue/task tracking. This enables two-way synchronization between speck steps and external work items.
 
 ### Requirements
 
@@ -350,6 +384,56 @@ pull_checkbox_mode = "checkpoints"  # What to check: "checkpoints" or "all"
 | E010 | Broken reference |
 | E011 | Circular dependency |
 | E013 | Beads not initialized |
+| E019 | Claude CLI not installed |
+| E020 | Agent invocation failed |
+| E021 | Agent timeout |
+| E022 | Monitor halted execution |
+
+## Troubleshooting
+
+### "Claude CLI not installed"
+
+The `plan` and `execute` commands require Claude Code:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### "Not initialized"
+
+Run `specks init` in your project directory to create the `.specks/` directory.
+
+### "Skills not found"
+
+If you installed specks via binary download, install the Claude Code skills:
+
+```bash
+specks setup claude
+```
+
+### Validation Errors
+
+Check the specific issues with:
+
+```bash
+specks validate specks-problem.md --json
+```
+
+Common issues: missing sections, invalid anchor format, broken references.
+
+### Agent Timeout
+
+For complex operations, increase the timeout:
+
+```bash
+specks execute .specks/specks-complex.md --timeout 900
+```
+
+## Documentation
+
+- **[Getting Started Guide](docs/getting-started.md)** - Installation, setup, and core concepts
+- **[Tutorial: Create Your First Speck](docs/tutorials/first-speck.md)** - Walk through the planning workflow
+- **[Tutorial: Execute a Plan](docs/tutorials/execute-plan.md)** - Walk through the execution workflow
 
 ## License
 
