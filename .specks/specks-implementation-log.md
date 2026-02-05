@@ -93,6 +93,68 @@ Entries are sorted newest-first.
 
 ---
 
+## [specks-2.md] Step 3: Create Slash Command Skills for Claude Code Internal Use | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- [D10] Dual invocation paths - CLI and Claude Code internal invocation
+- [D03] Iterative planning loop - loop until user approval
+- [D09] Execute command workflow - director's S10 execution protocol
+- Concept C02: Planning Loop State Machine (#c02-planning-loop)
+- `agents/specks-director.md` - Director agent specification for both modes
+- `.claude/skills/implement-plan/SKILL.md` - Existing skill pattern to follow
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `.claude/skills/specks-plan/` directory | Done |
+| Create `SKILL.md` with YAML frontmatter (name, description, argument-hint) | Done |
+| Document skill invocation: `/specks-plan "idea"` or `/specks-plan path/to/speck.md` | Done |
+| Skill invokes director agent with mode=plan | Done |
+| Skill has access to AskUserQuestion tool for interactive dialogue | Done |
+| Document input modes: fresh idea vs revision of existing speck | Done |
+| Document the iterative loop behavior inside Claude Code | Done |
+| Create `.claude/skills/specks-execute/` directory | Done |
+| Create `SKILL.md` with YAML frontmatter | Done |
+| Document skill invocation: `/specks-execute path/to/speck.md [options]` | Done |
+| Skill invokes director agent with mode=execute | Done |
+| Document supported options (start-step, end-step, commit-policy, checkpoint-mode) | Done |
+| Document run directory creation and artifact collection | Done |
+| Ensure both skills reference the director agent definition | Done |
+
+**Files Created:**
+- `.claude/skills/specks-plan/SKILL.md` - Planning slash command skill (166 lines) with YAML frontmatter, invocation modes, workflow diagram, and integration documentation
+- `.claude/skills/specks-execute/SKILL.md` - Execution slash command skill (227 lines) with YAML frontmatter, 5-phase workflow diagram, options table, and error handling documentation
+
+**Files Modified:**
+- `.specks/specks-2.md` - Checked off all Step 3 tasks, tests, and checkpoints
+
+**Test Results:**
+- Manual test: `/specks-plan "test idea"` enters iterative loop inside Claude Code: PASS
+- Manual test: `/specks-plan .specks/specks-existing.md` enters revision mode: PASS
+- Manual test: `/specks-execute` with test speck creates run directory: PASS
+- Manual test: Interactive dialogue works via AskUserQuestion tool: PASS
+- `cargo nextest run`: 151 tests passed (no code changes, skills are markdown files)
+
+**Checkpoints Verified:**
+- `.claude/skills/specks-plan/SKILL.md` exists with proper structure: PASS
+- `.claude/skills/specks-execute/SKILL.md` exists with proper structure: PASS
+- Skills follow same patterns as existing skills (implement-plan, etc.): PASS
+- YAML frontmatter includes name, description, argument-hint: PASS
+
+**Key Decisions/Notes:**
+- Skills invoke director agent via Task tool with mode=plan or mode=execute
+- Both skills document identical outcomes whether invoked via CLI or slash command
+- specks-plan skill documents the punch list approach from interviewer agent
+- specks-execute skill includes full 5-phase workflow diagram matching director spec
+- Options documented in specks-execute match CLI flags from Spec S02
+- Run directory structure documented matches D15 specification
+- Skills reference director agent but don't duplicate its full specification
+
+---
+
 ## [specks-2.md] Step 2: Implement specks plan Command | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05
