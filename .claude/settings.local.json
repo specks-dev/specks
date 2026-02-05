@@ -22,7 +22,15 @@
       "Bash(bd ready:*)",
       "Bash(uuidgen:*)",
       "Bash(git -C /Users/kocienda/Mounts/u/src/specks status)",
-      "Bash(git -C /Users/kocienda/Mounts/u/src/specks diff --stat)"
+      "Bash(git -C /Users/kocienda/Mounts/u/src/specks diff --stat)",
+      "Bash(pgrep:*)",
+      "Bash(bd daemon:*)",
+      "Bash(bd daemon start:*)",
+      "Bash(bd daemons stop:*)",
+      "Bash(kill:*)",
+      "Bash(bd delete:*)",
+      "Bash(tests/bin/claude-mock:*)",
+      "Bash(SPECKS_CLAUDE_MOCK_OUTPUT=\"test output\" tests/bin/claude-mock:*)"
     ]
   }
 }

@@ -104,6 +104,19 @@ pub enum SpecksError {
     /// Step anchor not found
     #[error("step anchor not found: {0}")]
     StepAnchorNotFound(String),
+
+    // === Agent errors (E019-E021) ===
+    /// E019: Claude CLI not installed
+    #[error("E019: Claude CLI not installed. Install Claude Code from https://claude.ai/download")]
+    ClaudeCliNotInstalled,
+
+    /// E020: Agent invocation failed
+    #[error("E020: Agent invocation failed: {reason}")]
+    AgentInvocationFailed { reason: String },
+
+    /// E021: Agent timeout
+    #[error("E021: Agent timeout after {secs} seconds")]
+    AgentTimeout { secs: u64 },
 }
 
 impl SpecksError {
@@ -131,6 +144,9 @@ impl SpecksError {
             SpecksError::BeadsNotInstalled => "E005", // Beads CLI error
             SpecksError::BeadsCommand(_) => "E016",   // Beads command error
             SpecksError::StepAnchorNotFound(_) => "E017", // Step anchor not found
+            SpecksError::ClaudeCliNotInstalled => "E019",
+            SpecksError::AgentInvocationFailed { .. } => "E020",
+            SpecksError::AgentTimeout { .. } => "E021",
         }
     }
 
@@ -182,6 +198,10 @@ impl SpecksError {
             | SpecksError::StepBeadNotFound { .. } => 13, // Beads not initialized
 
             SpecksError::Parse { .. } => 1, // Parse errors are validation errors
+
+            SpecksError::ClaudeCliNotInstalled => 6, // Claude CLI not installed
+
+            SpecksError::AgentInvocationFailed { .. } | SpecksError::AgentTimeout { .. } => 1, // Agent errors
         }
     }
 }
@@ -219,5 +239,24 @@ mod tests {
             err.to_string(),
             "E003: Invalid metadata Status value: invalid (must be draft/active/done)"
         );
+    }
+
+    #[test]
+    fn test_agent_error_codes() {
+        let err = SpecksError::ClaudeCliNotInstalled;
+        assert_eq!(err.code(), "E019");
+        assert_eq!(err.exit_code(), 6);
+
+        let err = SpecksError::AgentInvocationFailed {
+            reason: "test failure".to_string(),
+        };
+        assert_eq!(err.code(), "E020");
+        assert_eq!(err.exit_code(), 1);
+        assert!(err.to_string().contains("test failure"));
+
+        let err = SpecksError::AgentTimeout { secs: 300 };
+        assert_eq!(err.code(), "E021");
+        assert_eq!(err.exit_code(), 1);
+        assert!(err.to_string().contains("300 seconds"));
     }
 }

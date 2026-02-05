@@ -6,6 +6,59 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 1: Agent Invocation Infrastructure | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- [D02] Shell out to Claude CLI - decision to shell out rather than direct API calls
+- Concept C01: CLI to Agent Bridge - architecture for specks plan/execute bridging to claude CLI
+- Error Model (#error-model) - error codes E019, E020, E021 specifications
+- `crates/specks-core/src/error.rs` - existing error patterns
+- `tests/bin/bd-fake` - mock CLI pattern for testing
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create agent.rs module with AgentRunner struct | Done |
+| Implement `check_claude_cli()` to verify claude is installed | Done |
+| Implement `invoke_agent()` to shell out with proper arguments | Done |
+| Parse agent output and capture artifacts | Done |
+| Handle timeout with configurable duration | Done |
+| Add E019 (Claude CLI not installed) to error.rs | Done |
+| Add E020 (Agent invocation failed) to error.rs | Done |
+| Add E021 (Agent timeout) to error.rs | Done |
+| Create tests/bin/claude-mock for testing | Done |
+
+**Files Created:**
+- `crates/specks/src/agent.rs` - Agent invocation module (531 lines) with AgentRunner, AgentConfig, AgentResult structs and helper functions
+- `tests/bin/claude-mock` - Mock claude CLI for testing (41 lines), environment-variable-driven
+
+**Files Modified:**
+- `crates/specks/src/main.rs` - Added `mod agent;` declaration
+- `crates/specks-core/src/error.rs` - Added E019 (ClaudeCliNotInstalled), E020 (AgentInvocationFailed), E021 (AgentTimeout) error variants with proper exit codes
+- `.specks/specks-2.md` - Checked off all Step 1 tasks, tests, and checkpoints
+
+**Test Results:**
+- `cargo nextest run`: 128 tests passed (15 new agent tests + 1 new error test)
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo test` passes (new tests): PASS (128 tests)
+- Agent invocation with mock returns expected result: PASS
+- E019 error displays install instructions: PASS
+
+**Key Decisions/Notes:**
+- AgentRunner uses polling-based timeout rather than async for simplicity
+- Mock claude CLI controlled via environment variables (SPECKS_CLAUDE_MOCK_OUTPUT, SPECKS_CLAUDE_MOCK_EXIT, etc.)
+- Helper functions provided for common agent configs: `interviewer_config()`, `planner_config()`, `critic_config()`, `director_config()`
+- Error codes follow plan specification: E019 exit code 6, E020/E021 exit code 1
+- Test count exceeds specification: 15 tests delivered vs 4 specified
+- Reviewer report approved implementation with zero issues
+
+---
+
 ## [specks-2.md] Step 0: Create Interviewer Agent Definition | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

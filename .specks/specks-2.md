@@ -884,27 +884,27 @@ tests/fixtures/
 - Error codes E019, E020, E021 in specks-core
 
 **Tasks:**
-- [ ] Create agent.rs module with AgentRunner struct
-- [ ] Implement `check_claude_cli()` to verify claude is installed
-- [ ] Implement `invoke_agent()` to shell out with proper arguments
-- [ ] Parse agent output and capture artifacts
-- [ ] Handle timeout with configurable duration
-- [ ] Add E019 (Claude CLI not installed) to error.rs
-- [ ] Add E020 (Agent invocation failed) to error.rs
-- [ ] Add E021 (Agent timeout) to error.rs
-- [ ] Create tests/bin/claude-mock for testing
+- [x] Create agent.rs module with AgentRunner struct
+- [x] Implement `check_claude_cli()` to verify claude is installed
+- [x] Implement `invoke_agent()` to shell out with proper arguments
+- [x] Parse agent output and capture artifacts
+- [x] Handle timeout with configurable duration
+- [x] Add E019 (Claude CLI not installed) to error.rs
+- [x] Add E020 (Agent invocation failed) to error.rs
+- [x] Add E021 (Agent timeout) to error.rs
+- [x] Create tests/bin/claude-mock for testing
 
 **Tests:**
-- [ ] Unit test: check_claude_cli returns appropriate result
-- [ ] Unit test: invoke_agent constructs correct command line
-- [ ] Unit test: timeout handling works correctly
-- [ ] Integration test: mock claude CLI produces expected output
+- [x] Unit test: check_claude_cli returns appropriate result
+- [x] Unit test: invoke_agent constructs correct command line
+- [x] Unit test: timeout handling works correctly
+- [x] Integration test: mock claude CLI produces expected output
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo test` passes (new tests)
-- [ ] Agent invocation with mock returns expected result
-- [ ] E019 error displays install instructions
+- [x] `cargo build` succeeds
+- [x] `cargo test` passes (new tests)
+- [x] Agent invocation with mock returns expected result
+- [x] E019 error displays install instructions
 
 **Rollback:**
 - Revert commit, remove agent.rs

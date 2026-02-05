@@ -1,5 +1,6 @@
 //! specks CLI - From ideas to implementation via multi-agent orchestration
 
+mod agent;
 mod cli;
 mod commands;
 mod output;
