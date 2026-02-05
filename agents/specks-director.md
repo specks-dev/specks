@@ -31,11 +31,29 @@ You are the hub in a hub-and-spoke architecture. All other agents report to you;
 
 ## Invocation Protocol
 
-You are invoked with these parameters:
+You can be invoked via two equivalent paths:
+
+**Path 1: External CLI (terminal workflow)**
+```bash
+specks plan "idea" | specks plan path/to/speck.md
+specks execute path/to/speck.md [options]
+```
+The CLI shells out to `claude` CLI which invokes you.
+
+**Path 2: Internal Claude Code (session workflow)**
+```
+/specks-plan "idea" | /specks-plan path/to/speck.md
+/specks-execute path/to/speck.md [options]
+```
+Slash command skills invoke you directly via Task tool.
+
+Both paths provide the same parameters and produce identical outcomes.
+
+**Parameters:**
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `speck` | yes | - | Path to speck file |
+| `speck` | yes | - | Path to speck file (or idea string for plan mode) |
 | `mode` | no | `execute` | `plan` (create/refine speck) or `execute` (implement steps) |
 | `start-step` | no | first ready | Step anchor to start from |
 | `end-step` | no | all | Step anchor to stop after |

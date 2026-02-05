@@ -6,6 +6,54 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 0: Create Interviewer Agent Definition | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- [D03] Iterative planning loop - interviewer bookends the process
+- [D04] Interviewer agent for user interaction - proactive punch list approach
+- Concept C02: Planning Loop State Machine - gather and present modes
+- `agents/specks-planner.md` - YAML frontmatter pattern
+- `agents/specks-critic.md` - agent interaction patterns
+- `agents/specks-director.md` - orchestration context
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/specks-interviewer.md` with YAML frontmatter | Done |
+| Define agent role: gather requirements, present results, collect feedback | Done |
+| Specify tools: Read, Grep, Glob, Bash, AskUserQuestion | Done |
+| Document input modes: fresh idea vs revision of existing speck | Done |
+| Document output format for planner handoff | Done |
+| Document proactive punch list behavior (4 sub-items) | Done |
+| Document flexible behavior (3 sub-items) | Done |
+| Document punch list mechanics (4 sub-items) | Done |
+| Add decision tree for "ready or revise?" interaction | Done |
+
+**Files Created:**
+- `agents/specks-interviewer.md` - New interviewer agent definition (368 lines)
+- `.claude/agents/specks-interviewer.md` - Copy for Claude Code integration
+
+**Files Modified:**
+- `.specks/specks-2.md` - Checked off all Step 0 tasks and checkpoints
+
+**Checkpoints Verified:**
+- `agents/specks-interviewer.md` exists with proper structure: PASS
+- Agent definition follows same patterns as other agents: PASS
+- YAML frontmatter includes name, description, tools, model: PASS
+- Punch list behavior is clearly documented in agent definition: PASS
+
+**Key Decisions/Notes:**
+- Agent has two primary modes: Gather Mode (collect requirements) and Present Mode (show results with punch list)
+- Punch list items come from three sources: critic feedback, interviewer's own analysis, and user concerns
+- Items are prioritized as High/Medium/Low, with High blocking implementation
+- Agent is flexible to follow user's lead while maintaining its own tracking of unresolved issues
+- Output formats use JSON schemas for integration with director agent
+
+---
+
 ## [specks-1.md] Step 9: End-to-End Validation | COMPLETE | 2026-02-04
 
 **Completed:** 2026-02-04
