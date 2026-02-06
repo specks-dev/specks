@@ -13,6 +13,7 @@
 //! The `PlanningMode` enum is passed explicitly to `PlanningLoop::new()` so the
 //! caller specifies which mode is in use.
 
+mod cli_gather;
 mod types;
 
 use std::path::{Path, PathBuf};
@@ -24,6 +25,9 @@ use crate::agent::AgentRunner;
 
 // Re-export types from the types module
 pub use types::{LoopContext, LoopOutcome, LoopState, PlanMode, PlanningMode, UserDecision};
+
+// Re-export CLI gather types
+pub use cli_gather::{CliGatherer, GatherResult};
 
 /// Planning loop manager
 pub struct PlanningLoop {
@@ -243,11 +247,35 @@ impl PlanningLoop {
 
     /// Run the interviewer gather phase
     ///
-    /// In CLI mode, this will eventually use CLI prompts instead of the agent.
+    /// Per [D18], in CLI mode the CLI code handles interaction directly.
     /// In Claude Code mode, this invokes the interviewer agent.
     fn run_interviewer_gather(&mut self) -> Result<(), SpecksError> {
-        // Per [D18], in CLI mode we will eventually use CLI prompts.
-        // For now, both modes use the agent (to be refactored in Step 8.3.4)
+        match self.mode {
+            PlanningMode::Cli => self.run_cli_gather(),
+            PlanningMode::ClaudeCode => self.run_agent_gather(),
+        }
+    }
+
+    /// Run the CLI-mode gather phase using inquire prompts
+    ///
+    /// Per [D18], the CLI itself acts as the interviewer in CLI mode.
+    fn run_cli_gather(&mut self) -> Result<(), SpecksError> {
+        let gatherer = cli_gather::CliGatherer::new();
+        let result = gatherer.gather(self.adapter.as_ref(), &self.context)?;
+
+        if !result.user_confirmed {
+            // User cancelled during gather phase
+            return Err(SpecksError::UserAborted);
+        }
+
+        self.context.requirements = Some(result.requirements);
+        Ok(())
+    }
+
+    /// Run the agent-mode gather phase using the interviewer agent
+    ///
+    /// This is used in Claude Code mode where the interviewer agent handles interaction.
+    fn run_agent_gather(&mut self) -> Result<(), SpecksError> {
         let progress_handle = if !self.quiet {
             Some(
                 self.adapter

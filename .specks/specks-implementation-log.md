@@ -6,6 +6,58 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.4: Implement CLI-Mode Gather Phase | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Phase 2.0 plan, Step 8.3.4 specification
+- `crates/specks/src/planning_loop/mod.rs` - Planning loop module with mode support
+- `crates/specks/src/planning_loop/types.rs` - PlanningMode and LoopContext types
+- `crates/specks-core/src/interaction.rs` - InteractionAdapter trait definition
+- Design decision [D18] CLI is interviewer
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `cli_gather.rs` with `CliGatherer` struct | Done |
+| Implement `CliGatherer::gather()` method | Done |
+| `GatherResult` with `requirements` and `user_confirmed` fields | Done |
+| Implement `Scope` enum (Full, Minimal, Custom) | Done |
+| Implement gathering workflow for new ideas | Done |
+| Implement gathering workflow for revisions | Done |
+| Format gathered info into prompt for planner | Done |
+| Update `PlanningLoop` to branch on mode in gather phase | Done |
+| Unit test: `CliGatherer` with mock adapter | Done |
+| Unit test: Revision mode prompt includes existing speck info | Done |
+
+**Files Created:**
+- `crates/specks/src/planning_loop/cli_gather.rs` - CLI gather implementation with `CliGatherer`, `GatherResult`, and `Scope` types
+
+**Files Modified:**
+- `crates/specks/src/planning_loop/mod.rs` - Added `mod cli_gather`, exports, and mode branching in `run_interviewer_gather()`
+
+**Test Results:**
+- `cargo nextest run`: 263 tests passed (13 new tests for cli_gather)
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo nextest run` passes: PASS (263 tests)
+
+**Key Decisions/Notes:**
+- Per [D18], the CLI acts as the interviewer in CLI mode, gathering requirements directly from the user
+- `GatherResult` struct holds `requirements: String` and `user_confirmed: bool`
+- `Scope` enum has variants: `Full`, `Minimal`, `Custom(String)` for scope selection
+- New idea workflow: displays idea, asks scope (select), asks tests (confirm), shows summary, confirms to proceed
+- Revision workflow: displays speck path, extracts summary from existing speck, asks what to change (text), confirms to proceed
+- `PlanningLoop::run_interviewer_gather()` now branches on `PlanningMode`:
+  - `Cli` → calls `run_cli_gather()` using `CliGatherer`
+  - `ClaudeCode` → calls `run_agent_gather()` using interviewer agent
+- Fixed thread-safety issue in test mock: changed `RefCell<Vec<T>>` to `Mutex<Vec<T>>` and `AtomicUsize` for indices since `InteractionAdapter` requires `Send + Sync`
+
+---
+
 ## [specks-2.md] Step 8.3.3: Create PlanningMode and Restructure Module | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

@@ -1929,32 +1929,32 @@ When gathering requirements in CLI mode, the CLI performs these interactions:
 The gathered information becomes the prompt for the planner agent.
 
 **Tasks:**
-- [ ] Create `cli_gather.rs` with `CliGatherer` struct
-- [ ] Implement `CliGatherer::gather(&self, adapter: &dyn InteractionAdapter, context: &LoopContext) -> Result<GatherResult, SpecksError>`
-- [ ] `GatherResult` contains:
+- [x] Create `cli_gather.rs` with `CliGatherer` struct
+- [x] Implement `CliGatherer::gather(&self, adapter: &dyn InteractionAdapter, context: &LoopContext) -> Result<GatherResult, SpecksError>`
+- [x] `GatherResult` contains:
   - `requirements: String` - Formatted requirements for planner
   - `user_confirmed: bool` - Whether user confirmed understanding
-- [ ] Implement gathering workflow:
+- [x] Implement gathering workflow:
   - Display idea/speck path being worked on
   - Ask scope question (if new idea): `ask_select` with Full/Minimal/Custom
   - Ask tests question: `ask_confirm` for including tests
   - Show understanding summary
   - Ask confirmation: `ask_confirm` to proceed
-- [ ] For revision mode:
+- [x] For revision mode:
   - Read and display current speck summary
   - Ask what to change: `ask_text` for revision description
-- [ ] Format gathered info into prompt for planner
-- [ ] Update `PlanningLoop` to branch on mode in gather phase:
+- [x] Format gathered info into prompt for planner
+- [x] Update `PlanningLoop` to branch on mode in gather phase:
   - `Cli`: Use `CliGatherer::gather()`
   - `ClaudeCode`: Use interviewer agent invocation
 
 **Tests:**
-- [ ] Unit test: `CliGatherer` with mock adapter returns expected format
-- [ ] Unit test: Revision mode prompt includes existing speck info
+- [x] Unit test: `CliGatherer` with mock adapter returns expected format
+- [x] Unit test: Revision mode prompt includes existing speck info
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
 
 **Rollback:**
 - Remove cli_gather.rs, revert mod.rs changes
