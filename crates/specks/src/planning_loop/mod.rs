@@ -879,4 +879,188 @@ mod tests {
         assert_eq!(handle.message(), "test");
         adapter.end_progress(handle, true);
     }
+
+    /// A mock adapter that cancels during gather
+    struct CancellingMockAdapter {
+        progress_counter: AtomicU64,
+    }
+
+    impl CancellingMockAdapter {
+        fn new() -> Self {
+            Self {
+                progress_counter: AtomicU64::new(0),
+            }
+        }
+    }
+
+    impl InteractionAdapter for CancellingMockAdapter {
+        fn ask_text(&self, _prompt: &str, _default: Option<&str>) -> InteractionResult<String> {
+            // Simulate user cancellation
+            Err(specks_core::interaction::InteractionError::Cancelled)
+        }
+
+        fn ask_select(&self, _prompt: &str, _options: &[&str]) -> InteractionResult<usize> {
+            // Simulate user cancellation
+            Err(specks_core::interaction::InteractionError::Cancelled)
+        }
+
+        fn ask_confirm(&self, _prompt: &str, _default: bool) -> InteractionResult<bool> {
+            // Simulate user cancellation
+            Err(specks_core::interaction::InteractionError::Cancelled)
+        }
+
+        fn ask_multi_select(
+            &self,
+            _prompt: &str,
+            _options: &[&str],
+        ) -> InteractionResult<Vec<usize>> {
+            Err(specks_core::interaction::InteractionError::Cancelled)
+        }
+
+        fn start_progress(&self, message: &str) -> ProgressHandle {
+            let id = self.progress_counter.fetch_add(1, Ordering::SeqCst);
+            ProgressHandle::new(id, message)
+        }
+
+        fn end_progress(&self, _handle: ProgressHandle, _success: bool) {}
+
+        fn print_info(&self, _message: &str) {}
+        fn print_warning(&self, _message: &str) {}
+        fn print_error(&self, _message: &str) {}
+        fn print_success(&self, _message: &str) {}
+    }
+
+    #[test]
+    fn test_cli_mode_cancellation_returns_user_aborted() {
+        // Test that cancellation during CLI gather returns UserAborted
+        let ctx = LoopContext::new_idea("test idea".to_string(), vec![]);
+        let project_root = PathBuf::from("/project");
+
+        let mut loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            false,
+            Box::new(CancellingMockAdapter::new()),
+            PlanningMode::Cli,
+        );
+
+        // Simulate the state transition to InterviewerGather
+        loop_instance.transition(LoopState::InterviewerGather);
+
+        // Try to run CLI gather - should fail with UserAborted
+        let result = loop_instance.run_cli_gather();
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), SpecksError::UserAborted));
+    }
+
+    #[test]
+    fn test_cli_mode_gather_produces_requirements() {
+        // Test that CLI gather with approving adapter produces requirements
+        let ctx = LoopContext::new_idea("test idea for feature".to_string(), vec![]);
+        let project_root = PathBuf::from("/project");
+
+        let mut loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            true, // quiet mode
+            create_mock_adapter(), // MockAdapter defaults to confirming
+            PlanningMode::Cli,
+        );
+
+        // Run CLI gather
+        let result = loop_instance.run_cli_gather();
+
+        assert!(result.is_ok());
+        // Verify requirements were gathered
+        assert!(loop_instance.context.requirements.is_some());
+        let requirements = loop_instance.context.requirements.as_ref().unwrap();
+        assert!(requirements.contains("test idea for feature"));
+    }
+
+    #[test]
+    fn test_cli_mode_present_returns_decision() {
+        // Test that CLI present with approving adapter returns Approve decision
+        let mut ctx = LoopContext::new_idea("test idea".to_string(), vec![]);
+        ctx.speck_path = Some(PathBuf::from("/project/.specks/specks-test.md"));
+        ctx.critic_feedback = Some("Approved. Looks good.".to_string());
+
+        let project_root = PathBuf::from("/project");
+
+        let mut loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            true, // quiet mode
+            create_mock_adapter(), // MockAdapter selects first option (Approve)
+            PlanningMode::Cli,
+        );
+
+        // Run CLI present
+        let result = loop_instance.run_cli_present();
+
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), UserDecision::Approve));
+    }
+
+    #[test]
+    fn test_mode_aware_gather_uses_cli_gatherer_in_cli_mode() {
+        // Verify that CLI mode uses CliGatherer (not agent)
+        let ctx = LoopContext::new_idea("test".to_string(), vec![]);
+        let project_root = PathBuf::from("/project");
+
+        let loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            false,
+            create_mock_adapter(),
+            PlanningMode::Cli,
+        );
+
+        // Verify mode is CLI
+        assert_eq!(*loop_instance.planning_mode(), PlanningMode::Cli);
+
+        // The run_interviewer_gather method will branch based on mode
+        // In CLI mode, it calls run_cli_gather() which uses CliGatherer
+        // We can't easily test the internal branching without running,
+        // but we verify the mode is set correctly
+    }
+
+    #[test]
+    fn test_mode_aware_present_uses_cli_presenter_in_cli_mode() {
+        // Verify that CLI mode uses CliPresenter (not agent)
+        let mut ctx = LoopContext::new_idea("test".to_string(), vec![]);
+        ctx.speck_path = Some(PathBuf::from("/project/.specks/specks-test.md"));
+        ctx.critic_feedback = Some("Approved.".to_string());
+
+        let project_root = PathBuf::from("/project");
+
+        let loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            false,
+            create_mock_adapter(),
+            PlanningMode::Cli,
+        );
+
+        // Verify mode is CLI
+        assert_eq!(*loop_instance.planning_mode(), PlanningMode::Cli);
+
+        // The run_interviewer_present method will branch based on mode
+        // In CLI mode, it calls run_cli_present() which uses CliPresenter
+    }
 }

@@ -1737,23 +1737,38 @@ specks setup claude --check --global  # Check global installation
 
 ---
 
-#### Step 8.3: Interaction Adapter System {#step-8-3}
+#### Step 8.3: Clarifier Agent and Unified Interaction Architecture {#step-8-3}
 
 **Depends on:** #step-8-2
 
-**Purpose:** Enable mode-specific, excellent user interaction by abstracting interaction patterns behind an adapter trait. CLI mode uses polished terminal prompts; Claude Code mode delegates interaction to the interviewer agent.
+**Purpose:** Enable intelligent, context-aware user interaction by introducing a clarifier agent that generates relevant questions before planning. Both CLI and Claude Code modes benefit from LLM-generated questions, creating a consistent user experience.
 
 **Context:**
 
-The `specks plan` CLI command hangs because agents try to use `AskUserQuestion` tool, but in `--print` mode the user cannot interact. The root cause is that agent-driven interaction does not work outside Claude Code. The solution is an `InteractionAdapter` trait that abstracts interaction patterns, with mode-specific implementations.
+The initial implementation had a fundamental UX problem: CLI mode asked generic, hard-coded questions ("What scope? Full/Minimal/Custom") while Claude Code mode used the interviewer agent. This created two entirely different user experiences for the same operation.
+
+The root cause was an architectural mismatch: the interviewer agent was designed to both generate questions AND present them, but its `AskUserQuestion` tool only works inside Claude Code. This led to a workaround where CLI mode bypassed the interviewer entirely and used dumb prompts.
+
+The solution separates concerns:
+1. **Question generation** becomes a dedicated agent (the clarifier) that runs first
+2. **Presentation** becomes a thin layer that works identically in both modes
+3. **Plan review** stays with the critic (unchanged)
 
 **Design Decisions:**
 
-- **[D15] Specks Owns CLI Interaction** {#d15-cli-interaction}: In CLI mode, specks itself gathers user input using `inquire` crate and passes responses to agents as context. The interviewer agent runs without `AskUserQuestion` tool.
+- **[D15] Specks Owns CLI Interaction** {#d15-cli-interaction}: In CLI mode, specks itself handles user interaction using `inquire` crate. Agents provide content (questions, feedback); CLI presents it.
 
-- **[D16] Agents Own Claude Code Interaction** {#d16-cc-interaction}: In Claude Code mode (via skills), the interviewer agent uses `AskUserQuestion` natively. No Rust adapter is needed; the interviewer IS the adapter.
+- **[D16] Agents Own Claude Code Interaction** {#d16-cc-interaction}: In Claude Code mode (via skills), the interviewer agent uses `AskUserQuestion` to present content from other agents.
 
 - **[D17] Graceful Non-TTY Fallback** {#d17-non-tty}: When stdin is not a TTY (CI, pipes), use sensible defaults or fail fast with clear message rather than hanging.
+
+- **[D21] Clarifier Agent Generates Questions** {#d21-clarifier-generates}: A dedicated clarifier agent analyzes ideas and generates context-aware clarifying questions before planning begins. Rationale: separates question generation (LLM intelligence) from presentation (UI layer), allowing both CLI and Claude Code to benefit from intelligent questions.
+
+- **[D22] Interviewer is Presentation-Only in Claude Code** {#d22-interviewer-presentation}: In Claude Code mode, the interviewer agent becomes a presentation layer that consumes clarifier/critic output and uses `AskUserQuestion` to interact with the user. Rationale: separating generation from presentation creates cleaner architecture.
+
+- **[D23] CLI Presents Agent Output Directly** {#d23-cli-presents-directly}: In CLI mode, the planning loop code presents clarifier/critic output directly via inquire prompts, without invoking the interviewer agent. Rationale: the intelligence is in clarifier/critic output, not in presentation.
+
+- **[D24] Clarifier Runs Every Iteration** {#d24-clarifier-every-iteration}: The clarifier agent runs in EVERY iteration of the planning loop, not just at the start. First iteration: analyzes the idea and generates clarifying questions. Subsequent iterations: analyzes critic feedback and generates questions about what to revise. This makes the clarifier the single source of intelligent questions throughout the entire planning process.
 
 **Dependencies to add:**
 ```toml
@@ -1762,6 +1777,109 @@ indicatif = "0.17"   # Progress spinners
 owo-colors = "4"     # Colored output
 ctrlc = "3.4"        # Ctrl+C handling
 ```
+
+**Planning Loop Flow:**
+
+The clarifier agent runs in EVERY iteration of the loop - it's the single source of intelligent questions throughout. On the first iteration it analyzes the idea; on subsequent iterations it analyzes the critic's feedback and generates questions about what to revise.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Planning Loop                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────┐ ◄───────────────────────────────────────────┐ │
+│  │  Clarifier   │     First iteration: analyzes idea          │ │
+│  │    Agent     │     Subsequent: analyzes critic feedback    │ │
+│  └──────┬───────┘                                             │ │
+│         │ Questions                                           │ │
+│         ▼                                                     │ │
+│  ┌──────────────┐                                             │ │
+│  │  Presenter   │ ──── CLI: inquire prompts                   │ │
+│  │   (mode)     │      CC: interviewer + AskUserQuestion      │ │
+│  └──────┬───────┘                                             │ │
+│         │ Answers                                             │ │
+│         ▼                                                     │ │
+│  ┌──────────────┐                                             │ │
+│  │   Planner    │ ──── Creates/revises speck from input       │ │
+│  │    Agent     │                                             │ │
+│  └──────┬───────┘                                             │ │
+│         │ Draft speck                                         │ │
+│         ▼                                                     │ │
+│  ┌──────────────┐                                             │ │
+│  │    Critic    │ ──── Reviews plan quality                   │ │
+│  │    Agent     │                                             │ │
+│  └──────┬───────┘                                             │ │
+│         │ Feedback                                            │ │
+│         ▼                                                     │ │
+│  Approve? ──Yes──► Done                                       │ │
+│     │                                                         │ │
+│    No                                                         │ │
+│     │                                                         │ │
+│     └─────────────────────────────────────────────────────────┘ │
+│         (critic feedback goes to clarifier for next iteration)  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Clarifier Agent Output Format:**
+
+The clarifier produces the same output format whether analyzing an idea or critic feedback:
+
+```json
+{
+  "mode": "idea" | "revision",
+  "analysis": {
+    "understood_intent": "Brief summary of what user wants / what needs revision",
+    "relevant_context": ["file.rs - existing pattern", "config.toml - constraint"],
+    "identified_ambiguities": ["unclear if CLI or library", "no error handling spec"]
+  },
+  "questions": [
+    {
+      "question": "Should this support both CLI and library usage?",
+      "options": ["CLI only", "Library only", "Both"],
+      "why_asking": "Affects API design and module structure",
+      "default": "CLI only"
+    }
+  ],
+  "assumptions_if_no_answer": [
+    "Will assume CLI only if not specified"
+  ]
+}
+```
+
+- **mode: "idea"** - First iteration, analyzing the user's original idea
+- **mode: "revision"** - Subsequent iterations, analyzing critic feedback for revision
+
+**Enriched Requirements Format (output of presentation layer):**
+
+```json
+{
+  "original_idea": "...",
+  "clarifier_analysis": { ... },
+  "user_answers": {
+    "question_1": "selected_option",
+    "question_2": "selected_option"
+  },
+  "enriched_requirements": "Formatted prompt for planner"
+}
+```
+
+**New Files:**
+
+| File | Purpose |
+|------|---------|
+| `agents/specks-clarifier.md` | Clarifier agent definition |
+| `crates/specks/src/planning_loop/clarifier.rs` | Clarifier invocation and output parsing |
+
+**New Symbols:**
+
+| Symbol | Kind | Location | Notes |
+|--------|------|----------|-------|
+| `ClarifierInput` | enum | `planning_loop/clarifier.rs` | `Idea(String)` or `CriticFeedback(String)` |
+| `ClarifierOutput` | struct | `planning_loop/clarifier.rs` | Parsed clarifier response |
+| `ClarifierQuestion` | struct | `planning_loop/clarifier.rs` | Single question with options |
+| `invoke_clarifier` | fn | `planning_loop/clarifier.rs` | Invoke clarifier agent |
+| `EnrichedRequirements` | struct | `planning_loop/types.rs` | Idea + analysis + answers |
 
 ---
 
@@ -1778,9 +1896,9 @@ ctrlc = "3.4"        # Ctrl+C handling
 - Updated `crates/specks-core/src/lib.rs` - Export interaction module
 
 **Tasks:**
-- [x] Add dependencies to `crates/specks-core/Cargo.toml`: `inquire`, `indicatif`, `owo-colors`
-- [x] Create `interaction.rs` module with `InteractionAdapter` trait
-- [x] Define trait methods:
+- [ ] Add dependencies to `crates/specks-core/Cargo.toml`: `inquire`, `indicatif`, `owo-colors`
+- [ ] Create `interaction.rs` module with `InteractionAdapter` trait
+- [ ] Define trait methods:
   - `ask_text(&self, prompt: &str, default: Option<&str>) -> Result<String>`
   - `ask_select(&self, prompt: &str, options: &[&str]) -> Result<usize>`
   - `ask_confirm(&self, prompt: &str, default: bool) -> Result<bool>`
@@ -1791,18 +1909,18 @@ ctrlc = "3.4"        # Ctrl+C handling
   - `print_warning(&self, message: &str)`
   - `print_error(&self, message: &str)`
   - `print_success(&self, message: &str)`
-- [x] Define `ProgressHandle` type for tracking spinners
-- [x] Define `InteractionError` enum with variants for cancellation, timeout, non-tty
-- [x] Export trait and types from lib.rs
+- [ ] Define `ProgressHandle` type for tracking spinners
+- [ ] Define `InteractionError` enum with variants for cancellation, timeout, non-tty
+- [ ] Export trait and types from lib.rs
 
 **Tests:**
-- [x] Unit test: trait is object-safe (can use `dyn InteractionAdapter`)
-- [x] Unit test: error types implement std::error::Error
+- [ ] Unit test: trait is object-safe (can use `dyn InteractionAdapter`)
+- [ ] Unit test: error types implement std::error::Error
 
 **Checkpoint:**
-- [x] `cargo build` succeeds
-- [x] `cargo nextest run` passes
-- [x] Trait compiles and is usable as trait object
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Trait compiles and is usable as trait object
 
 **Rollback:**
 - Remove interaction.rs, revert Cargo.toml changes
@@ -1825,19 +1943,19 @@ ctrlc = "3.4"        # Ctrl+C handling
 - Updated `crates/specks/Cargo.toml` - Add ctrlc dependency
 
 **Tasks:**
-- [x] Add `ctrlc = "3.4"` to `crates/specks/Cargo.toml`
-- [x] Create `interaction/` module directory
-- [x] Implement `CliAdapter` struct with TTY detection
-- [x] Implement `ask_text` using `inquire::Text`
-- [x] Implement `ask_select` using `inquire::Select`
-- [x] Implement `ask_confirm` using `inquire::Confirm`
-- [x] Implement `ask_multi_select` using `inquire::MultiSelect`
-- [x] Implement `start_progress` using `indicatif::ProgressBar::new_spinner()`
-- [x] Implement `end_progress` with success/failure styling
-- [x] Implement `print_*` methods using `owo-colors` for consistent styling
-- [x] Add TTY check: if not TTY, return `InteractionError::NonTty` or use defaults
-- [x] Set up Ctrl+C handler with `ctrlc` crate for graceful cancellation
-- [x] Handle Ctrl+C during prompts: return `InteractionError::Cancelled`
+- [ ] Add `ctrlc = "3.4"` to `crates/specks/Cargo.toml`
+- [ ] Create `interaction/` module directory
+- [ ] Implement `CliAdapter` struct with TTY detection
+- [ ] Implement `ask_text` using `inquire::Text`
+- [ ] Implement `ask_select` using `inquire::Select`
+- [ ] Implement `ask_confirm` using `inquire::Confirm`
+- [ ] Implement `ask_multi_select` using `inquire::MultiSelect`
+- [ ] Implement `start_progress` using `indicatif::ProgressBar::new_spinner()`
+- [ ] Implement `end_progress` with success/failure styling
+- [ ] Implement `print_*` methods using `owo-colors` for consistent styling
+- [ ] Add TTY check: if not TTY, return `InteractionError::NonTty` or use defaults
+- [ ] Set up Ctrl+C handler with `ctrlc` crate for graceful cancellation
+- [ ] Handle Ctrl+C during prompts: return `InteractionError::Cancelled`
 
 **Color Scheme:**
 - Info: default/white
@@ -1846,13 +1964,13 @@ ctrlc = "3.4"        # Ctrl+C handling
 - Success: green
 
 **Tests:**
-- [x] Unit test: `CliAdapter::new()` detects TTY correctly
-- [x] Unit test: non-TTY mode returns appropriate errors
-- [x] Integration test: manual verification of prompt styling (document in test comments)
+- [ ] Unit test: `CliAdapter::new()` detects TTY correctly
+- [ ] Unit test: non-TTY mode returns appropriate errors
+- [ ] Integration test: manual verification of prompt styling (document in test comments)
 
 **Checkpoint:**
-- [x] `cargo build` succeeds
-- [x] `cargo nextest run` passes
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
 - [ ] Manual test: `CliAdapter` prompts work in terminal
 - [ ] Manual test: Ctrl+C cancels gracefully
 
@@ -1876,24 +1994,24 @@ ctrlc = "3.4"        # Ctrl+C handling
 - `crates/specks/src/planning_loop/types.rs` - Shared types and PlanningMode enum
 
 **Tasks:**
-- [x] Create `planning_loop/` directory
-- [x] Move `planning_loop.rs` to `planning_loop/mod.rs`
-- [x] Create `types.rs` with:
+- [ ] Create `planning_loop/` directory
+- [ ] Move `planning_loop.rs` to `planning_loop/mod.rs`
+- [ ] Create `types.rs` with:
   - `PlanningMode` enum (`Cli`, `ClaudeCode`)
   - Move `LoopState`, `PlanMode`, `LoopOutcome`, `LoopContext`, `UserDecision` to types.rs
-- [x] Update `PlanningLoop::new()` to accept `mode: PlanningMode` parameter
-- [x] Store mode in `PlanningLoop` struct
-- [x] Update mod.rs to re-export types
-- [x] Update imports in `commands/plan.rs` (pass `PlanningMode::Cli`)
+- [ ] Update `PlanningLoop::new()` to accept `mode: PlanningMode` parameter
+- [ ] Store mode in `PlanningLoop` struct
+- [ ] Update mod.rs to re-export types
+- [ ] Update imports in `commands/plan.rs` (pass `PlanningMode::Cli`)
 
 **Tests:**
-- [x] Existing tests continue to pass
-- [x] Unit test: `PlanningMode` serialization/display
+- [ ] Existing tests continue to pass
+- [ ] Unit test: `PlanningMode` serialization/display
 
 **Checkpoint:**
-- [x] `cargo build` succeeds
-- [x] `cargo nextest run` passes
-- [x] Module structure is clean
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Module structure is clean
 
 **Rollback:**
 - Revert to single-file planning_loop.rs
@@ -1902,197 +2020,312 @@ ctrlc = "3.4"        # Ctrl+C handling
 
 ---
 
-##### Step 8.3.4: Implement CLI-Mode Gather Phase {#step-8-3-4}
+##### Step 8.3.4: Create Clarifier Agent Definition {#step-8-3-4}
 
 **Depends on:** #step-8-3-3
 
-**Commit:** `feat(plan): implement CLI-mode requirement gathering with inquire prompts`
+**Commit:** `feat(agents): add specks-clarifier agent for intelligent requirement gathering`
 
-**References:** [D18] CLI is interviewer, (#d18-cli-is-interviewer)
+**References:** [D21] Clarifier generates questions, [D24] Clarifier runs every iteration, (#d21-clarifier-generates, #d24-clarifier-every-iteration)
 
 **Artifacts:**
-- `crates/specks/src/planning_loop/cli_gather.rs` - CLI gather implementation
-- Updated `crates/specks/src/planning_loop/mod.rs` - Wire up CLI gather
+- `agents/specks-clarifier.md` - Clarifier agent definition
 
-**Concept: CLI Gather Workflow**
+**Concept: Clarifier Agent**
 
-When gathering requirements in CLI mode, the CLI performs these interactions:
+The clarifier agent is the single source of intelligent questions throughout the ENTIRE planning loop. It runs in every iteration:
 
-1. **Display the idea**: Print what the user provided
-2. **Explore codebase**: Show progress spinner while analyzing
-3. **Ask clarifying questions** (if needed):
-   - "What scope should this feature have? [Full/Minimal/Custom]"
-   - "Should this include tests? [Yes/No]"
-   - Custom text prompts based on idea analysis
-4. **Confirm understanding**: "I'll create a plan for [summary]. Continue? [Y/n]"
+- **First iteration:** Analyzes the user's idea, explores the codebase for context, identifies ambiguities, and generates clarifying questions
+- **Subsequent iterations:** Analyzes the critic's feedback and generates questions about what the user wants to revise
 
-The gathered information becomes the prompt for the planner agent.
+Unlike the old hard-coded questions ("What scope?"), the clarifier:
+
+1. **Analyzes context** - the idea (first run) or critic feedback (subsequent runs)
+2. **Explores the codebase** for relevant patterns, files, constraints
+3. **Identifies ambiguities** and gaps that need user input
+4. **Generates relevant questions** with options (not free-form)
+5. **Explains why each question matters** so users understand the impact
+
+The clarifier does NOT use `AskUserQuestion` - it's pure analysis. The presentation layer (CLI or interviewer) handles user interaction.
 
 **Tasks:**
-- [x] Create `cli_gather.rs` with `CliGatherer` struct
-- [x] Implement `CliGatherer::gather(&self, adapter: &dyn InteractionAdapter, context: &LoopContext) -> Result<GatherResult, SpecksError>`
-- [x] `GatherResult` contains:
-  - `requirements: String` - Formatted requirements for planner
-  - `user_confirmed: bool` - Whether user confirmed understanding
-- [x] Implement gathering workflow:
-  - Display idea/speck path being worked on
-  - Ask scope question (if new idea): `ask_select` with Full/Minimal/Custom
-  - Ask tests question: `ask_confirm` for including tests
-  - Show understanding summary
-  - Ask confirmation: `ask_confirm` to proceed
-- [x] For revision mode:
-  - Read and display current speck summary
-  - Ask what to change: `ask_text` for revision description
-- [x] Format gathered info into prompt for planner
-- [x] Update `PlanningLoop` to branch on mode in gather phase:
-  - `Cli`: Use `CliGatherer::gather()`
-  - `ClaudeCode`: Use interviewer agent invocation
+
+*Agent Definition:*
+- [ ] Create `agents/specks-clarifier.md` with:
+  - Tools: Read, Grep, Glob, Bash (NO AskUserQuestion)
+  - Model: sonnet (fast, good analysis)
+  - Purpose: Analyze ideas/feedback and generate clarifying questions
+  - Output format: JSON with mode, analysis, questions array
+- [ ] Create `.claude/agents/specks-clarifier.md` (mirrored copy for Claude Code)
+- [ ] Define question format: question, options, why_asking, default
+- [ ] Include examples of good vs bad questions:
+  - Good: "Should this support both CLI and library usage?" (specific, actionable)
+  - Bad: "Can you tell me more?" (vague, unhelpful)
+- [ ] Document handling of detailed ideas (return empty questions array)
+- [ ] Document assumptions_if_no_answer for each question
+- [ ] Document dual-mode operation: analyzing idea vs analyzing critic feedback
+
+*Code Integration (adding clarifier to required agents):*
+- [ ] Update `crates/specks/src/agent.rs`:
+  - Add `"specks-clarifier"` to `PLAN_REQUIRED_AGENTS` (line 23)
+  - Add `clarifier_config()` function with tools: Read, Grep, Glob, Bash
+- [ ] Update test `test_plan_required_agents_contains_expected` (line 1029-1033):
+  - Add assertion for `"specks-clarifier"`
+  - Change `len() == 3` to `len() == 4`
+- [ ] Update `crates/specks/src/planning_loop/mod.rs` line 6:
+  - Comment: "The loop runs: clarifier -> presenter -> planner -> critic -> (loop)"
+- [ ] Update `crates/specks/src/commands/plan.rs` line 4:
+  - Comment: "planning loop with clarifier, planner, and critic agents"
+- [ ] Update `crates/specks/src/cli.rs` line 15:
+  - Update long_about text to include clarifier in agent list (11 agents)
+- [ ] Review `crates/specks/src/planning_loop/types.rs`:
+  - Consider if LoopState enum needs new states for clarifier flow
+  - Update state machine comments if needed
+
+*Test Updates:*
+- [ ] Update `tests/integration/plan-tests.sh` line 46:
+  - Add `specks-clarifier` to agent loop check
+- [ ] Update `crates/specks/tests/agent_integration_tests.rs`:
+  - Add `"specks-clarifier"` to `ALL_AGENTS` constant
 
 **Tests:**
-- [x] Unit test: `CliGatherer` with mock adapter returns expected format
-- [x] Unit test: Revision mode prompt includes existing speck info
+- [ ] Unit test: Agent file has valid YAML frontmatter
+- [ ] Unit test: `PLAN_REQUIRED_AGENTS` contains clarifier
+- [ ] Unit test: `clarifier_config()` returns correct tools
+- [ ] Integration test: ALL_AGENTS includes clarifier
+- [ ] Manual test: Agent can be loaded by agent resolver
 
 **Checkpoint:**
-- [x] `cargo build` succeeds
-- [x] `cargo nextest run` passes
+- [ ] `specks validate` passes
+- [ ] Agent file follows established patterns from other agents
+- [ ] Agent does NOT have AskUserQuestion in tools list
+- [ ] `cargo nextest run` passes (including updated agent count tests)
+- [ ] `verify_required_agents("plan", ...)` includes clarifier
+- [ ] `.claude/agents/specks-clarifier.md` exists and matches `agents/specks-clarifier.md`
 
 **Rollback:**
-- Remove cli_gather.rs, revert mod.rs changes
+- Delete `agents/specks-clarifier.md` and `.claude/agents/specks-clarifier.md`
 
 **Commit after all checkpoints pass.**
 
 ---
 
-##### Step 8.3.5: Implement CLI-Mode Present Phase {#step-8-3-5}
+##### Step 8.3.5: Add Clarifier Invocation to Planning Loop {#step-8-3-5}
 
 **Depends on:** #step-8-3-4
 
-**Commit:** `feat(plan): implement CLI-mode result presentation with inquire prompts`
+**Commit:** `feat(plan): add clarifier phase to planning loop`
 
-**References:** [D18] CLI is interviewer, (#d18-cli-is-interviewer)
-
-**Artifacts:**
-- `crates/specks/src/planning_loop/cli_present.rs` - CLI present implementation
-- Updated `crates/specks/src/planning_loop/mod.rs` - Wire up CLI present
-
-**Concept: CLI Present Workflow**
-
-When presenting results in CLI mode, the CLI performs these interactions:
-
-1. **Show speck path**: Print where the speck was created
-2. **Show summary**: Brief overview of what the plan covers
-3. **Show critic feedback**: Formatted critic assessment with colors
-4. **Present punch list** (if issues):
-   - High priority items in red
-   - Medium priority items in yellow
-   - Low priority items in normal text
-5. **Ask for decision**: Select prompt with options:
-   - "Approve this plan"
-   - "Revise (provide feedback)"
-   - "Abort planning"
-6. **If revise**: Text prompt for feedback, loops back to planner
-
-**Color Scheme:**
-- Approved items: green
-- High priority issues: red
-- Medium priority issues: yellow
-- Low priority issues: default
-- Speck path: cyan
-- Section headers: bold
-
-**Tasks:**
-- [x] Create `cli_present.rs` with `CliPresenter` struct
-- [x] Implement `CliPresenter::present(&self, adapter: &dyn InteractionAdapter, context: &LoopContext) -> Result<UserDecision, SpecksError>`
-- [x] Implement presentation workflow:
-  - Print speck path with success message
-  - Print speck summary (title, step count, scope)
-  - Print critic feedback formatted with colors:
-    - Issues: red/yellow based on severity
-    - Approval status: green if approved, yellow if concerns
-  - Build punch list from critic feedback
-  - Present punch list with priority colors
-- [x] Implement decision prompt:
-  - `ask_select` with options: ["Approve this plan", "Revise with feedback", "Abort planning"]
-  - If "Revise": `ask_text` for feedback
-  - Return `UserDecision::Approve`, `UserDecision::Revise(feedback)`, or `UserDecision::Abort`
-- [x] Update `PlanningLoop` to branch on mode in present phase:
-  - `Cli`: Use `CliPresenter::present()`
-  - `ClaudeCode`: Use interviewer agent invocation
-
-**Tests:**
-- [x] Unit test: `CliPresenter` with mock adapter returns correct decision types
-- [x] Unit test: Punch list formatting is correct
-
-**Checkpoint:**
-- [x] `cargo build` succeeds
-- [x] `cargo nextest run` passes
-
-**Rollback:**
-- Remove cli_present.rs, revert mod.rs changes
-
-**Commit after all checkpoints pass.**
-
----
-
-##### Step 8.3.6: Integrate Mode-Aware Loop and Test CLI End-to-End {#step-8-3-6}
-
-**Depends on:** #step-8-3-5
-
-**Commit:** `feat(plan): integrate mode-aware planning loop for CLI`
-
-**References:** [D18] CLI is interviewer, [D20] Shared agent invocation, (#d18-cli-is-interviewer, #d20-shared-agent-invocation)
+**References:** [D21] Clarifier generates questions, [D24] Clarifier runs every iteration, (#d21-clarifier-generates, #d24-clarifier-every-iteration)
 
 **Artifacts:**
-- Updated `crates/specks/src/planning_loop/mod.rs` - Full mode-aware run()
-- Updated `crates/specks/src/commands/plan.rs` - Pass CLI mode
+- `crates/specks/src/planning_loop/clarifier.rs` - Clarifier module
+- Updated `crates/specks/src/planning_loop/mod.rs` - Add clarify phase
+- Updated `crates/specks/src/planning_loop/types.rs` - Add new types
 
 **Tasks:**
-- [ ] Refactor `PlanningLoop::run()` to use mode-aware gather and present
-- [ ] Verify planner and critic invocations are unchanged (shared between modes)
-- [ ] Update `commands/plan.rs` to explicitly pass `PlanningMode::Cli`
-- [ ] Test full CLI flow manually:
-  - Run `specks plan "add a greeting command"`
-  - Verify: CLI prompts appear (not spinner-then-hang)
-  - Verify: Can answer questions interactively
-  - Verify: See planner progress spinner
-  - Verify: See critic progress spinner
-  - Verify: See formatted results
-  - Verify: Can approve, revise, or abort
-- [ ] Test Ctrl+C handling at each prompt stage
-- [ ] Test revision mode: `specks plan .specks/specks-1.md`
-
-**Manual Test Script:**
-```bash
-# Test 1: New idea with approval
-specks plan "add a hello world command"
-# Expected: CLI prompts, interactive flow, creates speck
-
-# Test 2: Ctrl+C during gather
-specks plan "add another command"
-# Press Ctrl+C during prompts
-# Expected: Clean exit with message
-
-# Test 3: Revision mode
-specks plan .specks/specks-2.md
-# Expected: Shows current speck, asks what to change
-
-# Test 4: Revise loop
-specks plan "simple feature"
-# At decision prompt, select "Revise with feedback"
-# Provide feedback
-# Expected: Loop back to planner, new draft, present again
-```
+- [ ] Create `clarifier.rs` with:
+  - `ClarifierOutput` struct matching JSON output format
+  - `ClarifierQuestion` struct with question, options, why_asking, default
+  - `ClarifierInput` enum: `Idea(String)` or `CriticFeedback(String)`
+  - `invoke_clarifier(input: ClarifierInput, project_root: &Path) -> Result<ClarifierOutput>`
+  - JSON parsing for clarifier response
+- [ ] Add `EnrichedRequirements` to `types.rs`:
+  - `original_idea: String`
+  - `clarifier_analysis: Option<ClarifierOutput>`
+  - `user_answers: HashMap<String, String>`
+  - `critic_feedback: Option<String>` - From previous iteration
+  - `fn to_planner_prompt(&self) -> String` - Format for planner input
+- [ ] Update `PlanningLoop::run()` to invoke clarifier in EVERY iteration:
+  - First iteration: `invoke_clarifier(ClarifierInput::Idea(idea))`
+  - Subsequent iterations: `invoke_clarifier(ClarifierInput::CriticFeedback(feedback))`
+  - Parse JSON response into ClarifierOutput
+  - Pass to presentation layer
+- [ ] Wire clarifier invocation using existing agent infrastructure
+- [ ] Handle case where clarifier returns empty questions array (proceed directly to planner)
 
 **Tests:**
-- [ ] Integration test: CLI mode creates speck (with mock Claude CLI)
-- [ ] Integration test: Cancellation returns UserAborted
+- [ ] Unit test: `ClarifierOutput` parsing from JSON
+- [ ] Unit test: `ClarifierQuestion` serialization
+- [ ] Unit test: `EnrichedRequirements::to_planner_prompt()` formatting
+- [ ] Integration test: Clarifier invocation with mock agent
 
 **Checkpoint:**
 - [ ] `cargo build` succeeds
 - [ ] `cargo nextest run` passes
-- [ ] Manual test: `specks plan "test"` uses interactive prompts
-- [ ] Manual test: Ctrl+C exits cleanly at any stage
-- [ ] Manual test: Revision mode works
+- [ ] Clarifier phase runs (even if questions not presented yet)
+
+**Rollback:**
+- Remove clarifier.rs, revert mod.rs and types.rs changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.6: Refactor CLI Gather to Present Clarifier Questions {#step-8-3-6}
+
+**Depends on:** #step-8-3-5
+
+**Commit:** `feat(cli): present clarifier questions instead of hard-coded prompts`
+
+**References:** [D23] CLI presents directly, (#d23-cli-presents-directly)
+
+**Artifacts:**
+- Updated `crates/specks/src/planning_loop/cli_gather.rs` - Present clarifier output
+
+**Concept: New CLI Gather Workflow**
+
+Instead of asking hard-coded questions ("What scope?"), CLI gather now:
+
+1. **Receives clarifier output** with intelligent, context-aware questions
+2. **Displays analysis summary** showing what the clarifier understood
+3. **For each question**: Uses `inquire::Select` with the options from clarifier
+4. **Shows "why asking"** as help text so users understand the impact
+5. **Collects answers** into HashMap keyed by question
+6. **Builds EnrichedRequirements** combining idea + analysis + answers
+
+**Tasks:**
+- [ ] Remove hard-coded scope/tests questions from `cli_gather.rs`
+- [ ] Add function to present clarifier questions:
+  - `present_clarifier_questions(adapter: &dyn InteractionAdapter, output: &ClarifierOutput) -> Result<HashMap<String, String>>`
+  - Display analysis summary (what clarifier understood)
+  - For each question: use `inquire::Select` with options
+  - Show "why asking" as help text
+  - Collect answers into HashMap
+- [ ] Handle case where clarifier returned empty questions:
+  - Display: "I understand what you want. Proceeding to create plan."
+  - Use `ask_confirm` to let user add any additional context
+- [ ] Update `CliGatherer::gather()` to:
+  - Invoke clarifier first
+  - Present questions via new function
+  - Build `EnrichedRequirements` from idea + clarifier output + answers
+- [ ] Return enriched requirements for planner
+
+**Tests:**
+- [ ] Unit test: Mock adapter receives correct question prompts
+- [ ] Unit test: Answers are correctly mapped to questions
+- [ ] Unit test: Empty questions case proceeds without prompts
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Hard-coded scope/tests questions removed from cli_gather.rs
+- [ ] Clarifier questions appear in terminal
+
+**Rollback:**
+- Revert cli_gather.rs changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.7: Update Interviewer Agent for Presentation Role {#step-8-3-7}
+
+**Depends on:** #step-8-3-5
+
+**Commit:** `refactor(agents): update interviewer to be presentation-focused`
+
+**References:** [D22] Interviewer is presentation-only, (#d22-interviewer-presentation)
+
+**Artifacts:**
+- Updated `agents/specks-interviewer.md` - Presentation-focused prompt
+- Updated `.claude/agents/specks-interviewer.md` - Mirrored copy for Claude Code
+
+**Concept: Interviewer as Presentation Layer**
+
+The interviewer agent no longer generates questions - the clarifier does that. The interviewer's new role is:
+
+1. **Receive clarifier output** with questions and analysis
+2. **Present questions** to user via `AskUserQuestion` tool
+3. **Add conversational polish** (explain context, be helpful)
+4. **Collect answers** and return them
+5. **Present critic feedback** (unchanged from before)
+
+**Tasks:**
+- [ ] Update `agents/specks-interviewer.md`:
+  - Update description: "Presents clarifier questions and critic feedback to users in Claude Code mode"
+  - Update Gather Mode section: receives clarifier output (does NOT generate questions)
+  - Add note: "Used in Claude Code mode only. CLI mode presents directly."
+  - Remove any question-generation logic from prompt
+  - Keep punch list behavior for critic feedback presentation
+- [ ] Update `.claude/agents/specks-interviewer.md` (mirrored copy):
+  - Apply same changes as above
+  - Ensure files match exactly
+
+**Tests:**
+- [ ] Manual test: Interviewer presents clarifier questions in Claude Code
+- [ ] Agent file validates correctly
+
+**Checkpoint:**
+- [ ] `specks validate` passes
+- [ ] Interviewer agent description accurately reflects new role
+- [ ] Interviewer still has AskUserQuestion in tools list
+- [ ] `agents/specks-interviewer.md` and `.claude/agents/specks-interviewer.md` are identical
+
+**Rollback:**
+- Revert agents/specks-interviewer.md to previous version
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.8: Integrate and Test End-to-End {#step-8-3-8}
+
+**Depends on:** #step-8-3-6, #step-8-3-7
+
+**Commit:** `feat(plan): integrate clarifier-based planning flow end-to-end`
+
+**References:** [D21] Clarifier generates questions, [D23] CLI presents directly, [D24] Clarifier runs every iteration, (#d21-clarifier-generates, #d23-cli-presents-directly, #d24-clarifier-every-iteration)
+
+**Artifacts:**
+- Updated `crates/specks/src/planning_loop/mod.rs` - Full integration
+- Updated `crates/specks/src/planning_loop/cli_present.rs` - Minor updates if needed
+- Integration tests
+
+**Tasks:**
+- [ ] Ensure full flow works: clarifier → present questions → planner → critic → present feedback
+- [ ] Verify planner receives enriched requirements with user answers
+- [ ] Test with various idea types:
+  - Vague idea: "add a feature" → expect multiple questions
+  - Detailed idea: "add X with Y and Z specifically" → expect fewer/no questions
+  - Revision: existing speck path → ask what to change
+- [ ] Verify user answers appear in generated plan context
+- [ ] Test cancellation at each prompt stage
+
+**Manual Test Script:**
+```bash
+# Test 1: Vague idea - expect clarifying questions
+specks plan "add a greeting command"
+# Expected: Clarifier asks about CLI/library, output format, etc.
+# NOT hard-coded "What scope?" questions
+
+# Test 2: Detailed idea - expect minimal questions
+specks plan "add a CLI greeting command that prints 'Hello, World!' to stdout and exits with code 0"
+# Expected: Clarifier may have no questions, proceeds to planner
+
+# Test 3: Verify answers affect plan
+specks plan "add error handling"
+# Answer the clarifier questions
+# Verify the generated plan reflects your answers
+
+# Test 4: Ctrl+C handling
+specks plan "test idea"
+# Press Ctrl+C during clarifier questions
+# Expected: Clean exit with message
+```
+
+**Tests:**
+- [ ] Integration test: Full flow with mock clarifier
+- [ ] Integration test: Clarifier questions presented via adapter
+- [ ] Integration test: User answers included in planner prompt
+- [ ] Integration test: Empty questions case skips to planner
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Manual test: CLI shows intelligent questions (not "What scope?")
+- [ ] Manual test: Answers affect generated plan
+- [ ] Manual test: Ctrl+C exits cleanly
 
 **Rollback:**
 - Revert integration changes
@@ -2101,133 +2334,61 @@ specks plan "simple feature"
 
 ---
 
-##### Step 8.3.7: Verify and Document Claude Code Mode {#step-8-3-7}
-
-**Depends on:** #step-8-3-6
-
-**Commit:** `docs: verify Claude Code mode and update skill documentation`
-
-**References:** [D16] CC interaction, (#d16-cc-interaction)
-
-**Artifacts:**
-- Updated `.claude/skills/specks-plan/SKILL.md` - Document interaction behavior
-- Updated `agents/specks-interviewer.md` - Clarify when agent is used
-
-**Tasks:**
-- [ ] Verify `/specks-plan` skill invokes interviewer agent (not CLI gather)
-- [ ] Update SKILL.md to explain:
-  - Inside Claude Code: interviewer agent handles all user interaction
-  - CLI commands: CLI handles interaction, agents do work
-- [ ] Add "Interaction Modes" section to SKILL.md explaining the difference
-- [ ] Update interviewer agent header to note: "Used in Claude Code mode only"
-- [ ] Create manual test for Claude Code mode:
-  1. Open Claude Code in test project
-  2. Run: `/specks-plan "add a greeting command"`
-  3. Verify: Interviewer asks questions via AskUserQuestion
-  4. Verify: Can answer naturally
-  5. Verify: Planning loop completes
-  6. Verify: Speck is created
-- [ ] Document any differences in behavior between modes
-
-**Checkpoint:**
-- [ ] `/specks-plan` works in Claude Code (manual test)
-- [ ] Interviewer uses AskUserQuestion correctly
-- [ ] Documentation is accurate
-- [ ] Both modes produce equivalent specks
-
-**Rollback:**
-- Revert documentation changes
-
-**Commit after all checkpoints pass.**
-
----
-
-##### Step 8.3.8: Polish UX and Add Non-Interactive Support {#step-8-3-8}
-
-**Depends on:** #step-8-3-7
-
-**Commit:** `feat(cli): polish CLI UX and add --yes flag for non-interactive mode`
-
-**References:** [D17] Non-TTY fallback, (#d17-non-tty)
-
-**Artifacts:**
-- `crates/specks/src/interaction/non_interactive.rs` - NonInteractiveAdapter
-- Updated CLI argument parsing
-- Updated `crates/specks/src/commands/plan.rs`
-
-**Tasks:**
-- [ ] Create `NonInteractiveAdapter` implementing `InteractionAdapter`:
-  - `ask_confirm` returns `true` (accept defaults)
-  - `ask_text` returns default or empty string
-  - `ask_select` returns first option
-  - Progress methods print minimal output
-  - Print methods write to stdout/stderr normally
-- [ ] Add `--yes` / `-y` flag to `specks plan` command
-- [ ] Add `--non-interactive` flag as alias
-- [ ] Detect CI environment: `CI=true`, `GITHUB_ACTIONS`, `JENKINS_URL`
-- [ ] Auto-select non-interactive mode when:
-  - `--yes` flag provided
-  - CI environment detected
-  - stdin is not a TTY (already handled by CliAdapter)
-- [ ] Print informative message when using defaults: "Running in non-interactive mode, using defaults"
-- [ ] Polish error messages:
-  - "Not a terminal - use --yes for non-interactive mode"
-  - "Cancelled by user"
-  - "Planning loop aborted"
-- [ ] Verify NO_COLOR environment variable is respected (owo-colors handles this)
-- [ ] Test on multiple terminals: macOS Terminal, iTerm2, VS Code terminal
-
-**Tests:**
-- [ ] Unit test: CI detection works for common CI systems
-- [ ] Unit test: NonInteractiveAdapter returns expected defaults
-- [ ] Integration test: `specks plan --yes "test"` runs without prompts
-
-**Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] `CI=true specks plan "test"` does not hang
-- [ ] `specks plan --yes "test"` accepts defaults
-- [ ] NO_COLOR=1 produces uncolored output
-
-**Rollback:**
-- Remove non_interactive.rs, revert CLI changes
-
-**Commit after all checkpoints pass.**
-
----
-
-##### Step 8.3.9: Create Architecture Documentation {#step-8-3-9}
+##### Step 8.3.9: Update Documentation {#step-8-3-9}
 
 **Depends on:** #step-8-3-8
 
-**Commit:** `docs: add interaction adapter architecture documentation`
+**Commit:** `docs: document clarifier agent and unified interaction architecture`
 
-**References:** [D15] CLI interaction, [D16] CC interaction, [D17] Non-TTY fallback, [D18] CLI is interviewer, (#d15-cli-interaction, #d16-cc-interaction, #d17-non-tty, #d18-cli-is-interviewer)
+**References:** [D21] Clarifier generates questions, [D22] Interviewer is presentation-only, [D23] CLI presents directly, (#d21-clarifier-generates, #d22-interviewer-presentation, #d23-cli-presents-directly)
 
 **Artifacts:**
-- `docs/architecture/interaction-system.md` - Architecture documentation
-- Updated `docs/getting-started.md` - Note about interaction modes
-- Updated README
+- Updated `CLAUDE.md` - Agent suite section
+- Updated `README.md` - Planning loop description
+- Updated `docs/getting-started.md` - Flow description
+- Updated `docs/tutorials/first-speck.md` - Loop explanation
+- Updated `.claude/skills/specks-plan/SKILL.md` - Agent list
+- Created/Updated `docs/architecture/interaction-system.md` - Full architecture
 
 **Tasks:**
-- [ ] Create `docs/architecture/interaction-system.md` documenting:
-  - The dual-mode architecture (CLI vs Claude Code)
-  - Why CLI mode doesn't use interviewer agent
-  - The `InteractionAdapter` trait and implementations
-  - How to add new interaction methods
-- [ ] Add "Interaction Modes" section to getting started guide
-- [ ] Update README with:
-  - CLI usage examples: `specks plan "idea"`
-  - Claude Code usage examples: `/specks-plan "idea"`
-  - Note about interactive vs non-interactive modes
-- [ ] Add troubleshooting section for common issues:
-  - "specks plan hangs" - likely non-TTY, use --yes
-  - "No prompts appear" - check terminal capabilities
+
+*CLAUDE.md (agent suite):*
+- [ ] Change "Ten agents work together" to "Eleven agents work together"
+- [ ] Add new entry: "**Clarifier** - Generates context-aware clarifying questions"
+- [ ] Update Interviewer description: "Presents clarifier/critic output to users (Claude Code mode)"
+
+*README.md:*
+- [ ] Update line ~149: Change "interviewer gathers requirements, planner creates speck, critic reviews, interviewer presents results" to reflect new clarifier-based flow
+- [ ] Update lines ~176-188: Add Clarifier to Agent Suite table, update Interviewer description
+
+*docs/getting-started.md:*
+- [ ] Update lines ~108-124: Add Clarifier to The Agent Suite table
+- [ ] Update lines ~150-162: Update workflow diagram (INTERVIEWER → CLARIFIER)
+- [ ] Update line ~216: Change "The interviewer asks clarifying questions" to describe clarifier role
+
+*docs/tutorials/first-speck.md:*
+- [ ] Update line ~8: Change "interviewer-planner-critic loop" to "clarifier-planner-critic loop"
+
+*.claude/skills/specks-plan/SKILL.md:*
+- [ ] Update line ~15: Change "interviewer, planner, and critic agents" to "clarifier, planner, and critic agents"
+- [ ] Explain that interviewer is now presentation-only in Claude Code mode
+
+*docs/architecture/interaction-system.md:*
+- [ ] Document the full clarifier → presenter → planner → critic → (loop) flow
+- [ ] Explain CLI mode vs Claude Code mode differences
+- [ ] Document ClarifierOutput JSON format
+- [ ] Include flow diagram
+
+*Examples to include:*
+- [ ] OLD hard-coded: "What scope should this feature have? [Full/Minimal/Custom]"
+- [ ] NEW clarifier: "Should this support both CLI and library usage?" (context-aware)
 
 **Checkpoint:**
-- [ ] Documentation is complete and accurate
-- [ ] Getting started guide covers both modes
-- [ ] README examples work as documented
+- [ ] `grep -r "Ten agents" docs/` returns no results
+- [ ] `grep -r "11 agents\|eleven agents" CLAUDE.md` finds the update
+- [ ] All flow descriptions mention clarifier (not just interviewer)
+- [ ] Skills documentation updated
+- [ ] Architecture doc exists and is accurate
 
 **Rollback:**
 - Revert documentation changes
@@ -2236,16 +2397,24 @@ specks plan "simple feature"
 
 ---
 
-**Step 8.3 Completion Checkpoint:**
-- [ ] Steps 8.3.1 through 8.3.9 completed
-- [ ] `specks plan "test"` works interactively in CLI with excellent UX
-- [ ] `specks plan --yes "test"` works non-interactively
-- [ ] `/specks-plan "test"` works in Claude Code with interviewer agent
-- [ ] Ctrl+C exits cleanly at any stage
-- [ ] Progress spinners show elapsed time
-- [ ] Colored output is clear and consistent
-- [ ] Documentation is complete
-- [ ] No regressions in existing functionality
+**Step 8.3 Summary: Clarifier Integration Complete** {#step-8-3-summary}
+
+After completing Steps 8.3.1-8.3.9, you will have:
+
+- **Infrastructure** (8.3.1-8.3.3): InteractionAdapter trait, CliAdapter, PlanningMode enum
+- **Clarifier agent** (8.3.4-8.3.5): Generates intelligent, context-aware questions
+- **CLI presentation** (8.3.6): Presents clarifier questions via inquire (no hard-coded prompts)
+- **Interviewer update** (8.3.7): Presentation-only role in Claude Code mode
+- **Integration** (8.3.8): Full flow working end-to-end
+- **Documentation** (8.3.9): Architecture documented, agent suite updated
+
+**Final Step 8.3 Checkpoint:**
+- [ ] `specks plan "vague idea"` asks intelligent questions (not "What scope?")
+- [ ] `specks plan "detailed idea"` asks fewer/no questions
+- [ ] Both CLI and Claude Code produce equivalent plans from same input
+- [ ] User answers are reflected in generated plans
+- [ ] All 11 agents documented in CLAUDE.md
+- [ ] No regressions in existing tests
 
 ---
 

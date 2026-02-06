@@ -6,6 +6,101 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3: Clarifier Agent Architecture Redesign | PLANNING | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Phase 2.0 plan, Step 8.3 complete section
+- `.specks/specks-skeleton.md` - Plan format reference
+- `crates/specks/src/agent.rs` - PLAN_REQUIRED_AGENTS, agent config functions
+- `crates/specks/src/planning_loop/mod.rs` - Planning loop flow
+- `crates/specks/src/commands/plan.rs` - Plan command implementation
+- `agents/specks-interviewer.md` - Current interviewer agent
+- `agents/specks-critic.md` - Current critic agent
+- `CLAUDE.md` - Agent suite documentation
+
+**Summary:**
+
+Major architectural redesign of Step 8.3 to introduce a **clarifier agent** that generates intelligent, context-aware questions. This replaces the problematic hard-coded questions in CLI mode and unifies the user experience across CLI and Claude Code modes.
+
+**Key Architectural Decisions Added:**
+
+| Decision | Description |
+|----------|-------------|
+| [D21] Clarifier Generates Questions | Dedicated agent analyzes ideas/feedback and generates context-aware questions |
+| [D22] Interviewer is Presentation-Only | In Claude Code mode, interviewer presents clarifier/critic output |
+| [D23] CLI Presents Agent Output Directly | CLI mode presents clarifier/critic output via inquire prompts |
+| [D24] Clarifier Runs Every Iteration | Clarifier runs in EVERY loop iteration, not just first |
+
+**Planning Loop Flow Change:**
+
+OLD: `interviewer -> planner -> critic -> interviewer -> (loop back to planner)`
+
+NEW: `clarifier -> presenter -> planner -> critic -> (loop back to clarifier)`
+
+The clarifier is now the single source of intelligent questions throughout the entire planning process.
+
+**Files Modified:**
+- `.specks/specks-2.md` - Complete redesign of Step 8.3 section:
+  - Updated purpose, context, and design decisions
+  - Added planning loop flow diagram
+  - Added ClarifierOutput JSON format specification
+  - Added ClarifierInput enum and EnrichedRequirements types
+  - Cleared checkboxes in Steps 8.3.1-8.3.3 for re-verification
+  - Expanded Step 8.3.4 with comprehensive code integration tasks
+  - Updated Step 8.3.7 to include mirrored agent files
+  - Expanded Step 8.3.9 with complete documentation update list
+
+**Code Integration Points Identified (via code-architect audit):**
+
+| Category | File | Change Required |
+|----------|------|-----------------|
+| Code | `crates/specks/src/agent.rs` | Add clarifier to PLAN_REQUIRED_AGENTS, add clarifier_config() |
+| Code | `crates/specks/src/cli.rs` | Update long_about agent list |
+| Code | `crates/specks/src/planning_loop/types.rs` | Review LoopState enum |
+| Test | `tests/integration/plan-tests.sh` | Add clarifier to agent loop |
+| Test | `crates/specks/tests/agent_integration_tests.rs` | Add to ALL_AGENTS |
+| Agent | `agents/specks-clarifier.md` | CREATE new agent |
+| Agent | `.claude/agents/specks-clarifier.md` | CREATE mirrored copy |
+| Agent | `agents/specks-interviewer.md` | UPDATE for presentation role |
+| Agent | `.claude/agents/specks-interviewer.md` | UPDATE mirrored copy |
+| Doc | `CLAUDE.md` | Update agent count (10 → 11) |
+| Doc | `README.md` | Update flow description and agent table |
+| Doc | `docs/getting-started.md` | Update agent table and workflow diagram |
+| Doc | `docs/tutorials/first-speck.md` | Update loop description |
+| Skill | `.claude/skills/specks-plan/SKILL.md` | Update agent list |
+
+**Substep Structure (Updated):**
+
+| Step | Title | Status |
+|------|-------|--------|
+| 8.3.1 | Core Interaction Adapter Trait | Needs re-verification |
+| 8.3.2 | CLI Adapter Implementation | Needs re-verification |
+| 8.3.3 | Create PlanningMode and Restructure Module | Needs re-verification |
+| 8.3.4 | Create Clarifier Agent Definition | Not started |
+| 8.3.5 | Add Clarifier Invocation to Planning Loop | Not started |
+| 8.3.6 | Refactor CLI Gather to Present Clarifier Questions | Not started |
+| 8.3.7 | Update Interviewer Agent for Presentation Role | Not started |
+| 8.3.8 | Integrate and Test End-to-End | Not started |
+| 8.3.9 | Update Documentation | Not started |
+
+**Key Decisions/Notes:**
+
+1. **Problem identified**: CLI mode had hard-coded, context-blind questions ("What scope? Full/Minimal/Custom") while Claude Code mode used intelligent LLM-driven questions via the interviewer agent.
+
+2. **Solution**: Separate concerns - clarifier agent generates questions (intelligence), presentation layer displays them (UI). Both modes benefit from same intelligent questions.
+
+3. **Clarifier runs every iteration**: Initially designed to run only at start, but revised to run in EVERY iteration. First iteration analyzes idea; subsequent iterations analyze critic feedback.
+
+4. **Critic role unchanged**: Critic stays focused on plan review. Does NOT generate questions.
+
+5. **Interviewer becomes presentation-only**: In Claude Code mode, interviewer receives clarifier output and presents via AskUserQuestion. In CLI mode, CLI code presents directly via inquire.
+
+6. **Checkboxes cleared**: Steps 8.3.1-8.3.3 checkboxes cleared for re-verification given substantial architectural changes.
+
+---
+
 ## [specks-2.md] Step 8.3.5: Implement CLI-Mode Present Phase | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05
