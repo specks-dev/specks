@@ -2185,32 +2185,32 @@ Instead of asking hard-coded questions ("What scope?"), CLI gather now:
 6. **Builds EnrichedRequirements** combining idea + analysis + answers
 
 **Tasks:**
-- [ ] Remove hard-coded scope/tests questions from `cli_gather.rs`
-- [ ] Add function to present clarifier questions:
+- [x] Remove hard-coded scope/tests questions from `cli_gather.rs`
+- [x] Add function to present clarifier questions:
   - `present_clarifier_questions(adapter: &dyn InteractionAdapter, output: &ClarifierOutput) -> Result<HashMap<String, String>>`
   - Display analysis summary (what clarifier understood)
   - For each question: use `inquire::Select` with options
   - Show "why asking" as help text
   - Collect answers into HashMap
-- [ ] Handle case where clarifier returned empty questions:
+- [x] Handle case where clarifier returned empty questions:
   - Display: "I understand what you want. Proceeding to create plan."
   - Use `ask_confirm` to let user add any additional context
-- [ ] Update `CliGatherer::gather()` to:
+- [x] Update `CliGatherer::gather()` to:
   - Invoke clarifier first
   - Present questions via new function
   - Build `EnrichedRequirements` from idea + clarifier output + answers
-- [ ] Return enriched requirements for planner
+- [x] Return enriched requirements for planner
 
 **Tests:**
-- [ ] Unit test: Mock adapter receives correct question prompts
-- [ ] Unit test: Answers are correctly mapped to questions
-- [ ] Unit test: Empty questions case proceeds without prompts
+- [x] Unit test: Mock adapter receives correct question prompts
+- [x] Unit test: Answers are correctly mapped to questions
+- [x] Unit test: Empty questions case proceeds without prompts
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] Hard-coded scope/tests questions removed from cli_gather.rs
-- [ ] Clarifier questions appear in terminal
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
+- [x] Hard-coded scope/tests questions removed from cli_gather.rs
+- [x] Clarifier questions appear in terminal
 
 **Rollback:**
 - Revert cli_gather.rs changes

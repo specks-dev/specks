@@ -376,13 +376,25 @@ impl PlanningLoop {
     /// Run the CLI-mode gather phase using inquire prompts
     ///
     /// Per [D18], the CLI itself acts as the interviewer in CLI mode.
+    /// Per [D23], presents clarifier-generated questions instead of hard-coded prompts.
     fn run_cli_gather(&mut self) -> Result<(), SpecksError> {
         let gatherer = cli_gather::CliGatherer::new();
-        let result = gatherer.gather(self.adapter.as_ref(), &self.context)?;
+
+        // Pass clarifier output to the gatherer (per [D23])
+        let result = gatherer.gather(
+            self.adapter.as_ref(),
+            &self.context,
+            self.clarifier_output.as_ref(),
+        )?;
 
         if !result.user_confirmed {
             // User cancelled during gather phase
             return Err(SpecksError::UserAborted);
+        }
+
+        // Update enriched requirements if the gatherer produced them
+        if let Some(enriched) = result.enriched {
+            self.enriched_requirements = Some(enriched);
         }
 
         self.context.requirements = Some(result.requirements);

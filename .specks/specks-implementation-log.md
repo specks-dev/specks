@@ -6,6 +6,62 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.6: Refactor CLI Gather to Present Clarifier Questions | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Step 8.3.6 specification
+- `[D23] CLI presents directly` - Design decision
+- `crates/specks/src/planning_loop/cli_gather.rs` - Existing CLI gather implementation
+- `crates/specks/src/planning_loop/clarifier.rs` - Clarifier types (ClarifierOutput, EnrichedRequirements)
+- `crates/specks/src/planning_loop/mod.rs` - Planning loop integration
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove hard-coded scope/tests questions from `cli_gather.rs` | Done |
+| Add `present_clarifier_output()` function to display analysis and questions | Done |
+| Add `display_analysis_summary()` for visual analysis display | Done |
+| Handle empty questions case with optional additional context | Done |
+| Update `CliGatherer::gather()` to accept clarifier output | Done |
+| Build `EnrichedRequirements` from idea + clarifier output + answers | Done |
+| Return enriched requirements in `GatherResult` | Done |
+| Update `PlanningLoop::run_cli_gather()` to pass clarifier output | Done |
+
+**Files Modified:**
+- `crates/specks/src/planning_loop/cli_gather.rs`:
+  - Removed `Scope` enum and hard-coded scope/tests questions
+  - Added `present_clarifier_output()` method for presenting clarifier questions via inquire
+  - Added `display_analysis_summary()` method for visual analysis display
+  - Updated `GatherResult` struct to include `enriched: Option<EnrichedRequirements>`
+  - Updated `gather()` signature to accept `Option<&ClarifierOutput>`
+  - Refactored `gather_new_idea()` and `gather_revision()` to use clarifier output
+  - Replaced all old tests with new tests for clarifier-based flow
+- `crates/specks/src/planning_loop/mod.rs`:
+  - Updated `run_cli_gather()` to pass `self.clarifier_output.as_ref()` to gatherer
+  - Added code to update `self.enriched_requirements` when gatherer produces enriched output
+
+**Test Results:**
+- `cargo nextest run`: 306 tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo nextest run` passes: PASS
+- Hard-coded scope/tests questions removed from cli_gather.rs: PASS
+- Clarifier questions appear in terminal: PASS (manually verified)
+
+**Key Decisions/Notes:**
+- The new CLI gather presents clarifier-generated questions using `inquire::Select` for each question
+- When clarifier returns no questions, displays "✓ I understand what you want" and optionally asks for additional context
+- Analysis summary uses visual box characters for clear separation
+- Each question shows "why asking" explanation before the prompt
+- Default options are marked with "(default)" suffix in the options list
+- The `GatherResult` now carries `EnrichedRequirements` for downstream use by the planner
+
+---
+
 ## [specks-2.md] Step 8.3.5: Add Clarifier Invocation to Planning Loop | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05
