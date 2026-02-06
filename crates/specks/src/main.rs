@@ -3,6 +3,7 @@
 mod agent;
 mod cli;
 mod commands;
+mod interaction;
 mod output;
 mod planning_loop;
 mod share;

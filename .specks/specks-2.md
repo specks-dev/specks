@@ -1777,19 +1777,19 @@ ctrlc = "3.4"        # Ctrl+C handling
 - Updated `crates/specks/Cargo.toml` - Add ctrlc dependency
 
 **Tasks:**
-- [ ] Add `ctrlc = "3.4"` to `crates/specks/Cargo.toml`
-- [ ] Create `interaction/` module directory
-- [ ] Implement `CliAdapter` struct with TTY detection
-- [ ] Implement `ask_text` using `inquire::Text`
-- [ ] Implement `ask_select` using `inquire::Select`
-- [ ] Implement `ask_confirm` using `inquire::Confirm`
-- [ ] Implement `ask_multi_select` using `inquire::MultiSelect`
-- [ ] Implement `start_progress` using `indicatif::ProgressBar::new_spinner()`
-- [ ] Implement `end_progress` with success/failure styling
-- [ ] Implement `print_*` methods using `owo-colors` for consistent styling
-- [ ] Add TTY check: if not TTY, return `InteractionError::NonTty` or use defaults
-- [ ] Set up Ctrl+C handler with `ctrlc` crate for graceful cancellation
-- [ ] Handle Ctrl+C during prompts: return `InteractionError::Cancelled`
+- [x] Add `ctrlc = "3.4"` to `crates/specks/Cargo.toml`
+- [x] Create `interaction/` module directory
+- [x] Implement `CliAdapter` struct with TTY detection
+- [x] Implement `ask_text` using `inquire::Text`
+- [x] Implement `ask_select` using `inquire::Select`
+- [x] Implement `ask_confirm` using `inquire::Confirm`
+- [x] Implement `ask_multi_select` using `inquire::MultiSelect`
+- [x] Implement `start_progress` using `indicatif::ProgressBar::new_spinner()`
+- [x] Implement `end_progress` with success/failure styling
+- [x] Implement `print_*` methods using `owo-colors` for consistent styling
+- [x] Add TTY check: if not TTY, return `InteractionError::NonTty` or use defaults
+- [x] Set up Ctrl+C handler with `ctrlc` crate for graceful cancellation
+- [x] Handle Ctrl+C during prompts: return `InteractionError::Cancelled`
 
 **Color Scheme:**
 - Info: default/white
@@ -1798,13 +1798,13 @@ ctrlc = "3.4"        # Ctrl+C handling
 - Success: green
 
 **Tests:**
-- [ ] Unit test: `CliAdapter::new()` detects TTY correctly
-- [ ] Unit test: non-TTY mode returns appropriate errors
-- [ ] Integration test: manual verification of prompt styling (document in test comments)
+- [x] Unit test: `CliAdapter::new()` detects TTY correctly
+- [x] Unit test: non-TTY mode returns appropriate errors
+- [x] Integration test: manual verification of prompt styling (document in test comments)
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
 - [ ] Manual test: `CliAdapter` prompts work in terminal
 - [ ] Manual test: Ctrl+C cancels gracefully
 

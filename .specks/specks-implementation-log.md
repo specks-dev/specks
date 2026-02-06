@@ -6,6 +6,68 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.2: CLI Adapter Implementation | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Phase 2.0 plan file, Step 8.3.2 specification
+- Design decisions D15 (CLI interaction), D17 (Non-TTY fallback)
+- `crates/specks-core/src/interaction.rs` - InteractionAdapter trait from Step 8.3.1
+- `crates/specks/Cargo.toml` - Existing CLI dependencies
+- `crates/specks/src/main.rs` - Existing module structure
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add `ctrlc = "3.4"` to `crates/specks/Cargo.toml` | Done |
+| Create `interaction/` module directory | Done |
+| Implement `CliAdapter` struct with TTY detection | Done |
+| Implement `ask_text` using `inquire::Text` | Done |
+| Implement `ask_select` using `inquire::Select` | Done |
+| Implement `ask_confirm` using `inquire::Confirm` | Done |
+| Implement `ask_multi_select` using `inquire::MultiSelect` | Done |
+| Implement `start_progress` using `indicatif::ProgressBar::new_spinner()` | Done |
+| Implement `end_progress` with success/failure styling | Done |
+| Implement `print_*` methods using `owo-colors` for consistent styling | Done |
+| Add TTY check: if not TTY, return `InteractionError::NonTty` | Done |
+| Set up Ctrl+C handler with `ctrlc` crate for graceful cancellation | Done |
+| Handle Ctrl+C during prompts: return `InteractionError::Cancelled` | Done |
+| Unit test: `CliAdapter::new()` detects TTY correctly | Done |
+| Unit test: non-TTY mode returns appropriate errors | Done |
+| Integration test: manual verification of prompt styling (documented in code) | Done |
+
+**Files Created:**
+- `crates/specks/src/interaction/mod.rs` - CLI interaction module exports
+- `crates/specks/src/interaction/cli_adapter.rs` - CliAdapter implementation with TTY detection, Ctrl+C handling, all InteractionAdapter methods
+
+**Files Modified:**
+- `Cargo.toml` - Added `ctrlc = "3.4"` to workspace dependencies
+- `crates/specks/Cargo.toml` - Added `inquire`, `indicatif`, `owo-colors`, `ctrlc` dependencies
+- `crates/specks/src/main.rs` - Added `mod interaction`
+- `.specks/specks-2.md` - Checked off completed tasks and checkpoints
+
+**Test Results:**
+- `cargo nextest run`: 242 tests passed (12 new tests added)
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo nextest run` passes: PASS
+- Manual test: `CliAdapter` prompts work in terminal: PENDING (requires Step 8.3.3 integration)
+- Manual test: Ctrl+C cancels gracefully: PENDING (requires Step 8.3.3 integration)
+
+**Key Decisions/Notes:**
+- **Global Ctrl+C handler**: Uses atomic `CANCELLED` flag that can be checked before/during prompts
+- **TTY detection**: Uses `std::io::stdin().is_terminal()` from Rust 1.70+
+- **Error mapping**: `convert_inquire_error()` maps inquire errors to InteractionError variants
+- **Color scheme**: Info (white), Warning (yellow), Error (red bold), Success (green with checkmark)
+- **Progress spinners**: Cyan spinner with tick characters `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, 100ms tick rate
+- **Unused code warnings**: Expected until Step 8.3.3 integrates CliAdapter into planning loop
+- **Helper functions exported**: `setup_ctrl_c_handler()` and `reset_cancellation()` for use by commands
+
+---
+
 ## [specks-2.md] Step 8.3.1: Core Interaction Adapter Trait | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

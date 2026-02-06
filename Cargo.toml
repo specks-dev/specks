@@ -37,6 +37,7 @@ chrono = { version = "0.4", features = ["serde"] }
 inquire = "0.7"
 indicatif = "0.17"
 owo-colors = "4"
+ctrlc = "3.4"
 
 # Internal crates
 specks-core = { path = "crates/specks-core" }
