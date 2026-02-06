@@ -6,6 +6,60 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.5: Implement CLI-Mode Present Phase | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Phase 2.0 plan, Step 8.3.5 specification
+- `crates/specks-core/src/interaction.rs` - InteractionAdapter trait definition
+- `crates/specks/src/planning_loop/cli_gather.rs` - Pattern reference
+- `crates/specks/src/planning_loop/types.rs` - UserDecision enum
+- `crates/specks/src/planning_loop/mod.rs` - Integration point
+- Design decision [D18] CLI is interviewer
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `cli_present.rs` with `CliPresenter` struct | Done |
+| Implement `CliPresenter::present()` method | Done |
+| Implement presentation workflow with colors | Done |
+| Implement decision prompt (Approve/Revise/Abort) | Done |
+| Update `PlanningLoop` to branch on mode in present phase | Done |
+| Unit test: `CliPresenter` with mock adapter returns correct decision types | Done |
+| Unit test: Punch list formatting is correct | Done |
+
+**Files Created:**
+- `crates/specks/src/planning_loop/cli_present.rs` - CLI present implementation with `CliPresenter`, `CriticSummary`, `PunchListItem`, `Priority`, and `DecisionOption` types
+
+**Files Modified:**
+- `crates/specks/src/planning_loop/mod.rs` - Added `mod cli_present`, exports, and mode branching in `run_interviewer_present()`
+
+**Test Results:**
+- `cargo nextest run`: 279 tests passed (16 new tests for cli_present)
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo nextest run` passes: PASS (279 tests)
+
+**Key Decisions/Notes:**
+- Per [D18], the CLI acts as the interviewer in CLI mode for the present phase
+- `CriticSummary` extracts approval status based on keywords (approved, ready for implementation, looks good, no major issues)
+- `parse_critic_feedback()` extracts punch list items from bullet points and numbered lists
+- Priority assignment based on keywords:
+  - High: critical, blocking, must, error, missing required
+  - Medium: should, recommend, consider, warning
+  - Low: minor, optional, suggestion, could
+- Punch list displayed grouped by priority with appropriate print methods (error for high, warning for medium, info for low)
+- Decision prompt offers three options: Approve, Revise with feedback, Abort
+- Revise selection triggers follow-up `ask_text` prompt for feedback
+- `PlanningLoop::run_interviewer_present()` now branches on `PlanningMode`:
+  - `Cli` → calls `run_cli_present()` using `CliPresenter`
+  - `ClaudeCode` → calls `run_agent_present()` using interviewer agent
+
+---
+
 ## [specks-2.md] Step 8.3.4: Implement CLI-Mode Gather Phase | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

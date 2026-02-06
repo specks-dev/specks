@@ -14,6 +14,7 @@
 //! caller specifies which mode is in use.
 
 mod cli_gather;
+mod cli_present;
 mod types;
 
 use std::path::{Path, PathBuf};
@@ -28,6 +29,9 @@ pub use types::{LoopContext, LoopOutcome, LoopState, PlanMode, PlanningMode, Use
 
 // Re-export CLI gather types
 pub use cli_gather::{CliGatherer, GatherResult};
+
+// Re-export CLI present types
+pub use cli_present::{CliPresenter, CriticSummary, Priority, PunchListItem};
 
 /// Planning loop manager
 pub struct PlanningLoop {
@@ -446,11 +450,27 @@ impl PlanningLoop {
 
     /// Run the interviewer present phase and get user decision
     ///
-    /// In CLI mode, this will eventually use CLI prompts instead of the agent.
+    /// Per [D18], in CLI mode the CLI code handles interaction directly.
     /// In Claude Code mode, this invokes the interviewer agent.
     fn run_interviewer_present(&mut self) -> Result<UserDecision, SpecksError> {
-        // Per [D18], in CLI mode we will eventually use CLI prompts.
-        // For now, both modes use the agent (to be refactored in Step 8.3.5)
+        match self.mode {
+            PlanningMode::Cli => self.run_cli_present(),
+            PlanningMode::ClaudeCode => self.run_agent_present(),
+        }
+    }
+
+    /// Run the CLI-mode present phase using inquire prompts
+    ///
+    /// Per [D18], the CLI itself acts as the interviewer in CLI mode.
+    fn run_cli_present(&mut self) -> Result<UserDecision, SpecksError> {
+        let presenter = cli_present::CliPresenter::new();
+        presenter.present(self.adapter.as_ref(), &self.context)
+    }
+
+    /// Run the agent-mode present phase using the interviewer agent
+    ///
+    /// This is used in Claude Code mode where the interviewer agent handles interaction.
+    fn run_agent_present(&mut self) -> Result<UserDecision, SpecksError> {
         let progress_handle = if !self.quiet {
             Some(
                 self.adapter

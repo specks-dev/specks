@@ -2001,9 +2001,9 @@ When presenting results in CLI mode, the CLI performs these interactions:
 - Section headers: bold
 
 **Tasks:**
-- [ ] Create `cli_present.rs` with `CliPresenter` struct
-- [ ] Implement `CliPresenter::present(&self, adapter: &dyn InteractionAdapter, context: &LoopContext) -> Result<UserDecision, SpecksError>`
-- [ ] Implement presentation workflow:
+- [x] Create `cli_present.rs` with `CliPresenter` struct
+- [x] Implement `CliPresenter::present(&self, adapter: &dyn InteractionAdapter, context: &LoopContext) -> Result<UserDecision, SpecksError>`
+- [x] Implement presentation workflow:
   - Print speck path with success message
   - Print speck summary (title, step count, scope)
   - Print critic feedback formatted with colors:
@@ -2011,21 +2011,21 @@ When presenting results in CLI mode, the CLI performs these interactions:
     - Approval status: green if approved, yellow if concerns
   - Build punch list from critic feedback
   - Present punch list with priority colors
-- [ ] Implement decision prompt:
+- [x] Implement decision prompt:
   - `ask_select` with options: ["Approve this plan", "Revise with feedback", "Abort planning"]
   - If "Revise": `ask_text` for feedback
   - Return `UserDecision::Approve`, `UserDecision::Revise(feedback)`, or `UserDecision::Abort`
-- [ ] Update `PlanningLoop` to branch on mode in present phase:
+- [x] Update `PlanningLoop` to branch on mode in present phase:
   - `Cli`: Use `CliPresenter::present()`
   - `ClaudeCode`: Use interviewer agent invocation
 
 **Tests:**
-- [ ] Unit test: `CliPresenter` with mock adapter returns correct decision types
-- [ ] Unit test: Punch list formatting is correct
+- [x] Unit test: `CliPresenter` with mock adapter returns correct decision types
+- [x] Unit test: Punch list formatting is correct
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
 
 **Rollback:**
 - Remove cli_present.rs, revert mod.rs changes
