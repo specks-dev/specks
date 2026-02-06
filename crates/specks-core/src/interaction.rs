@@ -207,6 +207,12 @@ pub trait InteractionAdapter: Send + Sync {
     /// # Arguments
     /// * `message` - The success message to display (green color)
     fn print_success(&self, message: &str);
+
+    /// Print a header/section title
+    ///
+    /// # Arguments
+    /// * `message` - The header to display (bold cyan color)
+    fn print_header(&self, message: &str);
 }
 
 #[cfg(test)]
@@ -267,6 +273,7 @@ mod tests {
         fn print_warning(&self, _message: &str) {}
         fn print_error(&self, _message: &str) {}
         fn print_success(&self, _message: &str) {}
+        fn print_header(&self, _message: &str) {}
     }
 
     #[test]

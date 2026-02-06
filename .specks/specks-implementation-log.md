@@ -6,6 +6,80 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## Terminal UI Improvements: Streaming, Spacing, and Dialoguer Migration | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `crates/specks/src/streaming.rs` - Streaming display implementation
+- `crates/specks/src/interaction/cli_adapter.rs` - CLI interaction adapter
+- `crates/specks/src/planning_loop/cli_gather.rs` - CLI question gathering
+- `crates/specks/src/planning_loop/mod.rs` - Planning loop agent invocation
+- `crates/specks/src/agent.rs` - Agent invocation methods
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Fix garbled streaming output during planner/critic | Done |
+| Switch agents to spinner-only mode (no text streaming) | Done |
+| Simplify streaming display to inline spinner (no cursor positioning) | Done |
+| Fix spinner freezing during rapid event processing | Done |
+| Improve byte formatting (1.6k bytes, 1.6m bytes) | Done |
+| Add generous vertical spacing to Q&A interface | Done |
+| Add bold cyan headers with `print_header()` | Done |
+| Add question navigation (go back) and summary confirmation | Done |
+| Migrate from inquire to dialoguer for spacing control | Done |
+| Implement custom SpacedTheme for dialoguer | Done |
+
+**Files Modified:**
+- `crates/specks/src/streaming.rs`:
+  - Simplified to inline spinner using carriage return (no cursor positioning)
+  - Removed term_height and bottom-of-screen positioning
+  - Added `format_bytes()` helper for 1.6k/1.6m formatting
+- `crates/specks/src/agent.rs`:
+  - Added `last_spinner_update` to fix spinner freezing
+  - Update spinner on every loop iteration, not just timeout
+- `crates/specks/src/planning_loop/mod.rs`:
+  - Changed planner and critic to use `invoke_agent_spinner_only()`
+- `crates/specks/src/planning_loop/clarifier.rs`:
+  - Changed to use `invoke_agent_spinner_only()`
+- `crates/specks/src/planning_loop/cli_gather.rs`:
+  - Added question navigation (go back to previous)
+  - Added summary display with all Q&A
+  - Added confirmation before proceeding
+  - Improved vertical spacing throughout
+  - Added `print_header()` calls for section headers
+- `crates/specks/src/interaction/cli_adapter.rs`:
+  - Migrated from inquire to dialoguer
+  - Implemented custom `SpacedTheme` with `format_select_prompt_item()`
+  - Added blank lines between options via `writeln!(f)?`
+- `crates/specks-core/src/interaction.rs`:
+  - Added `print_header()` method to InteractionAdapter trait
+- `Cargo.toml` (workspace):
+  - Replaced `inquire` with `dialoguer` and `console`
+- `crates/specks/Cargo.toml`:
+  - Updated dependencies
+- `crates/specks-core/Cargo.toml`:
+  - Removed unused UI dependencies
+
+**Test Results:**
+- `cargo build`: Succeeds
+
+**Checkpoints Verified:**
+- Spinner updates smoothly during agent execution: PASS
+- Options have vertical spacing between them: PASS
+- Custom dialoguer theme provides spacing control: PASS
+
+**Key Decisions/Notes:**
+- Switched from inquire to dialoguer because inquire has no spacing customization
+- Dialoguer's Theme trait allows custom `format_select_prompt_item()` implementation
+- SpacedTheme adds `writeln!(f)?` before each item for vertical spacing
+- Simplified streaming display since we're not streaming content anymore
+- All agents now use spinner-only mode - cleaner than garbled text fragments
+
+---
+
 ## [specks-2.md] Step 8.3.7: Update Interviewer Agent for Presentation Role | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

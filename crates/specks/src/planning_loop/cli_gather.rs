@@ -265,15 +265,25 @@ impl CliGatherer {
             return Ok(HashMap::new());
         }
 
-        // Present each question using inquire::Select
-        let mut answers = HashMap::new();
+        // Present each question using inquire::Select with navigation
+        let mut answers: Vec<Option<String>> = vec![None; output.questions.len()];
+        let total_questions = output.questions.len();
+        let mut current_idx = 0;
 
-        for question in &output.questions {
-            // Display why we're asking
-            adapter.print_info(&format!("\n{}", question.why_asking));
+        // Question loop with back navigation
+        while current_idx < total_questions {
+            let question = &output.questions[current_idx];
+
+            // Question with clean vertical spacing
+            adapter.print_info("");
+            adapter.print_info("");
+            adapter.print_header(&format!("*** Question {} of {} ***", current_idx + 1, total_questions));
+            adapter.print_info("");
+            adapter.print_info(&question.why_asking);
+            adapter.print_info("");
 
             // Build options list with default marked
-            let options_with_default: Vec<String> = question
+            let mut options_with_default: Vec<String> = question
                 .options
                 .iter()
                 .map(|opt| {
@@ -285,44 +295,156 @@ impl CliGatherer {
                 })
                 .collect();
 
+            // Add "Go back" option if not on first question
+            let go_back_idx = if current_idx > 0 {
+                options_with_default.push("← Go back to previous question".to_string());
+                Some(options_with_default.len() - 1)
+            } else {
+                None
+            };
+
             let options_refs: Vec<&str> = options_with_default.iter().map(|s| s.as_str()).collect();
 
             let selected_index = adapter
                 .ask_select(&question.question, &options_refs)
                 .map_err(Self::convert_interaction_error)?;
 
+            // Check if user selected "Go back"
+            if Some(selected_index) == go_back_idx {
+                current_idx -= 1;
+                continue;
+            }
+
             // Get the actual selected option (without "(default)" suffix)
             let selected_answer = question.options.get(selected_index)
                 .cloned()
                 .unwrap_or_else(|| question.default.clone());
 
-            answers.insert(question.question.clone(), selected_answer);
+            answers[current_idx] = Some(selected_answer);
+            current_idx += 1;
         }
 
-        // Show assumptions for any unanswered questions
-        if !output.assumptions_if_no_answer.is_empty() {
-            adapter.print_info("\nAssumptions being made:");
-            for assumption in &output.assumptions_if_no_answer {
-                adapter.print_info(&format!("  • {}", assumption));
-            }
+        // Show summary and get confirmation
+        loop {
             adapter.print_info("");
+            adapter.print_info("");
+            adapter.print_header("*** Summary ***");
+            adapter.print_info("");
+            adapter.print_info("Your answers:");
+            adapter.print_info("");
+
+            for (idx, question) in output.questions.iter().enumerate() {
+                let answer = answers[idx].as_deref().unwrap_or("(no answer)");
+                // Truncate long questions for display
+                let q_display = if question.question.len() > 50 {
+                    format!("{}...", &question.question[..47])
+                } else {
+                    question.question.clone()
+                };
+                adapter.print_info(&format!("  Q{}. {}", idx + 1, q_display));
+                adapter.print_info(&format!("      → {}", answer));
+                adapter.print_info("");
+            }
+
+            // Show assumptions
+            if !output.assumptions_if_no_answer.is_empty() {
+                adapter.print_info("  Assumptions:");
+                adapter.print_info("");
+                for assumption in &output.assumptions_if_no_answer {
+                    adapter.print_info(&format!("    • {}", assumption));
+                }
+                adapter.print_info("");
+            }
+
+            adapter.print_info("");
+
+            // Build confirmation options
+            let mut confirm_options = vec!["✓ Looks good, proceed".to_string()];
+            for (idx, question) in output.questions.iter().enumerate() {
+                let q_short = if question.question.len() > 40 {
+                    format!("{}...", &question.question[..37])
+                } else {
+                    question.question.clone()
+                };
+                confirm_options.push(format!("← Revise Q{}: {}", idx + 1, q_short));
+            }
+
+            let confirm_refs: Vec<&str> = confirm_options.iter().map(|s| s.as_str()).collect();
+
+            let selected = adapter
+                .ask_select("Ready to proceed?", &confirm_refs)
+                .map_err(Self::convert_interaction_error)?;
+
+            if selected == 0 {
+                // User confirmed
+                break;
+            } else {
+                // User wants to revise a question
+                let revise_idx = selected - 1;
+                if revise_idx < output.questions.len() {
+                    let question = &output.questions[revise_idx];
+
+                    adapter.print_info("");
+                    adapter.print_info("");
+                    adapter.print_header(&format!("*** Revising Question {} ***", revise_idx + 1));
+                    adapter.print_info("");
+                    adapter.print_info(&question.why_asking);
+                    adapter.print_info("");
+
+                    let options_with_default: Vec<String> = question
+                        .options
+                        .iter()
+                        .map(|opt| {
+                            if opt == &question.default {
+                                format!("{} (default)", opt)
+                            } else {
+                                opt.clone()
+                            }
+                        })
+                        .collect();
+
+                    let options_refs: Vec<&str> = options_with_default.iter().map(|s| s.as_str()).collect();
+
+                    let selected_index = adapter
+                        .ask_select(&question.question, &options_refs)
+                        .map_err(Self::convert_interaction_error)?;
+
+                    let selected_answer = question.options.get(selected_index)
+                        .cloned()
+                        .unwrap_or_else(|| question.default.clone());
+
+                    answers[revise_idx] = Some(selected_answer);
+                }
+            }
         }
 
-        Ok(answers)
+        // Convert to HashMap
+        let mut result = HashMap::new();
+        for (idx, question) in output.questions.iter().enumerate() {
+            if let Some(answer) = &answers[idx] {
+                result.insert(question.question.clone(), answer.clone());
+            }
+        }
+
+        Ok(result)
     }
 
     /// Display the clarifier's analysis summary
     fn display_analysis_summary(&self, adapter: &dyn InteractionAdapter, output: &ClarifierOutput) {
-        adapter.print_info("\n━━━ Clarifier Analysis ━━━\n");
+        adapter.print_info("");
+        adapter.print_header("*** Analysis ***");
+        adapter.print_info("");
 
         // Show what clarifier understood
         if !output.analysis.understood_intent.is_empty() {
-            adapter.print_info(&format!("I understand you want to: {}\n", output.analysis.understood_intent));
+            adapter.print_info(&format!("I understand you want to: {}", output.analysis.understood_intent));
+            adapter.print_info("");
         }
 
         // Show relevant context found
         if !output.analysis.relevant_context.is_empty() {
             adapter.print_info("Relevant context found:");
+            adapter.print_info("");
             for ctx in &output.analysis.relevant_context {
                 adapter.print_info(&format!("  • {}", ctx));
             }
@@ -331,14 +453,12 @@ impl CliGatherer {
 
         // Show identified ambiguities (if any)
         if !output.analysis.identified_ambiguities.is_empty() {
-            adapter.print_info("Things I need to clarify:");
+            adapter.print_info("Need to clarify:");
+            adapter.print_info("");
             for ambiguity in &output.analysis.identified_ambiguities {
                 adapter.print_info(&format!("  • {}", ambiguity));
             }
-            adapter.print_info("");
         }
-
-        adapter.print_info("━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     }
 
     /// Read a brief summary from a speck file

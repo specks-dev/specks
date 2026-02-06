@@ -7,6 +7,8 @@ mod interaction;
 mod output;
 mod planning_loop;
 mod share;
+mod splash;
+mod streaming;
 
 use std::process::ExitCode;
 
@@ -102,9 +104,9 @@ fn main() -> ExitCode {
             verbose_agents,
         }),
         None => {
-            // No subcommand - print version info
+            // No subcommand - show splash screen
             if !cli.quiet {
-                println!("specks v{}", env!("CARGO_PKG_VERSION"));
+                splash::show_splash();
                 println!("Use --help for usage information");
             }
             Ok(0)

@@ -26,6 +26,7 @@ pub enum Priority {
 
 impl Priority {
     /// Get display label for the priority
+    #[allow(dead_code)]
     pub fn label(&self) -> &'static str {
         match self {
             Priority::High => "HIGH",
@@ -166,6 +167,7 @@ impl CliPresenter {
     /// Parse critic feedback into a structured summary
     ///
     /// Extracts approval status, assessment, and punch list items from the feedback.
+    /// Filters out "thinking" lines like "I'll...", "Let me...", etc.
     pub fn parse_critic_feedback(&self, feedback: &str) -> CriticSummary {
         let mut summary = CriticSummary::default();
 
@@ -177,32 +179,51 @@ impl CliPresenter {
             || (lower_feedback.contains("no major issues")
                 && !lower_feedback.contains("not approved"));
 
-        // Extract assessment (first paragraph or sentence)
-        let first_line = feedback.lines().next().unwrap_or("").trim();
-        if !first_line.is_empty() {
-            summary.assessment = first_line.to_string();
+        // Find a meaningful assessment line (skip thinking lines)
+        for line in feedback.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && !Self::is_thinking_line(trimmed) {
+                // Look for lines that look like summaries
+                if trimmed.starts_with("##") || trimmed.starts_with("**") ||
+                   trimmed.contains("Review") || trimmed.contains("Summary") ||
+                   trimmed.contains("Approved") || trimmed.contains("approved") {
+                    summary.assessment = trimmed.trim_start_matches('#').trim().to_string();
+                    break;
+                }
+            }
+        }
+
+        // If no good assessment found, use a default based on approval status
+        if summary.assessment.is_empty() {
+            summary.assessment = if summary.approved {
+                "Plan approved".to_string()
+            } else {
+                "Plan needs revision".to_string()
+            };
         }
 
         // Extract punch list items based on keywords and patterns
         for line in feedback.lines() {
             let trimmed = line.trim();
 
-            // Skip empty lines
-            if trimmed.is_empty() {
+            // Skip empty lines and thinking lines
+            if trimmed.is_empty() || Self::is_thinking_line(trimmed) {
                 continue;
             }
 
-            // Look for bullet points or numbered items with issue keywords
+            // Look for bullet points or numbered items
             if trimmed.starts_with('-')
                 || trimmed.starts_with('*')
                 || trimmed.starts_with("•")
+                || trimmed.starts_with("✅")
+                || trimmed.starts_with("✓")
                 || trimmed.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
             {
                 let item_text = trimmed
-                    .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit() || c == '.' || c == ')')
+                    .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c == '✅' || c == '✓' || c.is_ascii_digit() || c == '.' || c == ')' || c.is_whitespace())
                     .trim();
 
-                if item_text.is_empty() {
+                if item_text.is_empty() || Self::is_thinking_line(item_text) {
                     continue;
                 }
 
@@ -210,25 +231,18 @@ impl CliPresenter {
                 let lower_item = item_text.to_lowercase();
                 let priority = if lower_item.contains("critical")
                     || lower_item.contains("blocking")
-                    || lower_item.contains("must")
-                    || lower_item.contains("error")
+                    || lower_item.contains("must fix")
                     || lower_item.contains("missing required")
                 {
                     Priority::High
-                } else if lower_item.contains("should")
-                    || lower_item.contains("recommend")
-                    || lower_item.contains("consider")
-                    || lower_item.contains("warning")
-                {
-                    Priority::Medium
                 } else if lower_item.contains("minor")
                     || lower_item.contains("optional")
-                    || lower_item.contains("suggestion")
+                    || lower_item.contains("nice to have")
                     || lower_item.contains("could")
                 {
                     Priority::Low
                 } else {
-                    // Default to medium for unlabeled items
+                    // Default to medium
                     Priority::Medium
                 };
 
@@ -239,48 +253,73 @@ impl CliPresenter {
         summary
     }
 
-    /// Display critic feedback with colors
+    /// Check if a line is "thinking" text that should be filtered out
+    fn is_thinking_line(line: &str) -> bool {
+        let lower = line.to_lowercase();
+        lower.starts_with("i'll ")
+            || lower.starts_with("i will ")
+            || lower.starts_with("let me ")
+            || lower.starts_with("now let me")
+            || lower.starts_with("now i'll")
+            || lower.starts_with("first,")
+            || lower.starts_with("next,")
+            || lower.contains("let me start")
+            || lower.contains("let me check")
+            || lower.contains("let me read")
+            || lower.contains("let me create")
+            || lower.contains("let me write")
+            || lower.contains("let me identify")
+            || lower.contains("i need to")
+    }
+
+    /// Display critic feedback
     fn display_critic_feedback(&self, adapter: &dyn InteractionAdapter, summary: &CriticSummary) {
-        adapter.print_info("\n--- Critic Review ---");
+        adapter.print_info("");
 
-        // Show approval status
+        // Show approval status with clear visual
         if summary.approved {
-            adapter.print_success("Status: APPROVED");
+            adapter.print_success("✓ Critic: Plan approved");
         } else {
-            adapter.print_warning("Status: NEEDS REVISION");
-        }
-
-        // Show assessment
-        if !summary.assessment.is_empty() {
-            adapter.print_info(&format!("Assessment: {}", summary.assessment));
+            adapter.print_warning("⚠ Critic: Revisions needed");
         }
     }
 
-    /// Display punch list with priority colors
+    /// Display punch list with priority indicators
     fn display_punch_list(&self, adapter: &dyn InteractionAdapter, items: &[PunchListItem]) {
-        adapter.print_info("\n--- Punch List ---");
-
         // Count by priority
         let high_count = items.iter().filter(|i| i.priority == Priority::High).count();
         let medium_count = items.iter().filter(|i| i.priority == Priority::Medium).count();
         let low_count = items.iter().filter(|i| i.priority == Priority::Low).count();
 
-        adapter.print_info(&format!(
-            "Items: {} high, {} medium, {} low",
-            high_count, medium_count, low_count
-        ));
-
-        // Display items grouped by priority
-        for item in items.iter().filter(|i| i.priority == Priority::High) {
-            adapter.print_error(&format!("  [{}] {}", item.priority.label(), item.description));
+        // Only show if there are items
+        if items.is_empty() {
+            return;
         }
 
-        for item in items.iter().filter(|i| i.priority == Priority::Medium) {
-            adapter.print_warning(&format!("  [{}] {}", item.priority.label(), item.description));
+        adapter.print_info("");
+
+        // Show high priority items first (blocking issues)
+        if high_count > 0 {
+            adapter.print_info("Must address:");
+            for item in items.iter().filter(|i| i.priority == Priority::High) {
+                adapter.print_error(&format!("  ✗ {}", item.description));
+            }
         }
 
-        for item in items.iter().filter(|i| i.priority == Priority::Low) {
-            adapter.print_info(&format!("  [{}] {}", item.priority.label(), item.description));
+        // Show medium priority items
+        if medium_count > 0 {
+            adapter.print_info("Suggestions:");
+            for item in items.iter().filter(|i| i.priority == Priority::Medium) {
+                adapter.print_info(&format!("  • {}", item.description));
+            }
+        }
+
+        // Show low priority items
+        if low_count > 0 {
+            adapter.print_info("Optional:");
+            for item in items.iter().filter(|i| i.priority == Priority::Low) {
+                adapter.print_info(&format!("  ○ {}", item.description));
+            }
         }
     }
 

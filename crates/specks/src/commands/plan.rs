@@ -18,6 +18,7 @@ use crate::output::{JsonIssue, JsonResponse, PlanData, PlanValidation};
 use crate::planning_loop::{
     LoopContext, PlanMode, PlanningLoop, PlanningMode, detect_input_type, resolve_speck_path,
 };
+use crate::splash;
 
 /// Run the plan command
 ///
@@ -156,11 +157,14 @@ pub fn run_plan(
     reset_cancellation();
     let adapter = CliAdapter::new();
 
-    if !quiet {
+    // Show splash screen for interactive mode
+    if !quiet && !json_output {
+        splash::show_splash();
         match mode {
             PlanMode::New => adapter.print_info(&format!("Creating new speck from idea: {}", input)),
             PlanMode::Revision => adapter.print_info(&format!("Revising existing speck: {}", input)),
         }
+        println!(); // Blank line before streaming content
     }
 
     // Create and run the planning loop in CLI mode

@@ -22,10 +22,12 @@ dirs.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 specks-core.workspace = true
-inquire.workspace = true
+dialoguer.workspace = true
+console.workspace = true
 indicatif.workspace = true
 owo-colors.workspace = true
 ctrlc.workspace = true
+crossterm.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

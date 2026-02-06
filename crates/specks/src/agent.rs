@@ -263,6 +263,269 @@ impl AgentRunner {
             }
         }
     }
+
+    /// Invoke an agent with streaming output display.
+    ///
+    /// This method streams the agent's output line-by-line to the display,
+    /// showing a spinner with elapsed time at the bottom.
+    ///
+    /// Uses a background thread to read stdout so the spinner can update
+    /// independently of blocking I/O.
+    ///
+    /// If `show_text` is true, streaming text is displayed.
+    /// If false, only the spinner is shown (useful for tool-heavy agents like planner).
+    #[allow(dead_code)] // Available for agents that benefit from visible text streaming
+    pub fn invoke_agent_streaming(
+        &self,
+        config: &AgentConfig,
+        prompt: &str,
+        display: &mut crate::streaming::StreamingDisplay,
+    ) -> Result<AgentResult, SpecksError> {
+        self.invoke_agent_streaming_impl(config, prompt, display, true, None)
+    }
+
+    /// Like `invoke_agent_streaming` but only shows the spinner, not streaming text.
+    /// Use this for tool-heavy agents (planner, critic) where streaming text is noise.
+    pub fn invoke_agent_spinner_only(
+        &self,
+        config: &AgentConfig,
+        prompt: &str,
+        display: &mut crate::streaming::StreamingDisplay,
+    ) -> Result<AgentResult, SpecksError> {
+        self.invoke_agent_streaming_impl(config, prompt, display, false, None)
+    }
+
+    /// Like `invoke_agent_spinner_only` but also monitors a file for progress.
+    /// Shows file stats (lines, bytes) as the agent writes to it.
+    #[allow(dead_code)]
+    pub fn invoke_agent_with_file_monitor(
+        &self,
+        config: &AgentConfig,
+        prompt: &str,
+        display: &mut crate::streaming::StreamingDisplay,
+        file_to_monitor: &std::path::Path,
+    ) -> Result<AgentResult, SpecksError> {
+        self.invoke_agent_streaming_impl(config, prompt, display, false, Some(file_to_monitor.to_path_buf()))
+    }
+
+    /// Implementation of streaming invocation.
+    fn invoke_agent_streaming_impl(
+        &self,
+        config: &AgentConfig,
+        prompt: &str,
+        display: &mut crate::streaming::StreamingDisplay,
+        show_text: bool,
+        file_to_monitor: Option<PathBuf>,
+    ) -> Result<AgentResult, SpecksError> {
+        use std::io::BufRead;
+        use std::sync::mpsc;
+        use std::thread;
+
+        // First verify claude CLI is available
+        self.check_claude_cli()?;
+
+        // Read the agent definition file
+        let agent_content = std::fs::read_to_string(&config.agent_path).map_err(|e| {
+            SpecksError::AgentInvocationFailed {
+                reason: format!(
+                    "Failed to read agent definition at {}: {}",
+                    config.agent_path.display(),
+                    e
+                ),
+            }
+        })?;
+
+        // Build the claude command
+        let mut cmd = Command::new(&self.claude_path);
+
+        // Add --print flag with stream-json output format for real-time streaming
+        // Note: stream-json requires --verbose, and --include-partial-messages for token streaming
+        cmd.arg("--print");
+        cmd.arg("--verbose");
+        cmd.arg("--output-format");
+        cmd.arg("stream-json");
+        cmd.arg("--include-partial-messages");
+
+        // Add allowed tools
+        if !config.allowed_tools.is_empty() {
+            cmd.arg("--allowed-tools");
+            cmd.arg(config.allowed_tools.join(","));
+        }
+
+        // Add system prompt (the agent definition)
+        cmd.arg("--system-prompt");
+        cmd.arg(&agent_content);
+
+        // Add the user prompt
+        cmd.arg(prompt);
+
+        // Set working directory to project root
+        cmd.current_dir(&self.project_root);
+
+        // Configure for streaming: pipe stdout, capture stderr
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        // Spawn the child process
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| SpecksError::AgentInvocationFailed {
+                reason: format!("Failed to spawn claude process: {}", e),
+            })?;
+
+        // Take stdout for streaming
+        let stdout = child.stdout.take().ok_or_else(|| SpecksError::AgentInvocationFailed {
+            reason: "Failed to capture stdout".to_string(),
+        })?;
+
+        // Create a channel for the reader thread to send parsed events
+        let (tx, rx) = mpsc::channel::<Result<StreamEvent, String>>();
+
+        // Spawn a thread to read stream-json events
+        thread::spawn(move || {
+            let reader = std::io::BufReader::new(stdout);
+            for line_result in reader.lines() {
+                match line_result {
+                    Ok(line) => {
+                        // Parse stream-json event
+                        if let Some(event) = parse_stream_json_event(&line) {
+                            if tx.send(Ok(event)).is_err() {
+                                break; // Receiver dropped, stop reading
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(e.to_string()));
+                        break;
+                    }
+                }
+            }
+            // Channel closes when tx is dropped
+        });
+
+        let mut all_output = String::new();
+        let timeout = Duration::from_secs(config.timeout_secs);
+        let start = std::time::Instant::now();
+        let spinner_update_interval = Duration::from_millis(100);
+        let mut last_spinner_update = std::time::Instant::now();
+
+        // Start the streaming display
+        display.start();
+
+        // Main loop: check for lines and update spinner
+        loop {
+            // Check for timeout
+            if start.elapsed() >= timeout {
+                let _ = child.kill();
+                let _ = child.wait();
+                display.finish_error("timeout");
+                return Err(SpecksError::AgentTimeout { secs: config.timeout_secs });
+            }
+
+            // Check for cancellation
+            if display.is_cancelled() {
+                let _ = child.kill();
+                let _ = child.wait();
+                display.finish_error("cancelled");
+                return Err(SpecksError::UserAborted);
+            }
+
+            // Update spinner periodically regardless of event processing
+            if last_spinner_update.elapsed() >= spinner_update_interval {
+                if let Some(ref path) = file_to_monitor {
+                    if let Ok(content) = std::fs::read_to_string(path) {
+                        let lines = content.lines().count();
+                        let bytes = content.len();
+                        display.update_file_stats(lines, bytes);
+                    }
+                }
+                display.update_spinner();
+                last_spinner_update = std::time::Instant::now();
+            }
+
+            // Try to receive an event (non-blocking with short timeout)
+            match rx.recv_timeout(spinner_update_interval) {
+                Ok(Ok(event)) => {
+                    match event {
+                        StreamEvent::Text(content) => {
+                            // Got text content - accumulate and optionally display
+                            all_output.push_str(&content);
+                            if show_text {
+                                display.write_content(&content);
+                            }
+                        }
+                        StreamEvent::ToolStart(tool_name) => {
+                            // Tool is being invoked - show in spinner
+                            display.set_current_tool(&tool_name);
+                        }
+                        StreamEvent::ToolEnd => {
+                            // Tool finished
+                            display.clear_current_tool();
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    // Reader error
+                    display.finish_error(&format!("read error: {}", e));
+                    return Err(SpecksError::AgentInvocationFailed {
+                        reason: format!("Failed to read agent output: {}", e),
+                    });
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // Timeout already handled above
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    // Reader thread finished - process is done
+                    break;
+                }
+            }
+        }
+
+        // Wait for the process to complete
+        let status = child.wait().map_err(|e| {
+            display.finish_error(&format!("wait error: {}", e));
+            SpecksError::AgentInvocationFailed {
+                reason: format!("Failed to wait for agent: {}", e),
+            }
+        })?;
+
+        // Capture stderr
+        let stderr = if let Some(mut stderr_pipe) = child.stderr.take() {
+            let mut stderr_content = String::new();
+            let _ = std::io::Read::read_to_string(&mut stderr_pipe, &mut stderr_content);
+            stderr_content
+        } else {
+            String::new()
+        };
+
+        let exit_code = status.code().unwrap_or(-1);
+
+        // Check for failures
+        if !status.success() && exit_code != 0 {
+            let error_output = if stderr.is_empty() {
+                all_output.clone()
+            } else {
+                format!("{}\n{}", all_output, stderr)
+            };
+
+            display.finish_error(&format!("exit code {}", exit_code));
+            return Err(SpecksError::AgentInvocationFailed {
+                reason: format!(
+                    "Agent {} failed with exit code {}: {}",
+                    config.agent_name,
+                    exit_code,
+                    error_output.trim()
+                ),
+            });
+        }
+
+        display.finish_success();
+
+        Ok(AgentResult {
+            output: all_output,
+            success: status.success(),
+        })
+    }
 }
 
 /// Check if the given path is the specks development workspace.
@@ -571,6 +834,67 @@ pub fn clarifier_config(project_root: &Path) -> AgentConfig {
             "Bash".to_string(),
         ],
     )
+}
+
+/// Parsed event from stream-json
+#[derive(Debug, Clone)]
+pub enum StreamEvent {
+    /// Text content delta
+    Text(String),
+    /// Tool use started (tool name)
+    ToolStart(String),
+    /// Tool use completed
+    ToolEnd,
+}
+
+/// Parse a stream-json event from the Claude CLI.
+///
+/// The stream-json format outputs NDJSON (newline-delimited JSON) events.
+///
+/// Key event types:
+/// - `content_block_delta` with `text` - streaming text
+/// - `content_block_start` with `tool_use` - tool invocation starting
+/// - `content_block_stop` - content block (including tool use) finished
+fn parse_stream_json_event(line: &str) -> Option<StreamEvent> {
+    let json: serde_json::Value = serde_json::from_str(line).ok()?;
+
+    if json.get("type").and_then(|t| t.as_str()) != Some("stream_event") {
+        return None;
+    }
+
+    let event = json.get("event")?;
+    let event_type = event.get("type").and_then(|t| t.as_str())?;
+
+    match event_type {
+        "content_block_delta" => {
+            // Text delta
+            if let Some(text) = event
+                .get("delta")
+                .and_then(|d| d.get("text"))
+                .and_then(|t| t.as_str())
+            {
+                if !text.is_empty() {
+                    return Some(StreamEvent::Text(text.to_string()));
+                }
+            }
+        }
+        "content_block_start" => {
+            // Check for tool use start
+            if let Some(content_block) = event.get("content_block") {
+                if content_block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                    if let Some(name) = content_block.get("name").and_then(|n| n.as_str()) {
+                        return Some(StreamEvent::ToolStart(name.to_string()));
+                    }
+                }
+            }
+        }
+        "content_block_stop" => {
+            return Some(StreamEvent::ToolEnd);
+        }
+        _ => {}
+    }
+
+    None
 }
 
 #[cfg(test)]

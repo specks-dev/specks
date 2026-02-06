@@ -244,12 +244,48 @@ pub fn invoke_clarifier(
     parse_clarifier_output(&result.output, input.mode())
 }
 
+/// Invoke the clarifier agent with streaming output.
+///
+/// This version shows agent output in real-time with a spinner at the bottom.
+/// Use this for interactive CLI mode to provide better user feedback.
+///
+/// # Arguments
+///
+/// * `input` - The clarifier input (idea or critic feedback)
+/// * `runner` - The agent runner to use for invocation
+/// * `project_root` - The project root path
+/// * `timeout_secs` - Timeout for the agent invocation
+/// * `display` - The streaming display to use for output
+///
+/// # Returns
+///
+/// The parsed clarifier output, or an error if invocation or parsing fails.
+pub fn invoke_clarifier_streaming(
+    input: &ClarifierInput,
+    runner: &AgentRunner,
+    project_root: &Path,
+    timeout_secs: u64,
+    display: &mut crate::streaming::StreamingDisplay,
+) -> Result<ClarifierOutput, SpecksError> {
+    // Build the prompt
+    let prompt = input.to_prompt();
+
+    // Get clarifier config
+    let config = clarifier_config(project_root).with_timeout(timeout_secs);
+
+    // Invoke the agent with spinner only (JSON output is illegible when streamed)
+    let result = runner.invoke_agent_spinner_only(&config, &prompt, display)?;
+
+    // Parse the JSON output
+    parse_clarifier_output(&result.output, input.mode())
+}
+
 /// Parse clarifier output from JSON string.
 ///
-/// Handles common issues like markdown code blocks and extra whitespace.
+/// Handles common issues like prose before JSON, markdown code blocks, etc.
 fn parse_clarifier_output(output: &str, expected_mode: &str) -> Result<ClarifierOutput, SpecksError> {
-    // Clean up the output - remove markdown code blocks if present
-    let cleaned = strip_markdown_code_block(output);
+    // Extract the JSON object from the output (handles prose, markdown, etc.)
+    let cleaned = extract_json_from_output(output);
 
     // Try to parse as JSON
     match serde_json::from_str::<ClarifierOutput>(&cleaned) {
@@ -280,9 +316,75 @@ fn parse_clarifier_output(output: &str, expected_mode: &str) -> Result<Clarifier
     }
 }
 
-/// Strip markdown code block markers from JSON output.
+/// Extract JSON object from agent output.
 ///
-/// Agents sometimes wrap JSON in ```json ... ``` blocks despite instructions.
+/// Agents sometimes output prose before/after the JSON object.
+/// This function finds and extracts just the JSON.
+fn extract_json_from_output(text: &str) -> String {
+    let trimmed = text.trim();
+
+    // First, try to strip markdown code blocks
+    let without_markdown = strip_markdown_code_block(trimmed);
+
+    // If it already looks like valid JSON, return it
+    if without_markdown.starts_with('{') && without_markdown.ends_with('}') {
+        return without_markdown;
+    }
+
+    // Otherwise, find the JSON object in the text
+    // Look for the first '{' that starts a JSON object with "mode" key
+    if let Some(start) = trimmed.find("{\"mode\"") {
+        // Find the matching closing brace
+        if let Some(json_str) = extract_balanced_braces(&trimmed[start..]) {
+            return json_str;
+        }
+    }
+
+    // Fallback: find any JSON object
+    if let Some(start) = trimmed.find('{') {
+        if let Some(json_str) = extract_balanced_braces(&trimmed[start..]) {
+            return json_str;
+        }
+    }
+
+    // If we can't find JSON, return original (will fail parsing with good error)
+    without_markdown
+}
+
+/// Extract a balanced JSON object starting from the beginning of the string.
+fn extract_balanced_braces(text: &str) -> Option<String> {
+    if !text.starts_with('{') {
+        return None;
+    }
+
+    let mut depth = 0;
+    let mut in_string = false;
+    let mut escape_next = false;
+
+    for (i, c) in text.char_indices() {
+        if escape_next {
+            escape_next = false;
+            continue;
+        }
+
+        match c {
+            '\\' if in_string => escape_next = true,
+            '"' => in_string = !in_string,
+            '{' if !in_string => depth += 1,
+            '}' if !in_string => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(text[..=i].to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// Strip markdown code block markers from JSON output.
 fn strip_markdown_code_block(text: &str) -> String {
     let trimmed = text.trim();
 
@@ -589,6 +691,29 @@ mod tests {
 
         let without_block = r#"{"key": "value"}"#;
         assert_eq!(strip_markdown_code_block(without_block), r#"{"key": "value"}"#);
+    }
+
+    #[test]
+    fn test_extract_json_from_prose() {
+        let with_prose = r#"I'll explore the codebase first to understand context.
+
+{"mode": "idea", "analysis": {"understood_intent": "test", "relevant_context": [], "identified_ambiguities": []}, "questions": [], "assumptions_if_no_answer": []}"#;
+
+        let extracted = extract_json_from_output(with_prose);
+        assert!(extracted.starts_with("{\"mode\""));
+
+        // Verify it parses
+        let parsed: ClarifierOutput = serde_json::from_str(&extracted).unwrap();
+        assert_eq!(parsed.mode, "idea");
+    }
+
+    #[test]
+    fn test_extract_json_with_nested_braces() {
+        let nested = r#"Some prose here {"mode": "idea", "analysis": {"understood_intent": "test {with braces}", "relevant_context": [], "identified_ambiguities": []}, "questions": [], "assumptions_if_no_answer": []}"#;
+
+        let extracted = extract_json_from_output(nested);
+        let parsed: ClarifierOutput = serde_json::from_str(&extracted).unwrap();
+        assert_eq!(parsed.analysis.understood_intent, "test {with braces}");
     }
 
     #[test]

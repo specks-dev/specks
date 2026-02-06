@@ -35,8 +35,8 @@ pub use types::{LoopContext, LoopOutcome, LoopState, PlanMode, PlanningMode, Use
 // Re-export clarifier types (public API for this module)
 #[allow(unused_imports)]
 pub use clarifier::{
-    invoke_clarifier, ClarifierAnalysis, ClarifierInput, ClarifierOutput, ClarifierQuestion,
-    EnrichedRequirements,
+    invoke_clarifier, invoke_clarifier_streaming, ClarifierAnalysis, ClarifierInput,
+    ClarifierOutput, ClarifierQuestion, EnrichedRequirements,
 };
 
 // Re-export CLI gather types (public API for this module)
@@ -290,17 +290,13 @@ impl PlanningLoop {
     /// - Subsequent iterations: analyzes critic feedback and generates revision questions
     ///
     /// The clarifier output is stored for the presentation phase.
+    ///
+    /// Per [D25], when not in quiet mode, streams agent output with a fixed spinner.
     fn run_clarifier(&mut self) -> Result<(), SpecksError> {
         let progress_msg = if self.context.iteration == 0 {
             "Clarifier analyzing idea..."
         } else {
             "Clarifier analyzing feedback..."
-        };
-
-        let progress_handle = if !self.quiet {
-            Some(self.adapter.start_progress(progress_msg))
-        } else {
-            None
         };
 
         // Build clarifier input based on iteration
@@ -326,15 +322,20 @@ impl PlanningLoop {
             }
         };
 
-        // Invoke the clarifier agent
-        let result = invoke_clarifier(&input, &self.runner, &self.project_root, self.timeout_secs);
-
-        // End progress spinner
-        if let Some(handle) = progress_handle {
-            self.adapter.end_progress(handle, result.is_ok());
-        }
-
-        let output = result?;
+        // Invoke clarifier with streaming output when not in quiet mode (per [D25])
+        let output = if !self.quiet {
+            use crate::streaming::StreamingDisplay;
+            let mut display = StreamingDisplay::new(progress_msg);
+            clarifier::invoke_clarifier_streaming(
+                &input,
+                &self.runner,
+                &self.project_root,
+                self.timeout_secs,
+                &mut display,
+            )?
+        } else {
+            invoke_clarifier(&input, &self.runner, &self.project_root, self.timeout_secs)?
+        };
 
         // Store clarifier output for the presentation phase
         self.clarifier_output = Some(output.clone());
@@ -455,6 +456,7 @@ impl PlanningLoop {
     /// Run the planner phase
     ///
     /// Per [D20], planner invocation is identical in both modes.
+    /// Per [D25], when not in quiet mode, streams agent output with a fixed spinner.
     fn run_planner(&mut self) -> Result<(), SpecksError> {
         let progress_msg = if self.context.iteration == 0 {
             "Planner creating speck...".to_string()
@@ -463,12 +465,6 @@ impl PlanningLoop {
                 "Planner revising speck (iteration {})...",
                 self.context.iteration + 1
             )
-        };
-
-        let progress_handle = if !self.quiet {
-            Some(self.adapter.start_progress(&progress_msg))
-        } else {
-            None
         };
 
         let mut prompt = String::new();
@@ -520,14 +516,15 @@ impl PlanningLoop {
         let config =
             crate::agent::planner_config(&self.project_root).with_timeout(self.timeout_secs);
 
-        let result = self.runner.invoke_agent(&config, &prompt);
-
-        // End progress spinner
-        if let Some(handle) = progress_handle {
-            self.adapter.end_progress(handle, result.is_ok());
+        // Invoke planner with spinner only (tool-heavy agent, text output is noise)
+        if !self.quiet {
+            use crate::streaming::StreamingDisplay;
+            let mut display = StreamingDisplay::new(&progress_msg);
+            self.runner
+                .invoke_agent_spinner_only(&config, &prompt, &mut display)?;
+        } else {
+            self.runner.invoke_agent(&config, &prompt)?;
         }
-
-        let _result = result?;
 
         // Update context with speck path
         self.context.speck_path = Some(speck_path);
@@ -538,13 +535,8 @@ impl PlanningLoop {
     /// Run the critic phase
     ///
     /// Per [D20], critic invocation is identical in both modes.
+    /// Per [D25], when not in quiet mode, streams agent output with a fixed spinner.
     fn run_critic(&mut self) -> Result<(), SpecksError> {
-        let progress_handle = if !self.quiet {
-            Some(self.adapter.start_progress("Critic reviewing speck..."))
-        } else {
-            None
-        };
-
         let speck_path =
             self.context
                 .speck_path
@@ -561,14 +553,17 @@ impl PlanningLoop {
         let config =
             crate::agent::critic_config(&self.project_root).with_timeout(self.timeout_secs);
 
-        let result = self.runner.invoke_agent(&config, &prompt);
+        // Invoke critic with spinner only (tool-heavy agent, text output is noise)
+        let result = if !self.quiet {
+            use crate::streaming::StreamingDisplay;
+            let mut display = StreamingDisplay::new("Critic reviewing speck...");
+            self.runner
+                .invoke_agent_spinner_only(&config, &prompt, &mut display)?
+        } else {
+            self.runner.invoke_agent(&config, &prompt)?
+        };
 
-        // End progress spinner
-        if let Some(handle) = progress_handle {
-            self.adapter.end_progress(handle, result.is_ok());
-        }
-
-        self.context.critic_feedback = Some(result?.output);
+        self.context.critic_feedback = Some(result.output);
 
         Ok(())
     }

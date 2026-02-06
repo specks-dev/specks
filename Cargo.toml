@@ -34,10 +34,12 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # Interactive prompts and terminal UI
-inquire = "0.7"
+dialoguer = "0.11"
+console = "0.15"
 indicatif = "0.17"
 owo-colors = "4"
 ctrlc = "3.4"
+crossterm = "0.28"
 
 # Internal crates
 specks-core = { path = "crates/specks-core" }

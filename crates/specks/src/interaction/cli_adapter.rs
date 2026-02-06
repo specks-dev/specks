@@ -1,16 +1,18 @@
-//! CLI adapter implementation using inquire for interactive prompts
+//! CLI adapter implementation using dialoguer for interactive prompts
 //!
 //! This module provides `CliAdapter`, which implements `InteractionAdapter` for
-//! terminal-based user interaction.
+//! terminal-based user interaction with customizable spacing.
 
 use std::collections::HashMap;
+use std::fmt::Write as FmtWrite;
 use std::io::{IsTerminal, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use console::Style;
+use dialoguer::{Confirm, Input, MultiSelect, Select};
+use dialoguer::theme::Theme;
 use indicatif::{ProgressBar, ProgressStyle};
-use inquire::{Confirm, MultiSelect, Select, Text};
-use inquire::error::InquireError;
 use owo_colors::OwoColorize;
 
 use specks_core::interaction::{
@@ -26,62 +28,207 @@ fn is_cancelled() -> bool {
 }
 
 /// Set up the global Ctrl+C handler
-///
-/// This should be called once at program startup. The handler sets a global flag
-/// that can be checked by the adapter to detect cancellation.
 pub fn setup_ctrl_c_handler() {
-    // Only set up the handler once
     static HANDLER_SET: AtomicBool = AtomicBool::new(false);
 
     if HANDLER_SET.swap(true, Ordering::SeqCst) {
-        return; // Already set up
+        return;
     }
 
     if let Err(e) = ctrlc::set_handler(move || {
         CANCELLED.store(true, Ordering::SeqCst);
-        // Print a newline to clean up the terminal
         eprintln!();
     }) {
-        // Log but don't fail if we can't set the handler
         eprintln!("Warning: Could not set Ctrl+C handler: {}", e);
     }
 }
 
 /// Reset the cancellation flag
-///
-/// This should be called at the start of a new interaction session
 pub fn reset_cancellation() {
     CANCELLED.store(false, Ordering::SeqCst);
 }
 
+/// Custom theme with generous spacing between elements
+struct SpacedTheme {
+    prompt_style: Style,
+    active_style: Style,
+    inactive_style: Style,
+    hint_style: Style,
+}
+
+impl SpacedTheme {
+    fn new() -> Self {
+        Self {
+            prompt_style: Style::new().cyan().bold(),
+            active_style: Style::new().cyan(),
+            inactive_style: Style::new(),
+            hint_style: Style::new().dim(),
+        }
+    }
+}
+
+impl Theme for SpacedTheme {
+    fn format_prompt(&self, f: &mut dyn FmtWrite, prompt: &str) -> std::fmt::Result {
+        write!(f, "{}", self.prompt_style.apply_to(format!("? {}", prompt)))
+    }
+
+    fn format_input_prompt(
+        &self,
+        f: &mut dyn FmtWrite,
+        prompt: &str,
+        default: Option<&str>,
+    ) -> std::fmt::Result {
+        match default {
+            Some(d) => write!(
+                f,
+                "{} {}",
+                self.prompt_style.apply_to(format!("? {}", prompt)),
+                self.hint_style.apply_to(format!("({})", d))
+            ),
+            None => write!(f, "{}", self.prompt_style.apply_to(format!("? {}", prompt))),
+        }
+    }
+
+    fn format_input_prompt_selection(
+        &self,
+        f: &mut dyn FmtWrite,
+        prompt: &str,
+        sel: &str,
+    ) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            self.prompt_style.apply_to(format!("? {}", prompt)),
+            self.active_style.apply_to(sel)
+        )
+    }
+
+    fn format_confirm_prompt(
+        &self,
+        f: &mut dyn FmtWrite,
+        prompt: &str,
+        default: Option<bool>,
+    ) -> std::fmt::Result {
+        let hint = match default {
+            Some(true) => "(Y/n)",
+            Some(false) => "(y/N)",
+            None => "(y/n)",
+        };
+        write!(
+            f,
+            "{} {}",
+            self.prompt_style.apply_to(format!("? {}", prompt)),
+            self.hint_style.apply_to(hint)
+        )
+    }
+
+    fn format_confirm_prompt_selection(
+        &self,
+        f: &mut dyn FmtWrite,
+        prompt: &str,
+        selection: Option<bool>,
+    ) -> std::fmt::Result {
+        let answer = match selection {
+            Some(true) => "Yes",
+            Some(false) => "No",
+            None => "?",
+        };
+        write!(
+            f,
+            "{} {}",
+            self.prompt_style.apply_to(format!("? {}", prompt)),
+            self.active_style.apply_to(answer)
+        )
+    }
+
+    fn format_select_prompt(&self, f: &mut dyn FmtWrite, prompt: &str) -> std::fmt::Result {
+        write!(f, "{}", self.prompt_style.apply_to(format!("? {}", prompt)))
+    }
+
+    fn format_select_prompt_selection(
+        &self,
+        f: &mut dyn FmtWrite,
+        prompt: &str,
+        sel: &str,
+    ) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            self.prompt_style.apply_to(format!("? {}", prompt)),
+            self.active_style.apply_to(sel)
+        )
+    }
+
+    fn format_select_prompt_item(
+        &self,
+        f: &mut dyn FmtWrite,
+        text: &str,
+        active: bool,
+    ) -> std::fmt::Result {
+        // Add blank line before each item for spacing
+        writeln!(f)?;
+        if active {
+            write!(f, "  {} {}", self.active_style.apply_to(">"), self.active_style.apply_to(text))
+        } else {
+            write!(f, "    {}", self.inactive_style.apply_to(text))
+        }
+    }
+
+    fn format_multi_select_prompt(&self, f: &mut dyn FmtWrite, prompt: &str) -> std::fmt::Result {
+        write!(f, "{}", self.prompt_style.apply_to(format!("? {}", prompt)))
+    }
+
+    fn format_multi_select_prompt_selection(
+        &self,
+        f: &mut dyn FmtWrite,
+        prompt: &str,
+        selections: &[&str],
+    ) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            self.prompt_style.apply_to(format!("? {}", prompt)),
+            self.active_style.apply_to(selections.join(", "))
+        )
+    }
+
+    fn format_multi_select_prompt_item(
+        &self,
+        f: &mut dyn FmtWrite,
+        text: &str,
+        checked: bool,
+        active: bool,
+    ) -> std::fmt::Result {
+        // Add blank line before each item for spacing
+        writeln!(f)?;
+        let checkbox = if checked { "[✓]" } else { "[ ]" };
+        if active {
+            write!(
+                f,
+                "  {} {} {}",
+                self.active_style.apply_to(">"),
+                self.active_style.apply_to(checkbox),
+                self.active_style.apply_to(text)
+            )
+        } else {
+            write!(
+                f,
+                "    {} {}",
+                self.inactive_style.apply_to(checkbox),
+                self.inactive_style.apply_to(text)
+            )
+        }
+    }
+}
+
 /// CLI adapter for terminal-based user interaction
-///
-/// This adapter uses the `inquire` crate for interactive prompts and
-/// `indicatif` for progress spinners. It implements proper TTY detection
-/// and Ctrl+C handling.
-///
-/// # Example
-///
-/// ```ignore
-/// let adapter = CliAdapter::new();
-/// if adapter.is_tty() {
-///     let name = adapter.ask_text("What is your name?", Some("World"))?;
-///     adapter.print_success(&format!("Hello, {}!", name));
-/// }
-/// ```
 pub struct CliAdapter {
-    /// Whether stdin is a TTY
     is_tty: bool,
-    /// Counter for generating unique progress handle IDs
     progress_counter: AtomicU64,
-    /// Active progress bars, keyed by handle ID
     active_progress: Arc<Mutex<HashMap<u64, ProgressBar>>>,
 }
 
 impl CliAdapter {
-    /// Create a new CLI adapter
-    ///
-    /// Automatically detects whether stdin is a TTY.
     pub fn new() -> Self {
         setup_ctrl_c_handler();
         Self {
@@ -91,10 +238,7 @@ impl CliAdapter {
         }
     }
 
-    /// Create a new CLI adapter with explicit TTY setting
-    ///
-    /// This is useful for testing or when you want to override TTY detection.
-    #[allow(dead_code)] // Test utility
+    #[allow(dead_code)]
     pub fn with_tty(is_tty: bool) -> Self {
         setup_ctrl_c_handler();
         Self {
@@ -104,13 +248,11 @@ impl CliAdapter {
         }
     }
 
-    /// Check if stdin is a TTY
-    #[allow(dead_code)] // Part of public API, used in tests
+    #[allow(dead_code)]
     pub fn is_tty(&self) -> bool {
         self.is_tty
     }
 
-    /// Check for cancellation before an operation
     fn check_cancelled(&self) -> InteractionResult<()> {
         if is_cancelled() {
             Err(InteractionError::Cancelled)
@@ -119,7 +261,6 @@ impl CliAdapter {
         }
     }
 
-    /// Check for TTY before an interactive operation
     fn require_tty(&self) -> InteractionResult<()> {
         if !self.is_tty {
             Err(InteractionError::NonTty)
@@ -128,18 +269,8 @@ impl CliAdapter {
         }
     }
 
-    /// Convert an inquire error to an InteractionError
-    fn convert_inquire_error(err: InquireError) -> InteractionError {
-        match err {
-            InquireError::OperationCanceled => InteractionError::Cancelled,
-            InquireError::OperationInterrupted => InteractionError::Cancelled,
-            InquireError::IO(io_err) => InteractionError::Io(io_err.to_string()),
-            InquireError::NotTTY => InteractionError::NonTty,
-            InquireError::InvalidConfiguration(msg) => {
-                InteractionError::InvalidInput(msg.to_string())
-            }
-            InquireError::Custom(err) => InteractionError::Other(err.to_string()),
-        }
+    fn convert_dialoguer_error(err: dialoguer::Error) -> InteractionError {
+        InteractionError::Io(err.to_string())
     }
 }
 
@@ -154,12 +285,13 @@ impl InteractionAdapter for CliAdapter {
         self.require_tty()?;
         self.check_cancelled()?;
 
-        let mut text = Text::new(prompt);
+        let theme = SpacedTheme::new();
+        let mut input: Input<String> = Input::with_theme(&theme).with_prompt(prompt);
         if let Some(d) = default {
-            text = text.with_default(d);
+            input = input.default(d.to_string());
         }
 
-        text.prompt().map_err(Self::convert_inquire_error)
+        input.interact_text().map_err(Self::convert_dialoguer_error)
     }
 
     fn ask_select(&self, prompt: &str, options: &[&str]) -> InteractionResult<usize> {
@@ -172,28 +304,30 @@ impl InteractionAdapter for CliAdapter {
             ));
         }
 
-        // Convert to owned strings for inquire
-        let options_owned: Vec<String> = options.iter().map(|s| s.to_string()).collect();
+        let theme = SpacedTheme::new();
 
-        let selected = Select::new(prompt, options_owned.clone())
-            .prompt()
-            .map_err(Self::convert_inquire_error)?;
+        // Print spacing before the select
+        println!();
 
-        // Find the index of the selected item
-        options_owned
-            .iter()
-            .position(|s| s == &selected)
-            .ok_or_else(|| InteractionError::Other("selected item not found".to_string()))
+        Select::with_theme(&theme)
+            .with_prompt(prompt)
+            .items(options)
+            .default(0)
+            .interact()
+            .map_err(Self::convert_dialoguer_error)
     }
 
     fn ask_confirm(&self, prompt: &str, default: bool) -> InteractionResult<bool> {
         self.require_tty()?;
         self.check_cancelled()?;
 
-        Confirm::new(prompt)
-            .with_default(default)
-            .prompt()
-            .map_err(Self::convert_inquire_error)
+        let theme = SpacedTheme::new();
+
+        Confirm::with_theme(&theme)
+            .with_prompt(prompt)
+            .default(default)
+            .interact()
+            .map_err(Self::convert_dialoguer_error)
     }
 
     fn ask_multi_select(&self, prompt: &str, options: &[&str]) -> InteractionResult<Vec<usize>> {
@@ -206,20 +340,16 @@ impl InteractionAdapter for CliAdapter {
             ));
         }
 
-        // Convert to owned strings for inquire
-        let options_owned: Vec<String> = options.iter().map(|s| s.to_string()).collect();
+        let theme = SpacedTheme::new();
 
-        let selected = MultiSelect::new(prompt, options_owned.clone())
-            .prompt()
-            .map_err(Self::convert_inquire_error)?;
+        // Print spacing before the multi-select
+        println!();
 
-        // Find the indices of the selected items
-        let indices: Vec<usize> = selected
-            .iter()
-            .filter_map(|s| options_owned.iter().position(|opt| opt == s))
-            .collect();
-
-        Ok(indices)
+        MultiSelect::with_theme(&theme)
+            .with_prompt(prompt)
+            .items(options)
+            .interact()
+            .map_err(Self::convert_dialoguer_error)
     }
 
     fn start_progress(&self, message: &str) -> ProgressHandle {
@@ -235,7 +365,6 @@ impl InteractionAdapter for CliAdapter {
         pb.set_message(message.to_string());
         pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
-        // Store the progress bar
         if let Ok(mut progress_map) = self.active_progress.lock() {
             progress_map.insert(id, pb);
         }
@@ -250,7 +379,6 @@ impl InteractionAdapter for CliAdapter {
                 let elapsed = pb.elapsed();
                 let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
 
-                // Clear the spinner line completely, then print the final status
                 pb.finish_and_clear();
 
                 if success {
@@ -264,7 +392,6 @@ impl InteractionAdapter for CliAdapter {
 
     fn print_info(&self, message: &str) {
         println!("{}", message);
-        // Flush to ensure immediate display
         let _ = std::io::stdout().flush();
     }
 
@@ -282,6 +409,11 @@ impl InteractionAdapter for CliAdapter {
         println!("{} {}", "✓".green(), message.green());
         let _ = std::io::stdout().flush();
     }
+
+    fn print_header(&self, message: &str) {
+        println!("{}", message.cyan().bold());
+        let _ = std::io::stdout().flush();
+    }
 }
 
 #[cfg(test)]
@@ -290,10 +422,7 @@ mod tests {
 
     #[test]
     fn test_cli_adapter_new_detects_tty() {
-        // In test context, stdin is typically not a TTY
         let adapter = CliAdapter::new();
-        // We can't assert a specific value here since it depends on the test environment,
-        // but we verify the method works
         let _ = adapter.is_tty();
     }
 
@@ -336,8 +465,6 @@ mod tests {
 
     #[test]
     fn test_empty_options_error_for_select() {
-        // Test that the InvalidInput error type exists and works
-        // (actual empty options validation would require TTY which we can't test here)
         let err = InteractionError::InvalidInput("options cannot be empty".to_string());
         assert!(matches!(err, InteractionError::InvalidInput(_)));
     }
@@ -347,14 +474,12 @@ mod tests {
         let adapter = CliAdapter::with_tty(false);
         let handle = adapter.start_progress("test message");
         assert_eq!(handle.message(), "test message");
-        // End progress doesn't fail even for non-TTY
         adapter.end_progress(handle, true);
     }
 
     #[test]
     fn test_print_methods_dont_panic() {
         let adapter = CliAdapter::with_tty(false);
-        // These should not panic, even without a TTY
         adapter.print_info("info message");
         adapter.print_warning("warning message");
         adapter.print_error("error message");
@@ -374,63 +499,6 @@ mod tests {
     #[test]
     fn test_default_implementation() {
         let adapter = CliAdapter::default();
-        // Should work the same as new()
         let _ = adapter.is_tty();
     }
-
-    #[test]
-    fn test_convert_inquire_error() {
-        // Test error conversion
-        let cancelled = CliAdapter::convert_inquire_error(InquireError::OperationCanceled);
-        assert!(matches!(cancelled, InteractionError::Cancelled));
-
-        let interrupted = CliAdapter::convert_inquire_error(InquireError::OperationInterrupted);
-        assert!(matches!(interrupted, InteractionError::Cancelled));
-
-        let not_tty = CliAdapter::convert_inquire_error(InquireError::NotTTY);
-        assert!(matches!(not_tty, InteractionError::NonTty));
-    }
-
-    // Integration test note:
-    // Manual verification of prompt styling should be done by running:
-    //
-    // ```rust
-    // let adapter = CliAdapter::new();
-    // if adapter.is_tty() {
-    //     // Test text input
-    //     let name = adapter.ask_text("Enter your name:", Some("World")).unwrap();
-    //     println!("Got: {}", name);
-    //
-    //     // Test select
-    //     let idx = adapter.ask_select("Pick one:", &["Option A", "Option B", "Option C"]).unwrap();
-    //     println!("Selected index: {}", idx);
-    //
-    //     // Test confirm
-    //     let confirmed = adapter.ask_confirm("Continue?", true).unwrap();
-    //     println!("Confirmed: {}", confirmed);
-    //
-    //     // Test multi-select
-    //     let indices = adapter.ask_multi_select("Pick any:", &["A", "B", "C"]).unwrap();
-    //     println!("Selected indices: {:?}", indices);
-    //
-    //     // Test progress
-    //     let handle = adapter.start_progress("Working...");
-    //     std::thread::sleep(std::time::Duration::from_secs(2));
-    //     adapter.end_progress(handle, true);
-    //
-    //     // Test print methods
-    //     adapter.print_info("This is info");
-    //     adapter.print_warning("This is a warning");
-    //     adapter.print_error("This is an error");
-    //     adapter.print_success("This is success");
-    // }
-    // ```
-    //
-    // Expected behavior:
-    // - Info: default/white text
-    // - Warning: yellow text with "warning:" prefix
-    // - Error: red bold text with "error:" prefix
-    // - Success: green text with "✓" prefix
-    // - Progress: cyan spinner that animates
-    // - Ctrl+C should cancel prompts and return InteractionError::Cancelled
 }
