@@ -3,8 +3,12 @@
 //! Implements the iterative planning loop per [D03] Iterative Planning Loop and
 //! Concept C02: Planning Loop State Machine.
 //!
-//! The loop runs: interviewer -> planner -> critic -> interviewer -> (approve | revise)
+//! The loop runs: clarifier -> presenter -> planner -> critic -> (loop)
 //! until the user approves the speck or aborts.
+//!
+//! Per [D21] and [D24], the clarifier agent runs in EVERY iteration:
+//! - First iteration: analyzes the user's idea
+//! - Subsequent iterations: analyzes critic feedback for revision questions
 //!
 //! Per [D18] and [D19], the loop supports two invocation modes:
 //! - **CLI mode**: CLI code handles all user interaction via inquire prompts
@@ -156,11 +160,19 @@ impl PlanningLoop {
         self.runner.check_claude_cli()?;
 
         // Start the loop
-        self.transition(LoopState::InterviewerGather);
+        // Per [D21] and [D24], the flow is: Clarifier -> Present -> Planner -> Critic -> CriticPresent
+        // For now, we skip Clarifier phase (will be implemented in Step 8.3.5) and go directly to Present
+        self.transition(LoopState::Present);
 
         while !self.is_complete() {
             match self.state {
-                LoopState::InterviewerGather => {
+                LoopState::Clarifier => {
+                    // Clarifier phase - will be implemented in Step 8.3.5
+                    // For now, skip to Present
+                    self.transition(LoopState::Present);
+                }
+                LoopState::Present => {
+                    // Gather requirements (previously InterviewerGather)
                     self.run_interviewer_gather()?;
                     self.transition(LoopState::Planner);
                 }
@@ -170,9 +182,10 @@ impl PlanningLoop {
                 }
                 LoopState::Critic => {
                     self.run_critic()?;
-                    self.transition(LoopState::InterviewerPresent);
+                    self.transition(LoopState::CriticPresent);
                 }
-                LoopState::InterviewerPresent => {
+                LoopState::CriticPresent => {
+                    // Present critic results (previously InterviewerPresent)
                     let user_decision = self.run_interviewer_present()?;
                     match user_decision {
                         UserDecision::Approve => {
@@ -181,7 +194,9 @@ impl PlanningLoop {
                         UserDecision::Revise(feedback) => {
                             self.context.revision_feedback = Some(feedback);
                             self.context.iteration += 1;
-                            self.transition(LoopState::Planner);
+                            // Per [D24], revision loops back through clarifier
+                            // For now, skip to Present until clarifier is implemented
+                            self.transition(LoopState::Present);
                         }
                         UserDecision::Abort => {
                             self.transition(LoopState::Aborted);
@@ -189,8 +204,8 @@ impl PlanningLoop {
                     }
                 }
                 LoopState::Revise => {
-                    // This state is handled by transitioning to Planner
-                    self.transition(LoopState::Planner);
+                    // This state is handled by transitioning to Clarifier (or Present for now)
+                    self.transition(LoopState::Present);
                 }
                 LoopState::Start | LoopState::Approved | LoopState::Aborted => {
                     // Terminal states or handled above
@@ -738,8 +753,9 @@ mod tests {
         );
 
         // Manual state transitions
-        loop_instance.transition(LoopState::InterviewerGather);
-        assert_eq!(*loop_instance.state(), LoopState::InterviewerGather);
+        // Present state is the new gather phase (was InterviewerGather)
+        loop_instance.transition(LoopState::Present);
+        assert_eq!(*loop_instance.state(), LoopState::Present);
 
         loop_instance.transition(LoopState::Approved);
         assert!(loop_instance.is_complete());
@@ -947,8 +963,8 @@ mod tests {
             PlanningMode::Cli,
         );
 
-        // Simulate the state transition to InterviewerGather
-        loop_instance.transition(LoopState::InterviewerGather);
+        // Simulate the state transition to Present (was InterviewerGather)
+        loop_instance.transition(LoopState::Present);
 
         // Try to run CLI gather - should fail with UserAborted
         let result = loop_instance.run_cli_gather();

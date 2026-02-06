@@ -43,7 +43,8 @@ create_test_project() {
     mkdir -p "$project_dir/agents"
 
     # Create minimal agent definitions (needed by AgentRunner)
-    for agent in specks-interviewer specks-planner specks-critic; do
+    # Note: specks-clarifier added per [D21] and [D24]
+    for agent in specks-clarifier specks-interviewer specks-planner specks-critic; do
         cat > "$project_dir/agents/${agent}.md" << EOF
 ---
 name: $agent

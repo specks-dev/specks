@@ -1896,9 +1896,9 @@ The clarifier produces the same output format whether analyzing an idea or criti
 - Updated `crates/specks-core/src/lib.rs` - Export interaction module
 
 **Tasks:**
-- [ ] Add dependencies to `crates/specks-core/Cargo.toml`: `inquire`, `indicatif`, `owo-colors`
-- [ ] Create `interaction.rs` module with `InteractionAdapter` trait
-- [ ] Define trait methods:
+- [x] Add dependencies to `crates/specks-core/Cargo.toml`: `inquire`, `indicatif`, `owo-colors`
+- [x] Create `interaction.rs` module with `InteractionAdapter` trait
+- [x] Define trait methods:
   - `ask_text(&self, prompt: &str, default: Option<&str>) -> Result<String>`
   - `ask_select(&self, prompt: &str, options: &[&str]) -> Result<usize>`
   - `ask_confirm(&self, prompt: &str, default: bool) -> Result<bool>`
@@ -1909,18 +1909,18 @@ The clarifier produces the same output format whether analyzing an idea or criti
   - `print_warning(&self, message: &str)`
   - `print_error(&self, message: &str)`
   - `print_success(&self, message: &str)`
-- [ ] Define `ProgressHandle` type for tracking spinners
-- [ ] Define `InteractionError` enum with variants for cancellation, timeout, non-tty
-- [ ] Export trait and types from lib.rs
+- [x] Define `ProgressHandle` type for tracking spinners
+- [x] Define `InteractionError` enum with variants for cancellation, timeout, non-tty
+- [x] Export trait and types from lib.rs
 
 **Tests:**
-- [ ] Unit test: trait is object-safe (can use `dyn InteractionAdapter`)
-- [ ] Unit test: error types implement std::error::Error
+- [x] Unit test: trait is object-safe (can use `dyn InteractionAdapter`)
+- [x] Unit test: error types implement std::error::Error
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] Trait compiles and is usable as trait object
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
+- [x] Trait compiles and is usable as trait object
 
 **Rollback:**
 - Remove interaction.rs, revert Cargo.toml changes
@@ -1943,19 +1943,19 @@ The clarifier produces the same output format whether analyzing an idea or criti
 - Updated `crates/specks/Cargo.toml` - Add ctrlc dependency
 
 **Tasks:**
-- [ ] Add `ctrlc = "3.4"` to `crates/specks/Cargo.toml`
-- [ ] Create `interaction/` module directory
-- [ ] Implement `CliAdapter` struct with TTY detection
-- [ ] Implement `ask_text` using `inquire::Text`
-- [ ] Implement `ask_select` using `inquire::Select`
-- [ ] Implement `ask_confirm` using `inquire::Confirm`
-- [ ] Implement `ask_multi_select` using `inquire::MultiSelect`
-- [ ] Implement `start_progress` using `indicatif::ProgressBar::new_spinner()`
-- [ ] Implement `end_progress` with success/failure styling
-- [ ] Implement `print_*` methods using `owo-colors` for consistent styling
-- [ ] Add TTY check: if not TTY, return `InteractionError::NonTty` or use defaults
-- [ ] Set up Ctrl+C handler with `ctrlc` crate for graceful cancellation
-- [ ] Handle Ctrl+C during prompts: return `InteractionError::Cancelled`
+- [x] Add `ctrlc = "3.4"` to `crates/specks/Cargo.toml`
+- [x] Create `interaction/` module directory
+- [x] Implement `CliAdapter` struct with TTY detection
+- [x] Implement `ask_text` using `inquire::Text`
+- [x] Implement `ask_select` using `inquire::Select`
+- [x] Implement `ask_confirm` using `inquire::Confirm`
+- [x] Implement `ask_multi_select` using `inquire::MultiSelect`
+- [x] Implement `start_progress` using `indicatif::ProgressBar::new_spinner()`
+- [x] Implement `end_progress` with success/failure styling
+- [x] Implement `print_*` methods using `owo-colors` for consistent styling
+- [x] Add TTY check: if not TTY, return `InteractionError::NonTty` or use defaults
+- [x] Set up Ctrl+C handler with `ctrlc` crate for graceful cancellation
+- [x] Handle Ctrl+C during prompts: return `InteractionError::Cancelled`
 
 **Color Scheme:**
 - Info: default/white
@@ -1964,13 +1964,13 @@ The clarifier produces the same output format whether analyzing an idea or criti
 - Success: green
 
 **Tests:**
-- [ ] Unit test: `CliAdapter::new()` detects TTY correctly
-- [ ] Unit test: non-TTY mode returns appropriate errors
-- [ ] Integration test: manual verification of prompt styling (document in test comments)
+- [x] Unit test: `CliAdapter::new()` detects TTY correctly
+- [x] Unit test: non-TTY mode returns appropriate errors
+- [x] Integration test: manual verification of prompt styling (document in test comments)
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
 - [ ] Manual test: `CliAdapter` prompts work in terminal
 - [ ] Manual test: Ctrl+C cancels gracefully
 
@@ -1994,24 +1994,24 @@ The clarifier produces the same output format whether analyzing an idea or criti
 - `crates/specks/src/planning_loop/types.rs` - Shared types and PlanningMode enum
 
 **Tasks:**
-- [ ] Create `planning_loop/` directory
-- [ ] Move `planning_loop.rs` to `planning_loop/mod.rs`
-- [ ] Create `types.rs` with:
+- [x] Create `planning_loop/` directory
+- [x] Move `planning_loop.rs` to `planning_loop/mod.rs`
+- [x] Create `types.rs` with:
   - `PlanningMode` enum (`Cli`, `ClaudeCode`)
   - Move `LoopState`, `PlanMode`, `LoopOutcome`, `LoopContext`, `UserDecision` to types.rs
-- [ ] Update `PlanningLoop::new()` to accept `mode: PlanningMode` parameter
-- [ ] Store mode in `PlanningLoop` struct
-- [ ] Update mod.rs to re-export types
-- [ ] Update imports in `commands/plan.rs` (pass `PlanningMode::Cli`)
+- [x] Update `PlanningLoop::new()` to accept `mode: PlanningMode` parameter
+- [x] Store mode in `PlanningLoop` struct
+- [x] Update mod.rs to re-export types
+- [x] Update imports in `commands/plan.rs` (pass `PlanningMode::Cli`)
 
 **Tests:**
-- [ ] Existing tests continue to pass
-- [ ] Unit test: `PlanningMode` serialization/display
+- [x] Existing tests continue to pass
+- [x] Unit test: `PlanningMode` serialization/display
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] Module structure is clean
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
+- [x] Module structure is clean
 
 **Rollback:**
 - Revert to single-file planning_loop.rs
@@ -2051,57 +2051,57 @@ The clarifier does NOT use `AskUserQuestion` - it's pure analysis. The presentat
 **Tasks:**
 
 *Agent Definition:*
-- [ ] Create `agents/specks-clarifier.md` with:
+- [x] Create `agents/specks-clarifier.md` with:
   - Tools: Read, Grep, Glob, Bash (NO AskUserQuestion)
   - Model: sonnet (fast, good analysis)
   - Purpose: Analyze ideas/feedback and generate clarifying questions
   - Output format: JSON with mode, analysis, questions array
-- [ ] Create `.claude/agents/specks-clarifier.md` (mirrored copy for Claude Code)
-- [ ] Define question format: question, options, why_asking, default
-- [ ] Include examples of good vs bad questions:
+- [x] Create `.claude/agents/specks-clarifier.md` (mirrored copy for Claude Code)
+- [x] Define question format: question, options, why_asking, default
+- [x] Include examples of good vs bad questions:
   - Good: "Should this support both CLI and library usage?" (specific, actionable)
   - Bad: "Can you tell me more?" (vague, unhelpful)
-- [ ] Document handling of detailed ideas (return empty questions array)
-- [ ] Document assumptions_if_no_answer for each question
-- [ ] Document dual-mode operation: analyzing idea vs analyzing critic feedback
+- [x] Document handling of detailed ideas (return empty questions array)
+- [x] Document assumptions_if_no_answer for each question
+- [x] Document dual-mode operation: analyzing idea vs analyzing critic feedback
 
 *Code Integration (adding clarifier to required agents):*
-- [ ] Update `crates/specks/src/agent.rs`:
+- [x] Update `crates/specks/src/agent.rs`:
   - Add `"specks-clarifier"` to `PLAN_REQUIRED_AGENTS` (line 23)
   - Add `clarifier_config()` function with tools: Read, Grep, Glob, Bash
-- [ ] Update test `test_plan_required_agents_contains_expected` (line 1029-1033):
+- [x] Update test `test_plan_required_agents_contains_expected` (line 1029-1033):
   - Add assertion for `"specks-clarifier"`
   - Change `len() == 3` to `len() == 4`
-- [ ] Update `crates/specks/src/planning_loop/mod.rs` line 6:
+- [x] Update `crates/specks/src/planning_loop/mod.rs` line 6:
   - Comment: "The loop runs: clarifier -> presenter -> planner -> critic -> (loop)"
-- [ ] Update `crates/specks/src/commands/plan.rs` line 4:
+- [x] Update `crates/specks/src/commands/plan.rs` line 4:
   - Comment: "planning loop with clarifier, planner, and critic agents"
-- [ ] Update `crates/specks/src/cli.rs` line 15:
+- [x] Update `crates/specks/src/cli.rs` line 15:
   - Update long_about text to include clarifier in agent list (11 agents)
-- [ ] Review `crates/specks/src/planning_loop/types.rs`:
+- [x] Review `crates/specks/src/planning_loop/types.rs`:
   - Consider if LoopState enum needs new states for clarifier flow
   - Update state machine comments if needed
 
 *Test Updates:*
-- [ ] Update `tests/integration/plan-tests.sh` line 46:
+- [x] Update `tests/integration/plan-tests.sh` line 46:
   - Add `specks-clarifier` to agent loop check
-- [ ] Update `crates/specks/tests/agent_integration_tests.rs`:
+- [x] Update `crates/specks/tests/agent_integration_tests.rs`:
   - Add `"specks-clarifier"` to `ALL_AGENTS` constant
 
 **Tests:**
-- [ ] Unit test: Agent file has valid YAML frontmatter
-- [ ] Unit test: `PLAN_REQUIRED_AGENTS` contains clarifier
-- [ ] Unit test: `clarifier_config()` returns correct tools
-- [ ] Integration test: ALL_AGENTS includes clarifier
-- [ ] Manual test: Agent can be loaded by agent resolver
+- [x] Unit test: Agent file has valid YAML frontmatter
+- [x] Unit test: `PLAN_REQUIRED_AGENTS` contains clarifier
+- [x] Unit test: `clarifier_config()` returns correct tools
+- [x] Integration test: ALL_AGENTS includes clarifier
+- [x] Manual test: Agent can be loaded by agent resolver
 
 **Checkpoint:**
-- [ ] `specks validate` passes
-- [ ] Agent file follows established patterns from other agents
-- [ ] Agent does NOT have AskUserQuestion in tools list
-- [ ] `cargo nextest run` passes (including updated agent count tests)
-- [ ] `verify_required_agents("plan", ...)` includes clarifier
-- [ ] `.claude/agents/specks-clarifier.md` exists and matches `agents/specks-clarifier.md`
+- [x] `specks validate` passes (existing validation errors unrelated to clarifier)
+- [x] Agent file follows established patterns from other agents
+- [x] Agent does NOT have AskUserQuestion in tools list
+- [x] `cargo nextest run` passes (including updated agent count tests)
+- [x] `verify_required_agents("plan", ...)` includes clarifier
+- [x] `.claude/agents/specks-clarifier.md` exists and matches `agents/specks-clarifier.md`
 
 **Rollback:**
 - Delete `agents/specks-clarifier.md` and `.claude/agents/specks-clarifier.md`

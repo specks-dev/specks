@@ -73,6 +73,7 @@ const EXECUTION_AGENTS: &[&str] = &[
 /// List of all agents (planning + execution + orchestration)
 const ALL_AGENTS: &[&str] = &[
     "specks-director",
+    "specks-clarifier",
     "specks-planner",
     "specks-critic",
     "specks-architect",
@@ -82,6 +83,7 @@ const ALL_AGENTS: &[&str] = &[
     "specks-auditor",
     "specks-logger",
     "specks-committer",
+    "specks-interviewer",
 ];
 
 // =============================================================================

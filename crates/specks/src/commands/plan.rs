@@ -1,7 +1,10 @@
 //! Implementation of the `specks plan` command
 //!
 //! Per Spec S01, this command creates or revises specks through an iterative
-//! planning loop with interviewer, planner, and critic agents.
+//! planning loop with clarifier, planner, and critic agents.
+//!
+//! Per [D21] and [D24], the clarifier agent generates context-aware questions
+//! in every iteration (first for the idea, subsequent for critic feedback).
 
 #[allow(unused_imports)]
 use std::path::{Path, PathBuf};

@@ -20,7 +20,8 @@ use crate::share::find_share_dir;
 pub const AGENTS_DIR_NAME: &str = "agents";
 
 /// Required agents for the `specks plan` command
-pub const PLAN_REQUIRED_AGENTS: &[&str] = &["specks-interviewer", "specks-planner", "specks-critic"];
+pub const PLAN_REQUIRED_AGENTS: &[&str] =
+    &["specks-clarifier", "specks-interviewer", "specks-planner", "specks-critic"];
 
 /// Required agents for the `specks execute` command
 pub const EXECUTE_REQUIRED_AGENTS: &[&str] = &[
@@ -558,6 +559,20 @@ pub fn director_config(project_root: &Path) -> AgentConfig {
     )
 }
 
+/// Create an AgentConfig for the clarifier agent
+pub fn clarifier_config(project_root: &Path) -> AgentConfig {
+    AgentConfig::new(
+        "specks-clarifier",
+        get_agent_path(project_root, "specks-clarifier"),
+        vec![
+            "Read".to_string(),
+            "Grep".to_string(),
+            "Glob".to_string(),
+            "Bash".to_string(),
+        ],
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -686,6 +701,26 @@ mod tests {
 
         assert_eq!(config.agent_name, "specks-director");
         assert!(config.allowed_tools.contains(&"Task".to_string()));
+    }
+
+    #[test]
+    fn test_clarifier_config() {
+        let project_root = PathBuf::from("/project");
+        let config = clarifier_config(&project_root);
+
+        assert_eq!(config.agent_name, "specks-clarifier");
+        // Clarifier has read-only tools - no Write, Edit, or AskUserQuestion
+        assert!(config.allowed_tools.contains(&"Read".to_string()));
+        assert!(config.allowed_tools.contains(&"Grep".to_string()));
+        assert!(config.allowed_tools.contains(&"Glob".to_string()));
+        assert!(config.allowed_tools.contains(&"Bash".to_string()));
+        assert!(!config.allowed_tools.contains(&"Write".to_string()));
+        assert!(!config.allowed_tools.contains(&"Edit".to_string()));
+        assert!(
+            !config
+                .allowed_tools
+                .contains(&"AskUserQuestion".to_string())
+        );
     }
 
     #[test]
@@ -1027,10 +1062,11 @@ mod tests {
 
     #[test]
     fn test_plan_required_agents_contains_expected() {
+        assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-clarifier"));
         assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-interviewer"));
         assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-planner"));
         assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-critic"));
-        assert_eq!(PLAN_REQUIRED_AGENTS.len(), 3);
+        assert_eq!(PLAN_REQUIRED_AGENTS.len(), 4);
     }
 
     #[test]

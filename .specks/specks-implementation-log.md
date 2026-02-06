@@ -6,6 +6,73 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.4: Create Clarifier Agent Definition | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Step 8.3.4 specification
+- `[D21] Clarifier Agent Generates Questions` - Design decision
+- `[D24] Clarifier Runs Every Iteration` - Design decision
+- `agents/specks-interviewer.md` - Agent pattern reference
+- `agents/specks-critic.md` - Agent pattern reference
+- `agents/specks-planner.md` - Agent pattern reference
+- `crates/specks/src/agent.rs` - PLAN_REQUIRED_AGENTS and config functions
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/specks-clarifier.md` with tools, model, output format | Done |
+| Create `.claude/agents/specks-clarifier.md` (mirrored copy) | Done |
+| Define question format: question, options, why_asking, default | Done |
+| Include examples of good vs bad questions | Done |
+| Document handling of detailed ideas (empty questions array) | Done |
+| Document assumptions_if_no_answer for each question | Done |
+| Document dual-mode operation: idea vs critic feedback | Done |
+| Add `"specks-clarifier"` to `PLAN_REQUIRED_AGENTS` | Done |
+| Add `clarifier_config()` function | Done |
+| Update test assertions for agent count (3 → 4) | Done |
+| Update planning_loop/mod.rs comment | Done |
+| Update commands/plan.rs comment | Done |
+| Update cli.rs long_about text (11 agents) | Done |
+| Update LoopState enum with new states | Done |
+| Update tests/integration/plan-tests.sh | Done |
+| Update agent_integration_tests.rs ALL_AGENTS | Done |
+
+**Files Created:**
+- `agents/specks-clarifier.md` - Clarifier agent definition (9KB, full spec with JSON output format, examples)
+- `.claude/agents/specks-clarifier.md` - Identical mirrored copy for Claude Code
+
+**Files Modified:**
+- `crates/specks/src/agent.rs` - Added clarifier to PLAN_REQUIRED_AGENTS, added clarifier_config(), updated tests
+- `crates/specks/src/planning_loop/mod.rs` - Updated module comment to reflect new flow
+- `crates/specks/src/planning_loop/types.rs` - Added Clarifier, Present, CriticPresent states to LoopState enum
+- `crates/specks/src/commands/plan.rs` - Updated module comment
+- `crates/specks/src/cli.rs` - Updated long_about to "11-agent suite"
+- `tests/integration/plan-tests.sh` - Added specks-clarifier to mock agent creation
+- `crates/specks/tests/agent_integration_tests.rs` - Added specks-clarifier and specks-interviewer to ALL_AGENTS
+
+**Test Results:**
+- `cargo nextest run`: 285 tests passed
+
+**Checkpoints Verified:**
+- Agent file follows established patterns: PASS
+- Agent does NOT have AskUserQuestion in tools list: PASS (only in documentation)
+- `cargo nextest run` passes: PASS (285 tests)
+- `verify_required_agents("plan", ...)` includes clarifier: PASS (verified via --verbose-agents)
+- `.claude/agents/specks-clarifier.md` matches `agents/specks-clarifier.md`: PASS (diff confirms identical)
+
+**Key Decisions/Notes:**
+- Clarifier agent uses tools: Read, Grep, Glob, Bash (NO AskUserQuestion - it generates questions, doesn't present them)
+- Model: sonnet (fast, good analysis)
+- JSON output format with mode, analysis, questions array, assumptions_if_no_answer
+- LoopState enum updated with new states: Clarifier → Present → Planner → Critic → CriticPresent
+- Actual clarifier invocation in the loop will be implemented in Step 8.3.5 (this step just defines the agent and integrates it into required agents)
+- State machine references updated but clarifier phase currently skipped pending Step 8.3.5
+
+---
+
 ## [specks-2.md] Step 8.3: Clarifier Agent Architecture Redesign | PLANNING | 2026-02-05
 
 **Completed:** 2026-02-05

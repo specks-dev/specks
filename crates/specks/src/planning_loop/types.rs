@@ -1,23 +1,36 @@
 //! Types for the planning loop state machine
 //!
 //! These types are shared between CLI and Claude Code modes of the planning loop.
+//!
+//! Per [D21] and [D24], the clarifier agent runs in EVERY iteration:
+//! - First iteration: analyzes the user's idea
+//! - Subsequent iterations: analyzes critic feedback for revision questions
+//!
+//! Flow: Start -> Clarifier -> Present -> Planner -> Critic -> Present -> (Approve | loop)
 
 use std::path::PathBuf;
 
-/// Planning loop state per Concept C02
+/// Planning loop state per Concept C02 and [D21]/[D24]
+///
+/// The loop runs: clarifier -> presenter -> planner -> critic -> presenter -> (loop)
+/// The clarifier runs in EVERY iteration, generating context-aware questions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoopState {
     /// Initial state: receive idea string or speck path
     Start,
-    /// Interviewer gathering requirements from user
-    InterviewerGather,
+    /// Clarifier analyzing idea (first iteration) or critic feedback (subsequent)
+    Clarifier,
+    /// Presenter showing clarifier questions and gathering answers
+    /// (CLI: inquire prompts, Claude Code: interviewer agent)
+    Present,
     /// Planner creating or revising the speck
     Planner,
     /// Critic reviewing the speck for quality
     Critic,
-    /// Interviewer presenting results and asking for approval
-    InterviewerPresent,
-    /// User provided feedback, loop back to planner
+    /// Presenter showing critic feedback and asking for approval
+    /// (Same as Present state, but after critic review)
+    CriticPresent,
+    /// User provided feedback, loop back to clarifier with critic feedback
     #[allow(dead_code)] // Part of state machine design, used when full loop is implemented
     Revise,
     /// User approved the speck
@@ -36,12 +49,13 @@ impl LoopState {
     #[allow(dead_code)] // Part of state machine design
     pub fn next(&self) -> Option<LoopState> {
         match self {
-            LoopState::Start => Some(LoopState::InterviewerGather),
-            LoopState::InterviewerGather => Some(LoopState::Planner),
+            LoopState::Start => Some(LoopState::Clarifier),
+            LoopState::Clarifier => Some(LoopState::Present),
+            LoopState::Present => Some(LoopState::Planner),
             LoopState::Planner => Some(LoopState::Critic),
-            LoopState::Critic => Some(LoopState::InterviewerPresent),
-            LoopState::InterviewerPresent => None, // Branches to Revise or Approved
-            LoopState::Revise => Some(LoopState::Planner),
+            LoopState::Critic => Some(LoopState::CriticPresent),
+            LoopState::CriticPresent => None, // Branches to Revise or Approved
+            LoopState::Revise => Some(LoopState::Clarifier), // Loop back through clarifier
             LoopState::Approved | LoopState::Aborted => None,
         }
     }
@@ -178,18 +192,14 @@ mod tests {
 
     #[test]
     fn test_loop_state_transitions() {
-        assert_eq!(LoopState::Start.next(), Some(LoopState::InterviewerGather));
-        assert_eq!(
-            LoopState::InterviewerGather.next(),
-            Some(LoopState::Planner)
-        );
+        // New flow per [D21] and [D24]: clarifier runs every iteration
+        assert_eq!(LoopState::Start.next(), Some(LoopState::Clarifier));
+        assert_eq!(LoopState::Clarifier.next(), Some(LoopState::Present));
+        assert_eq!(LoopState::Present.next(), Some(LoopState::Planner));
         assert_eq!(LoopState::Planner.next(), Some(LoopState::Critic));
-        assert_eq!(
-            LoopState::Critic.next(),
-            Some(LoopState::InterviewerPresent)
-        );
-        assert_eq!(LoopState::InterviewerPresent.next(), None);
-        assert_eq!(LoopState::Revise.next(), Some(LoopState::Planner));
+        assert_eq!(LoopState::Critic.next(), Some(LoopState::CriticPresent));
+        assert_eq!(LoopState::CriticPresent.next(), None); // Branches to Revise or Approved
+        assert_eq!(LoopState::Revise.next(), Some(LoopState::Clarifier)); // Loop back through clarifier
         assert_eq!(LoopState::Approved.next(), None);
         assert_eq!(LoopState::Aborted.next(), None);
     }
@@ -197,10 +207,11 @@ mod tests {
     #[test]
     fn test_loop_state_terminal() {
         assert!(!LoopState::Start.is_terminal());
-        assert!(!LoopState::InterviewerGather.is_terminal());
+        assert!(!LoopState::Clarifier.is_terminal());
+        assert!(!LoopState::Present.is_terminal());
         assert!(!LoopState::Planner.is_terminal());
         assert!(!LoopState::Critic.is_terminal());
-        assert!(!LoopState::InterviewerPresent.is_terminal());
+        assert!(!LoopState::CriticPresent.is_terminal());
         assert!(!LoopState::Revise.is_terminal());
         assert!(LoopState::Approved.is_terminal());
         assert!(LoopState::Aborted.is_terminal());

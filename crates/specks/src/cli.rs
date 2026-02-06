@@ -12,7 +12,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[command(version = VERSION)]
 #[command(about = "From ideas to implementation via multi-agent orchestration")]
 #[command(
-    long_about = "Specks transforms ideas into working software through orchestrated LLM agents.\n\nA multi-agent suite (director, planner, critic, architect, implementer, monitor, reviewer, auditor, logger, committer) collaborates to create structured plans and execute them to completion.\n\nThe CLI provides utilities to validate, list, track progress, and integrate with beads for execution tracking."
+    long_about = "Specks transforms ideas into working software through orchestrated LLM agents.\n\nAn 11-agent suite (director, clarifier, planner, critic, architect, implementer, monitor, reviewer, auditor, logger, committer) collaborates to create structured plans and execute them to completion.\n\nThe CLI provides utilities to validate, list, track progress, and integrate with beads for execution tracking."
 )]
 pub struct Cli {
     /// Increase output verbosity
