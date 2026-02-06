@@ -2,6 +2,7 @@
 
 mod agent;
 mod cli;
+mod colors;
 mod commands;
 mod interaction;
 mod output;

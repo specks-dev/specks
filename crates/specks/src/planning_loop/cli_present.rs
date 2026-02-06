@@ -11,6 +11,8 @@ use std::path::Path;
 use specks_core::SpecksError;
 use specks_core::interaction::{InteractionAdapter, InteractionError};
 
+use crate::colors::COLORS;
+
 use super::types::{LoopContext, UserDecision};
 
 /// Priority levels for punch list items
@@ -307,6 +309,11 @@ impl CliPresenter {
     }
 
     /// Display punch list with priority indicators
+    ///
+    /// Colors items by priority using semantic colors:
+    /// - HIGH: COLORS.fail (red)
+    /// - MEDIUM: COLORS.warning (yellow)
+    /// - LOW: COLORS.active (blue)
     fn display_punch_list(&self, adapter: &dyn InteractionAdapter, items: &[PunchListItem]) {
         // Count by priority
         let high_count = items
@@ -326,27 +333,30 @@ impl CliPresenter {
 
         adapter.print_info("");
 
-        // Show high priority items first (blocking issues)
+        // Show high priority items first (blocking issues) - using fail color (red)
         if high_count > 0 {
             adapter.print_info("Must address:");
             for item in items.iter().filter(|i| i.priority == Priority::High) {
+                // Use print_error which uses COLORS.fail
                 adapter.print_error(&format!("  ✗ {}", item.description));
             }
         }
 
-        // Show medium priority items
+        // Show medium priority items - using warning color (yellow)
         if medium_count > 0 {
             adapter.print_info("Suggestions:");
             for item in items.iter().filter(|i| i.priority == Priority::Medium) {
-                adapter.print_info(&format!("  • {}", item.description));
+                adapter.print_warning(&format!("  • {}", item.description));
             }
         }
 
-        // Show low priority items
+        // Show low priority items - using active color (blue)
         if low_count > 0 {
             adapter.print_info("Optional:");
             for item in items.iter().filter(|i| i.priority == Priority::Low) {
-                adapter.print_info(&format!("  ○ {}", item.description));
+                // Format with active color directly since print_info doesn't apply color
+                let colored_item = format!("  ○ {}", COLORS.active.style(&item.description));
+                adapter.print_info(&colored_item);
             }
         }
     }

@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 use owo_colors::OwoColorize;
 
+use crate::colors::COLORS;
+
 /// Braille spinner animation frames
 const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -186,8 +188,13 @@ impl StreamingDisplay {
             format!("{} {} [{}]", frame, self.message, elapsed)
         };
 
-        // Carriage return, clear line, draw spinner
-        write!(stdout, "\r\x1b[2K\x1b[36m{}\x1b[0m", spinner_text).ok();
+        // Carriage return, clear line, draw spinner with semantic active color
+        write!(
+            stdout,
+            "\r\x1b[2K{}",
+            COLORS.active.style(spinner_text)
+        )
+        .ok();
         stdout.flush().ok();
     }
 
@@ -213,12 +220,17 @@ impl StreamingDisplay {
 
             if success {
                 if summary.is_empty() {
-                    println!("{} {} [{}]", "✓".green(), self.message.green(), elapsed);
+                    println!(
+                        "{} {} [{}]",
+                        COLORS.success.style("✓"),
+                        COLORS.success.style(&self.message),
+                        elapsed
+                    );
                 } else {
                     println!(
                         "{} {} [{}] {}",
-                        "✓".green(),
-                        self.message.green(),
+                        COLORS.success.style("✓"),
+                        COLORS.success.style(&self.message),
                         elapsed,
                         summary.dimmed()
                     );
@@ -227,10 +239,10 @@ impl StreamingDisplay {
                 let err = error_msg.unwrap_or("error");
                 println!(
                     "{} {} [{}]: {}",
-                    "✗".red(),
-                    self.message.red(),
+                    COLORS.fail.style("✗"),
+                    COLORS.fail.style(&self.message),
                     elapsed,
-                    err.red()
+                    COLORS.fail.style(err)
                 );
             }
 

@@ -5,6 +5,8 @@
 use owo_colors::OwoColorize;
 use std::io::{IsTerminal, Write};
 
+use crate::colors::COLORS;
+
 /// ASCII art spectacles logo
 const SPECTACLES: &[&str] = &["  ○━━○ ○━━○", "    ╲───╱  "];
 
@@ -19,19 +21,19 @@ pub fn show_splash() {
     let mut stdout = std::io::stdout();
     let version = env!("CARGO_PKG_VERSION");
 
-    // Print spectacles with info on the right
+    // Print spectacles with info on the right (using semantic ACTIVE color)
     writeln!(
         stdout,
         "{}   {} v{}",
-        SPECTACLES[0].cyan(),
-        "specks".bold().cyan(),
+        COLORS.active.style(SPECTACLES[0]),
+        COLORS.active.style("specks").bold(),
         version.dimmed()
     )
     .ok();
     writeln!(
         stdout,
         "{}   {}",
-        SPECTACLES[1].cyan(),
+        COLORS.active.style(SPECTACLES[1]),
         "Multi-agent orchestration".dimmed()
     )
     .ok();

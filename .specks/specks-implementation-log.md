@@ -6,6 +6,73 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.6.2: Implement Semantic Color Theme | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Step 8.3.6.2 specification
+- `crates/specks/src/streaming.rs` - Spinner display with hardcoded ANSI colors
+- `crates/specks/src/interaction/cli_adapter.rs` - CLI adapter with dialoguer theme
+- `crates/specks/src/planning_loop/cli_present.rs` - Punch list display
+- `crates/specks/src/splash.rs` - Splash screen colors
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `crates/specks/src/colors.rs` with SemanticColors | Done |
+| Add `mod colors;` to main.rs | Done |
+| Update `streaming.rs` to use COLORS.active/success/fail | Done |
+| Update `cli_adapter.rs` print_* methods to use COLORS | Done |
+| Update `cli_adapter.rs` SpacedTheme to use blue instead of cyan | Done |
+| Update `cli_adapter.rs` completed selections to show green (not blue) | Done |
+| Update `cli_present.rs` punch list items with priority colors | Done |
+| Update `splash.rs` to use COLORS.active | Done |
+
+**Files Created:**
+- `crates/specks/src/colors.rs` - Semantic color module with:
+  - `SemanticColors` struct with active (blue), success (green), warning (yellow), fail (red)
+  - Global `COLORS` static using `std::sync::LazyLock`
+  - Unit tests for color accessibility
+
+**Files Modified:**
+- `crates/specks/src/main.rs`:
+  - Added `mod colors;` declaration
+- `crates/specks/src/streaming.rs`:
+  - Replaced `\x1b[36m` ANSI code with `COLORS.active.style()`
+  - Replaced `.green()` checkmark with `COLORS.success.style()`
+  - Replaced `.red()` X mark with `COLORS.fail.style()`
+- `crates/specks/src/interaction/cli_adapter.rs`:
+  - Added `completed_style` (green) to SpacedTheme for answered prompts
+  - Changed `prompt_style` and `active_style` from cyan to blue
+  - Changed spinner template from `.cyan` to `.blue`
+  - Updated `format_*_selection` methods to use dimmed prompt + green answer
+  - Updated print_* methods to use COLORS semantic styles
+- `crates/specks/src/planning_loop/cli_present.rs`:
+  - Added COLORS import
+  - Updated punch list display to use print_warning for MEDIUM priority
+  - Updated punch list display to use COLORS.active for LOW priority
+- `crates/specks/src/splash.rs`:
+  - Replaced `.cyan()` with `COLORS.active.style()`
+
+**Test Results:**
+- `cargo nextest run`: 313 tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo nextest run` passes: PASS
+- Unit test for SemanticColors::default(): PASS
+
+**Key Decisions/Notes:**
+- Used `std::sync::LazyLock` (Rust 1.85 std lib) instead of `once_cell` crate
+- Critical fix: Completed prompt selections now show dimmed prompt + green answer (not blue)
+- This ensures only ONE element is blue (active) at a time - completed items are visually distinct
+- The `console::Style` (dialoguer) and `owo_colors::Style` are different types, so SpacedTheme
+  uses hardcoded blue/green while print_* methods use the COLORS module
+
+---
+
 ## [specks-2.md] Step 8.3.6.1: Fix Critic-to-Clarifier Data Flow | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06

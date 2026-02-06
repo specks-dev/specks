@@ -2662,7 +2662,7 @@ Pass the structured punch list to the clarifier so it can generate one actionabl
 
 ##### Step 8.3.6.2: Implement Semantic Color Theme {#step-8-3-6-2}
 
-**STATUS: NEW**
+**STATUS: IN PROGRESS** (code complete, awaiting manual visual verification)
 
 **Depends on:** #step-8-3-6-1
 
@@ -2699,7 +2699,7 @@ These map to punch list severity: HIGH=FAIL, MEDIUM=WARNING, LOW=ACTIVE.
 
 **Tasks:**
 
-- [ ] Create `crates/specks/src/colors.rs`:
+- [x] Create `crates/specks/src/colors.rs`:
   ```rust
   use owo_colors::Style;
 
@@ -2725,28 +2725,28 @@ These map to punch list severity: HIGH=FAIL, MEDIUM=WARNING, LOW=ACTIVE.
   pub static COLORS: once_cell::sync::Lazy<SemanticColors> =
       once_cell::sync::Lazy::new(SemanticColors::default);
   ```
-- [ ] Add `mod colors;` to `lib.rs`
-- [ ] Update `streaming.rs`:
+- [x] Add `mod colors;` to `lib.rs`
+- [x] Update `streaming.rs`:
   - Replace hardcoded ANSI cyan with `COLORS.active`
   - Replace hardcoded green checkmark with `COLORS.success`
   - Replace hardcoded red X with `COLORS.fail`
-- [ ] Update `cli_adapter.rs`:
+- [x] Update `cli_adapter.rs`:
   - Use `COLORS.success` for success messages
   - Use `COLORS.fail` for error messages
   - Use `COLORS.warning` for warnings
   - Use `COLORS.active` for headers and prompts
-- [ ] Update `cli_present.rs`:
+- [x] Update `cli_present.rs`:
   - HIGH priority punch list items: `COLORS.fail`
   - MEDIUM priority items: `COLORS.warning`
   - LOW priority items: `COLORS.active`
 
 **Tests:**
-- [ ] Unit test: `SemanticColors::default()` returns expected styles
+- [x] Unit test: `SemanticColors::default()` returns expected styles
 - [ ] Visual verification: colors appear correctly in terminal
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
 - [ ] Manual test: Spinner uses blue (active) color
 - [ ] Manual test: Success messages use green (success) color
 - [ ] Manual test: Error messages use red (fail) color

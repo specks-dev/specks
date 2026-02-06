@@ -19,6 +19,8 @@ use specks_core::interaction::{
     InteractionAdapter, InteractionError, InteractionResult, ProgressHandle,
 };
 
+use crate::colors::COLORS;
+
 /// Global flag to track if Ctrl+C was pressed
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 
@@ -49,20 +51,32 @@ pub fn reset_cancellation() {
 }
 
 /// Custom theme with generous spacing between elements
+///
+/// Uses semantic colors:
+/// - prompt_style: blue/bold (ACTIVE) for question prompts while asking
+/// - active_style: blue (ACTIVE) for cursor highlight during selection
+/// - completed_style: green (SUCCESS) for answers after selection is made
+/// - hint_style: dimmed for defaults and hints
 struct SpacedTheme {
     prompt_style: Style,
     active_style: Style,
     inactive_style: Style,
     hint_style: Style,
+    /// Style for completed/selected answers - shows SUCCESS not ACTIVE
+    completed_style: Style,
 }
 
 impl SpacedTheme {
     fn new() -> Self {
         Self {
-            prompt_style: Style::new().cyan().bold(),
-            active_style: Style::new().cyan(),
+            // Blue for active prompts (currently being asked)
+            prompt_style: Style::new().blue().bold(),
+            // Blue for cursor highlight during selection
+            active_style: Style::new().blue(),
             inactive_style: Style::new(),
             hint_style: Style::new().dim(),
+            // Green for completed answers (no longer active)
+            completed_style: Style::new().green(),
         }
     }
 }
@@ -95,11 +109,12 @@ impl Theme for SpacedTheme {
         prompt: &str,
         sel: &str,
     ) -> std::fmt::Result {
+        // After input: show answer in green (completed, not active)
         write!(
             f,
             "{} {}",
-            self.prompt_style.apply_to(format!("? {}", prompt)),
-            self.active_style.apply_to(sel)
+            self.hint_style.apply_to(format!("? {}", prompt)),
+            self.completed_style.apply_to(sel)
         )
     }
 
@@ -128,6 +143,7 @@ impl Theme for SpacedTheme {
         prompt: &str,
         selection: Option<bool>,
     ) -> std::fmt::Result {
+        // After confirm: show answer in green (completed, not active)
         let answer = match selection {
             Some(true) => "Yes",
             Some(false) => "No",
@@ -136,8 +152,8 @@ impl Theme for SpacedTheme {
         write!(
             f,
             "{} {}",
-            self.prompt_style.apply_to(format!("? {}", prompt)),
-            self.active_style.apply_to(answer)
+            self.hint_style.apply_to(format!("? {}", prompt)),
+            self.completed_style.apply_to(answer)
         )
     }
 
@@ -151,11 +167,12 @@ impl Theme for SpacedTheme {
         prompt: &str,
         sel: &str,
     ) -> std::fmt::Result {
+        // After select: show answer in green (completed, not active)
         write!(
             f,
             "{} {}",
-            self.prompt_style.apply_to(format!("? {}", prompt)),
-            self.active_style.apply_to(sel)
+            self.hint_style.apply_to(format!("? {}", prompt)),
+            self.completed_style.apply_to(sel)
         )
     }
 
@@ -189,11 +206,12 @@ impl Theme for SpacedTheme {
         prompt: &str,
         selections: &[&str],
     ) -> std::fmt::Result {
+        // After multi-select: show answers in green (completed, not active)
         write!(
             f,
             "{} {}",
-            self.prompt_style.apply_to(format!("? {}", prompt)),
-            self.active_style.apply_to(selections.join(", "))
+            self.hint_style.apply_to(format!("? {}", prompt)),
+            self.completed_style.apply_to(selections.join(", "))
         )
     }
 
@@ -363,7 +381,8 @@ impl InteractionAdapter for CliAdapter {
         let pb = ProgressBar::new_spinner();
         pb.set_style(
             ProgressStyle::default_spinner()
-                .template("{spinner:.cyan} {msg} [{elapsed}]")
+                // Use blue (semantic ACTIVE color) instead of cyan
+                .template("{spinner:.blue} {msg} [{elapsed}]")
                 .expect("valid template")
                 .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
         );
@@ -387,9 +406,19 @@ impl InteractionAdapter for CliAdapter {
                 pb.finish_and_clear();
 
                 if success {
-                    println!("{} {} [{}]", "✓".green(), msg.green(), elapsed_str);
+                    println!(
+                        "{} {} [{}]",
+                        COLORS.success.style("✓"),
+                        COLORS.success.style(msg),
+                        elapsed_str
+                    );
                 } else {
-                    println!("{} {} [{}]", "✗".red(), msg.red(), elapsed_str);
+                    println!(
+                        "{} {} [{}]",
+                        COLORS.fail.style("✗"),
+                        COLORS.fail.style(msg),
+                        elapsed_str
+                    );
                 }
             }
         }
@@ -401,22 +430,30 @@ impl InteractionAdapter for CliAdapter {
     }
 
     fn print_warning(&self, message: &str) {
-        println!("{} {}", "warning:".yellow().bold(), message.yellow());
+        println!(
+            "{} {}",
+            COLORS.warning.style("warning:").bold(),
+            COLORS.warning.style(message)
+        );
         let _ = std::io::stdout().flush();
     }
 
     fn print_error(&self, message: &str) {
-        eprintln!("{} {}", "error:".red().bold(), message.red().bold());
+        eprintln!(
+            "{} {}",
+            COLORS.fail.style("error:").bold(),
+            COLORS.fail.style(message).bold()
+        );
         let _ = std::io::stderr().flush();
     }
 
     fn print_success(&self, message: &str) {
-        println!("{} {}", "✓".green(), message.green());
+        println!("{} {}", COLORS.success.style("✓"), COLORS.success.style(message));
         let _ = std::io::stdout().flush();
     }
 
     fn print_header(&self, message: &str) {
-        println!("{}", message.cyan().bold());
+        println!("{}", COLORS.active.style(message).bold());
         let _ = std::io::stdout().flush();
     }
 }
