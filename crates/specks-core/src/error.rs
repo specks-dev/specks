@@ -356,7 +356,10 @@ mod tests {
                 "specks-interviewer".to_string(),
                 "specks-critic".to_string(),
             ],
-            searched: vec!["./agents/".to_string(), "/opt/homebrew/share/specks/agents/".to_string()],
+            searched: vec![
+                "./agents/".to_string(),
+                "/opt/homebrew/share/specks/agents/".to_string(),
+            ],
         };
         assert_eq!(err.code(), "E026");
         assert_eq!(err.exit_code(), 8);

@@ -8,8 +8,8 @@
 
 use std::path::Path;
 
-use specks_core::interaction::{InteractionAdapter, InteractionError};
 use specks_core::SpecksError;
+use specks_core::interaction::{InteractionAdapter, InteractionError};
 
 use super::types::{LoopContext, UserDecision};
 
@@ -184,9 +184,13 @@ impl CliPresenter {
             let trimmed = line.trim();
             if !trimmed.is_empty() && !Self::is_thinking_line(trimmed) {
                 // Look for lines that look like summaries
-                if trimmed.starts_with("##") || trimmed.starts_with("**") ||
-                   trimmed.contains("Review") || trimmed.contains("Summary") ||
-                   trimmed.contains("Approved") || trimmed.contains("approved") {
+                if trimmed.starts_with("##")
+                    || trimmed.starts_with("**")
+                    || trimmed.contains("Review")
+                    || trimmed.contains("Summary")
+                    || trimmed.contains("Approved")
+                    || trimmed.contains("approved")
+                {
                     summary.assessment = trimmed.trim_start_matches('#').trim().to_string();
                     break;
                 }
@@ -217,10 +221,24 @@ impl CliPresenter {
                 || trimmed.starts_with("•")
                 || trimmed.starts_with("✅")
                 || trimmed.starts_with("✓")
-                || trimmed.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+                || trimmed
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_digit())
+                    .unwrap_or(false)
             {
                 let item_text = trimmed
-                    .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c == '✅' || c == '✓' || c.is_ascii_digit() || c == '.' || c == ')' || c.is_whitespace())
+                    .trim_start_matches(|c: char| {
+                        c == '-'
+                            || c == '*'
+                            || c == '•'
+                            || c == '✅'
+                            || c == '✓'
+                            || c.is_ascii_digit()
+                            || c == '.'
+                            || c == ')'
+                            || c.is_whitespace()
+                    })
                     .trim();
 
                 if item_text.is_empty() || Self::is_thinking_line(item_text) {
@@ -246,7 +264,9 @@ impl CliPresenter {
                     Priority::Medium
                 };
 
-                summary.punch_list.push(PunchListItem::new(priority, item_text));
+                summary
+                    .punch_list
+                    .push(PunchListItem::new(priority, item_text));
             }
         }
 
@@ -287,8 +307,14 @@ impl CliPresenter {
     /// Display punch list with priority indicators
     fn display_punch_list(&self, adapter: &dyn InteractionAdapter, items: &[PunchListItem]) {
         // Count by priority
-        let high_count = items.iter().filter(|i| i.priority == Priority::High).count();
-        let medium_count = items.iter().filter(|i| i.priority == Priority::Medium).count();
+        let high_count = items
+            .iter()
+            .filter(|i| i.priority == Priority::High)
+            .count();
+        let medium_count = items
+            .iter()
+            .filter(|i| i.priority == Priority::Medium)
+            .count();
         let low_count = items.iter().filter(|i| i.priority == Priority::Low).count();
 
         // Only show if there are items
@@ -337,7 +363,7 @@ impl CliPresenter {
         };
 
         let options = DecisionOption::all_labels();
-        let option_refs: Vec<&str> = options.iter().copied().collect();
+        let option_refs: Vec<&str> = options.to_vec();
 
         let selected = adapter
             .ask_select(prompt, &option_refs)
@@ -427,8 +453,8 @@ mod tests {
     use super::*;
     use specks_core::interaction::{InteractionResult, ProgressHandle};
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
     /// A configurable mock adapter for testing (thread-safe)
     struct ConfigurableMockAdapter {
@@ -536,12 +562,17 @@ mod tests {
                 .unwrap()
                 .push(("success".to_string(), message.to_string()));
         }
+        fn print_header(&self, message: &str) {
+            self.printed_messages
+                .lock()
+                .unwrap()
+                .push(("header".to_string(), message.to_string()));
+        }
     }
 
     #[test]
     fn test_cli_presenter_approve_decision() {
-        let adapter = ConfigurableMockAdapter::new()
-            .with_select_responses(vec![0]); // Approve
+        let adapter = ConfigurableMockAdapter::new().with_select_responses(vec![0]); // Approve
 
         let presenter = CliPresenter::new();
         let mut context = LoopContext::new_idea("test idea".to_string(), vec![]);
@@ -554,8 +585,7 @@ mod tests {
 
     #[test]
     fn test_cli_presenter_abort_decision() {
-        let adapter = ConfigurableMockAdapter::new()
-            .with_select_responses(vec![2]); // Abort
+        let adapter = ConfigurableMockAdapter::new().with_select_responses(vec![2]); // Abort
 
         let presenter = CliPresenter::new();
         let mut context = LoopContext::new_idea("test idea".to_string(), vec![]);
@@ -601,7 +631,8 @@ mod tests {
     fn test_parse_critic_feedback_not_approved() {
         let presenter = CliPresenter::new();
 
-        let feedback = "The plan needs revision.\n\n- Critical: missing error handling\n- Should add tests";
+        let feedback =
+            "The plan needs revision.\n\n- Critical: missing error handling\n- Should add tests";
         let summary = presenter.parse_critic_feedback(feedback);
 
         assert!(!summary.approved);
@@ -632,21 +663,30 @@ mod tests {
             .iter()
             .filter(|i| i.priority == Priority::High)
             .count();
-        assert!(high_priority >= 1, "Should have at least one high priority item");
+        assert!(
+            high_priority >= 1,
+            "Should have at least one high priority item"
+        );
 
         let medium_priority = summary
             .punch_list
             .iter()
             .filter(|i| i.priority == Priority::Medium)
             .count();
-        assert!(medium_priority >= 1, "Should have at least one medium priority item");
+        assert!(
+            medium_priority >= 1,
+            "Should have at least one medium priority item"
+        );
 
         let low_priority = summary
             .punch_list
             .iter()
             .filter(|i| i.priority == Priority::Low)
             .count();
-        assert!(low_priority >= 1, "Should have at least one low priority item");
+        assert!(
+            low_priority >= 1,
+            "Should have at least one low priority item"
+        );
     }
 
     #[test]
@@ -682,14 +722,14 @@ mod tests {
 
     #[test]
     fn test_cli_presenter_displays_punch_list() {
-        let adapter = ConfigurableMockAdapter::new()
-            .with_select_responses(vec![0]); // Approve
+        let adapter = ConfigurableMockAdapter::new().with_select_responses(vec![0]); // Approve
 
         let presenter = CliPresenter::new();
         let mut context = LoopContext::new_idea("test idea".to_string(), vec![]);
         context.speck_path = Some(PathBuf::from("/project/.specks/specks-test.md"));
         context.critic_feedback = Some(
-            "Needs work.\n- Critical: missing auth\n- Should add tests\n- Minor: typo in comment".to_string()
+            "Needs work.\n- Critical: missing auth\n- Should add tests\n- Minor: typo in comment"
+                .to_string(),
         );
 
         let _ = presenter.present(&adapter, &context).unwrap();
@@ -697,12 +737,15 @@ mod tests {
         let messages = adapter.get_printed_messages();
 
         // Check that punch list was displayed
-        let punch_list_header = messages.iter().any(|(_, msg)| msg.contains("Punch List"));
-        assert!(punch_list_header, "Should display punch list header");
+        let punch_list_header = messages.iter().any(|(_, msg)| msg.contains("Must address"));
+        assert!(punch_list_header, "Should display punch list items");
 
         // Check that high priority items are printed as errors
         let has_error_message = messages.iter().any(|(t, _)| t == "error");
-        assert!(has_error_message, "Should have error-level messages for high priority");
+        assert!(
+            has_error_message,
+            "Should have error-level messages for high priority"
+        );
     }
 
     #[test]
@@ -751,8 +794,7 @@ mod tests {
 
     #[test]
     fn test_cli_presenter_no_critic_feedback() {
-        let adapter = ConfigurableMockAdapter::new()
-            .with_select_responses(vec![0]); // Approve
+        let adapter = ConfigurableMockAdapter::new().with_select_responses(vec![0]); // Approve
 
         let presenter = CliPresenter::new();
         let mut context = LoopContext::new_idea("test idea".to_string(), vec![]);
@@ -763,7 +805,9 @@ mod tests {
         assert!(matches!(result, UserDecision::Approve));
 
         let messages = adapter.get_printed_messages();
-        let has_warning = messages.iter().any(|(t, msg)| t == "warning" && msg.contains("No critic feedback"));
+        let has_warning = messages
+            .iter()
+            .any(|(t, msg)| t == "warning" && msg.contains("No critic feedback"));
         assert!(has_warning, "Should warn about missing critic feedback");
     }
 

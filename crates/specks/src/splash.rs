@@ -6,10 +6,7 @@ use owo_colors::OwoColorize;
 use std::io::{IsTerminal, Write};
 
 /// ASCII art spectacles logo
-const SPECTACLES: &[&str] = &[
-    "  ○━━○ ○━━○",
-    "    ╲───╱  ",
-];
+const SPECTACLES: &[&str] = &["  ○━━○ ○━━○", "    ╲───╱  "];
 
 /// Display the splash screen
 pub fn show_splash() {

@@ -389,10 +389,7 @@ pub fn copy_skill_globally(
 }
 
 /// Verify if a skill is installed and up-to-date in the global skills directory.
-pub fn verify_global_skill_installation(
-    share_dir: &Path,
-    skill_name: &str,
-) -> SkillVerifyStatus {
+pub fn verify_global_skill_installation(share_dir: &Path, skill_name: &str) -> SkillVerifyStatus {
     // Get source path
     let Some(source_path) = get_source_skill_path(share_dir, skill_name) else {
         return SkillVerifyStatus::SourceMissing;
@@ -740,9 +737,7 @@ mod tests {
         assert_eq!(status, SkillInstallStatus::Installed);
 
         // Verify file was created in fake home
-        let dest_path = fake_home
-            .path()
-            .join(".claude/skills/specks-plan/SKILL.md");
+        let dest_path = fake_home.path().join(".claude/skills/specks-plan/SKILL.md");
         assert!(dest_path.exists());
 
         let content = fs::read_to_string(&dest_path).unwrap();
@@ -908,9 +903,7 @@ mod tests {
         assert!(project_path.exists());
 
         // Global should still exist
-        let global_path = fake_home
-            .path()
-            .join(".claude/skills/specks-plan/SKILL.md");
+        let global_path = fake_home.path().join(".claude/skills/specks-plan/SKILL.md");
         assert!(global_path.exists());
 
         // Restore HOME

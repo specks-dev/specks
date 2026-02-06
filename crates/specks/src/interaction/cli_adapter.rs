@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use console::Style;
-use dialoguer::{Confirm, Input, MultiSelect, Select};
 use dialoguer::theme::Theme;
+use dialoguer::{Confirm, Input, MultiSelect, Select};
 use indicatif::{ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 
@@ -168,7 +168,12 @@ impl Theme for SpacedTheme {
         // Add blank line before each item for spacing
         writeln!(f)?;
         if active {
-            write!(f, "  {} {}", self.active_style.apply_to(">"), self.active_style.apply_to(text))
+            write!(
+                f,
+                "  {} {}",
+                self.active_style.apply_to(">"),
+                self.active_style.apply_to(text)
+            )
         } else {
             write!(f, "    {}", self.inactive_style.apply_to(text))
         }

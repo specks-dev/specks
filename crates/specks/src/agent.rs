@@ -20,8 +20,12 @@ use crate::share::find_share_dir;
 pub const AGENTS_DIR_NAME: &str = "agents";
 
 /// Required agents for the `specks plan` command
-pub const PLAN_REQUIRED_AGENTS: &[&str] =
-    &["specks-clarifier", "specks-interviewer", "specks-planner", "specks-critic"];
+pub const PLAN_REQUIRED_AGENTS: &[&str] = &[
+    "specks-clarifier",
+    "specks-interviewer",
+    "specks-planner",
+    "specks-critic",
+];
 
 /// Required agents for the `specks execute` command
 pub const EXECUTE_REQUIRED_AGENTS: &[&str] = &[
@@ -305,7 +309,13 @@ impl AgentRunner {
         display: &mut crate::streaming::StreamingDisplay,
         file_to_monitor: &std::path::Path,
     ) -> Result<AgentResult, SpecksError> {
-        self.invoke_agent_streaming_impl(config, prompt, display, false, Some(file_to_monitor.to_path_buf()))
+        self.invoke_agent_streaming_impl(
+            config,
+            prompt,
+            display,
+            false,
+            Some(file_to_monitor.to_path_buf()),
+        )
     }
 
     /// Implementation of streaming invocation.
@@ -374,9 +384,12 @@ impl AgentRunner {
             })?;
 
         // Take stdout for streaming
-        let stdout = child.stdout.take().ok_or_else(|| SpecksError::AgentInvocationFailed {
-            reason: "Failed to capture stdout".to_string(),
-        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| SpecksError::AgentInvocationFailed {
+                reason: "Failed to capture stdout".to_string(),
+            })?;
 
         // Create a channel for the reader thread to send parsed events
         let (tx, rx) = mpsc::channel::<Result<StreamEvent, String>>();
@@ -419,7 +432,9 @@ impl AgentRunner {
                 let _ = child.kill();
                 let _ = child.wait();
                 display.finish_error("timeout");
-                return Err(SpecksError::AgentTimeout { secs: config.timeout_secs });
+                return Err(SpecksError::AgentTimeout {
+                    secs: config.timeout_secs,
+                });
             }
 
             // Check for cancellation
@@ -747,7 +762,9 @@ pub fn verify_required_agents(
 ///
 /// This is a pure function with no I/O - useful for tests and error messages.
 fn construct_agent_path(project_root: &Path, agent_name: &str) -> PathBuf {
-    project_root.join("agents").join(format!("{}.md", agent_name))
+    project_root
+        .join("agents")
+        .join(format!("{}.md", agent_name))
 }
 
 /// Get the path to a specific agent definition using per-agent resolution.

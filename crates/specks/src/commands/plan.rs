@@ -161,8 +161,12 @@ pub fn run_plan(
     if !quiet && !json_output {
         splash::show_splash();
         match mode {
-            PlanMode::New => adapter.print_info(&format!("Creating new speck from idea: {}", input)),
-            PlanMode::Revision => adapter.print_info(&format!("Revising existing speck: {}", input)),
+            PlanMode::New => {
+                adapter.print_info(&format!("Creating new speck from idea: {}", input))
+            }
+            PlanMode::Revision => {
+                adapter.print_info(&format!("Revising existing speck: {}", input))
+            }
         }
         println!(); // Blank line before streaming content
     }

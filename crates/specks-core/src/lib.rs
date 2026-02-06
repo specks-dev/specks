@@ -30,6 +30,7 @@ pub use config::{
     find_project_root_from, find_specks, is_reserved_file, speck_name_from_path,
 };
 pub use error::SpecksError;
+pub use interaction::{InteractionAdapter, InteractionError, InteractionResult, ProgressHandle};
 pub use parser::parse_speck;
 pub use types::{
     Anchor, BeadsHints, Checkpoint, CheckpointKind, Decision, Question, Speck, SpeckMetadata,
@@ -39,4 +40,3 @@ pub use validator::{
     Severity, ValidationConfig, ValidationIssue, ValidationLevel, ValidationResult, validate_speck,
     validate_speck_with_config,
 };
-pub use interaction::{InteractionAdapter, InteractionError, InteractionResult, ProgressHandle};

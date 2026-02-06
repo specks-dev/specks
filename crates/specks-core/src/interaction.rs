@@ -251,7 +251,11 @@ mod tests {
             Ok(default)
         }
 
-        fn ask_multi_select(&self, _prompt: &str, options: &[&str]) -> InteractionResult<Vec<usize>> {
+        fn ask_multi_select(
+            &self,
+            _prompt: &str,
+            options: &[&str],
+        ) -> InteractionResult<Vec<usize>> {
             if options.is_empty() {
                 return Err(InteractionError::InvalidInput(
                     "options cannot be empty".to_string(),

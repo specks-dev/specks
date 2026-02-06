@@ -3,8 +3,8 @@
 //! Updates on the same line using carriage return - no cursor positioning needed.
 
 use std::io::{IsTerminal, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use owo_colors::OwoColorize;
@@ -156,13 +156,32 @@ impl StreamingDisplay {
 
         // Build spinner text with stats
         let spinner_text = if let Some((lines, bytes)) = self.file_stats {
-            format!("{} {} [{}] ({} lines, {})", frame, self.message, elapsed, lines, Self::format_bytes(bytes))
+            format!(
+                "{} {} [{}] ({} lines, {})",
+                frame,
+                self.message,
+                elapsed,
+                lines,
+                Self::format_bytes(bytes)
+            )
         } else if let Some(ref tool) = self.current_tool {
-            format!("{} {} [{}] (using {}...)", frame, self.message, elapsed, tool)
+            format!(
+                "{} {} [{}] (using {}...)",
+                frame, self.message, elapsed, tool
+            )
         } else if self.tool_count > 0 {
-            format!("{} {} [{}] ({} tool calls)", frame, self.message, elapsed, self.tool_count)
+            format!(
+                "{} {} [{}] ({} tool calls)",
+                frame, self.message, elapsed, self.tool_count
+            )
         } else if self.chunk_count > 0 {
-            format!("{} {} [{}] ({} streamed)", frame, self.message, elapsed, Self::format_bytes(self.content_bytes))
+            format!(
+                "{} {} [{}] ({} streamed)",
+                frame,
+                self.message,
+                elapsed,
+                Self::format_bytes(self.content_bytes)
+            )
         } else {
             format!("{} {} [{}]", frame, self.message, elapsed)
         };
@@ -196,11 +215,23 @@ impl StreamingDisplay {
                 if summary.is_empty() {
                     println!("{} {} [{}]", "✓".green(), self.message.green(), elapsed);
                 } else {
-                    println!("{} {} [{}] {}", "✓".green(), self.message.green(), elapsed, summary.dimmed());
+                    println!(
+                        "{} {} [{}] {}",
+                        "✓".green(),
+                        self.message.green(),
+                        elapsed,
+                        summary.dimmed()
+                    );
                 }
             } else {
                 let err = error_msg.unwrap_or("error");
-                println!("{} {} [{}]: {}", "✗".red(), self.message.red(), elapsed, err.red());
+                println!(
+                    "{} {} [{}]: {}",
+                    "✗".red(),
+                    self.message.red(),
+                    elapsed,
+                    err.red()
+                );
             }
 
             // Show cursor
@@ -208,17 +239,15 @@ impl StreamingDisplay {
             stdout.flush().ok();
 
             self.active = false;
-        } else {
-            if success {
-                if summary.is_empty() {
-                    println!("✓ {} [{}]", self.message, elapsed);
-                } else {
-                    println!("✓ {} [{}] {}", self.message, elapsed, summary);
-                }
+        } else if success {
+            if summary.is_empty() {
+                println!("✓ {} [{}]", self.message, elapsed);
             } else {
-                let err = error_msg.unwrap_or("error");
-                println!("✗ {} [{}]: {}", self.message, elapsed, err);
+                println!("✓ {} [{}] {}", self.message, elapsed, summary);
             }
+        } else {
+            let err = error_msg.unwrap_or("error");
+            println!("✗ {} [{}]: {}", self.message, elapsed, err);
         }
     }
 
@@ -228,7 +257,11 @@ impl StreamingDisplay {
 
         if let Some((lines, bytes)) = self.file_stats {
             if bytes > 0 {
-                parts.push(format!("wrote {} lines, {}", lines, Self::format_bytes(bytes)));
+                parts.push(format!(
+                    "wrote {} lines, {}",
+                    lines,
+                    Self::format_bytes(bytes)
+                ));
             }
         }
 
@@ -237,7 +270,10 @@ impl StreamingDisplay {
         }
 
         if self.file_stats.is_none() && self.content_bytes > 0 {
-            parts.push(format!("{} streamed", Self::format_bytes(self.content_bytes)));
+            parts.push(format!(
+                "{} streamed",
+                Self::format_bytes(self.content_bytes)
+            ));
         }
 
         if parts.is_empty() {
@@ -266,8 +302,8 @@ impl Drop for StreamingDisplay {
     fn drop(&mut self) {
         if self.is_tty && self.active {
             let mut stdout = std::io::stdout();
-            write!(stdout, "\x1b[?25h").ok();  // Show cursor
-            write!(stdout, "\r\x1b[2K").ok();   // Clear line
+            write!(stdout, "\x1b[?25h").ok(); // Show cursor
+            write!(stdout, "\r\x1b[2K").ok(); // Clear line
             stdout.flush().ok();
         }
     }

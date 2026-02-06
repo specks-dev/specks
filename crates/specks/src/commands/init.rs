@@ -4,9 +4,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
-use crate::agent::{
-    EXECUTE_REQUIRED_AGENTS, PLAN_REQUIRED_AGENTS, resolve_agent_path_with_source,
-};
+use crate::agent::{EXECUTE_REQUIRED_AGENTS, PLAN_REQUIRED_AGENTS, resolve_agent_path_with_source};
 use crate::output::{InitData, JsonIssue, JsonResponse};
 use crate::share::{SkillInstallStatus, find_share_dir, install_all_skills};
 
@@ -269,15 +267,17 @@ fn report_agent_summary(project_root: &Path) {
 
     let mut found_count = 0;
     let mut missing_agents = Vec::new();
-    let mut sources: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut sources: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
 
     for agent_name in all_agents {
         if let Some((path, source)) = resolve_agent_path_with_source(agent_name, project_root) {
             found_count += 1;
-            sources
-                .entry(source.to_string())
-                .or_default()
-                .push(format!("{} ({})", agent_name, path.display()));
+            sources.entry(source.to_string()).or_default().push(format!(
+                "{} ({})",
+                agent_name,
+                path.display()
+            ));
         } else {
             missing_agents.push(agent_name.to_string());
         }
@@ -295,7 +295,9 @@ fn report_agent_summary(project_root: &Path) {
             missing_agents.len(),
             missing_agents.join(", ")
         );
-        eprintln!("           Agent commands (plan, execute) will fail until agents are available.");
+        eprintln!(
+            "           Agent commands (plan, execute) will fail until agents are available."
+        );
     } else {
         println!("  All {} agents available", found_count);
     }

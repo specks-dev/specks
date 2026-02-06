@@ -24,8 +24,8 @@ mod types;
 
 use std::path::{Path, PathBuf};
 
-use specks_core::interaction::{InteractionAdapter, InteractionError};
 use specks_core::SpecksError;
+use specks_core::interaction::{InteractionAdapter, InteractionError};
 
 use crate::agent::AgentRunner;
 
@@ -35,8 +35,8 @@ pub use types::{LoopContext, LoopOutcome, LoopState, PlanMode, PlanningMode, Use
 // Re-export clarifier types (public API for this module)
 #[allow(unused_imports)]
 pub use clarifier::{
-    invoke_clarifier, invoke_clarifier_streaming, ClarifierAnalysis, ClarifierInput,
-    ClarifierOutput, ClarifierQuestion, EnrichedRequirements,
+    ClarifierAnalysis, ClarifierInput, ClarifierOutput, ClarifierQuestion, EnrichedRequirements,
+    invoke_clarifier, invoke_clarifier_streaming,
 };
 
 // Re-export CLI gather types (public API for this module)
@@ -88,6 +88,7 @@ impl PlanningLoop {
     /// * `quiet` - Whether to suppress progress messages
     /// * `adapter` - Interaction adapter for user prompts and progress
     /// * `mode` - Planning mode: CLI (CLI handles interaction) or ClaudeCode (agent handles interaction)
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         context: LoopContext,
         project_root: PathBuf,
@@ -342,8 +343,9 @@ impl PlanningLoop {
 
         // Initialize enriched requirements for this iteration
         if self.context.iteration == 0 {
-            self.enriched_requirements =
-                Some(EnrichedRequirements::new(self.context.input.clone()).with_clarifier_output(output));
+            self.enriched_requirements = Some(
+                EnrichedRequirements::new(self.context.input.clone()).with_clarifier_output(output),
+            );
         } else {
             let mut req = EnrichedRequirements::for_revision(
                 self.context.input.clone(),
@@ -356,7 +358,9 @@ impl PlanningLoop {
         // Log if clarifier returned no questions
         if let Some(ref output) = self.clarifier_output {
             if output.has_no_questions() && !self.quiet {
-                self.adapter.print_info("Clarifier found no ambiguities - proceeding with clear requirements.");
+                self.adapter.print_info(
+                    "Clarifier found no ambiguities - proceeding with clear requirements.",
+                );
             }
         }
 
@@ -778,6 +782,7 @@ mod tests {
         fn print_warning(&self, _message: &str) {}
         fn print_error(&self, _message: &str) {}
         fn print_success(&self, _message: &str) {}
+        fn print_header(&self, _message: &str) {}
     }
 
     fn create_mock_adapter() -> Box<dyn InteractionAdapter> {
@@ -1049,6 +1054,7 @@ mod tests {
         fn print_warning(&self, _message: &str) {}
         fn print_error(&self, _message: &str) {}
         fn print_success(&self, _message: &str) {}
+        fn print_header(&self, _message: &str) {}
     }
 
     #[test]
@@ -1090,7 +1096,7 @@ mod tests {
             300,
             None,
             false,
-            true, // quiet mode
+            true,                  // quiet mode
             create_mock_adapter(), // MockAdapter defaults to confirming
             PlanningMode::Cli,
         );
@@ -1120,7 +1126,7 @@ mod tests {
             300,
             None,
             false,
-            true, // quiet mode
+            true,                  // quiet mode
             create_mock_adapter(), // MockAdapter selects first option (Approve)
             PlanningMode::Cli,
         );

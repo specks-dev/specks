@@ -13,7 +13,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use specks_core::SpecksError;
 
-use crate::agent::{clarifier_config, AgentRunner};
+use crate::agent::{AgentRunner, clarifier_config};
 
 /// Input to the clarifier agent.
 ///
@@ -283,7 +283,10 @@ pub fn invoke_clarifier_streaming(
 /// Parse clarifier output from JSON string.
 ///
 /// Handles common issues like prose before JSON, markdown code blocks, etc.
-fn parse_clarifier_output(output: &str, expected_mode: &str) -> Result<ClarifierOutput, SpecksError> {
+fn parse_clarifier_output(
+    output: &str,
+    expected_mode: &str,
+) -> Result<ClarifierOutput, SpecksError> {
     // Extract the JSON object from the output (handles prose, markdown, etc.)
     let cleaned = extract_json_from_output(output);
 
@@ -684,13 +687,22 @@ mod tests {
     #[test]
     fn test_strip_markdown_code_block() {
         let with_json_block = "```json\n{\"key\": \"value\"}\n```";
-        assert_eq!(strip_markdown_code_block(with_json_block), r#"{"key": "value"}"#);
+        assert_eq!(
+            strip_markdown_code_block(with_json_block),
+            r#"{"key": "value"}"#
+        );
 
         let with_plain_block = "```\n{\"key\": \"value\"}\n```";
-        assert_eq!(strip_markdown_code_block(with_plain_block), r#"{"key": "value"}"#);
+        assert_eq!(
+            strip_markdown_code_block(with_plain_block),
+            r#"{"key": "value"}"#
+        );
 
         let without_block = r#"{"key": "value"}"#;
-        assert_eq!(strip_markdown_code_block(without_block), r#"{"key": "value"}"#);
+        assert_eq!(
+            strip_markdown_code_block(without_block),
+            r#"{"key": "value"}"#
+        );
     }
 
     #[test]
@@ -802,7 +814,10 @@ mod tests {
         let mut req = EnrichedRequirements::new("test".to_string());
         req.add_answer("What scope?", "Full".to_string());
 
-        assert_eq!(req.user_answers.get("What scope?"), Some(&"Full".to_string()));
+        assert_eq!(
+            req.user_answers.get("What scope?"),
+            Some(&"Full".to_string())
+        );
     }
 
     #[test]

@@ -9,8 +9,8 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use specks_core::interaction::{InteractionAdapter, InteractionError};
 use specks_core::SpecksError;
+use specks_core::interaction::{InteractionAdapter, InteractionError};
 
 use super::clarifier::{ClarifierOutput, EnrichedRequirements};
 use super::types::{LoopContext, PlanMode};
@@ -198,7 +198,8 @@ impl CliGatherer {
 
         // Build enriched requirements for revision
         let critic_feedback = context.critic_feedback.clone().unwrap_or_default();
-        let mut enriched = EnrichedRequirements::for_revision(context.input.clone(), critic_feedback);
+        let mut enriched =
+            EnrichedRequirements::for_revision(context.input.clone(), critic_feedback);
         if let Some(output) = clarifier_output {
             enriched = enriched.with_clarifier_output(output.clone());
         }
@@ -277,7 +278,11 @@ impl CliGatherer {
             // Question with clean vertical spacing
             adapter.print_info("");
             adapter.print_info("");
-            adapter.print_header(&format!("*** Question {} of {} ***", current_idx + 1, total_questions));
+            adapter.print_header(&format!(
+                "*** Question {} of {} ***",
+                current_idx + 1,
+                total_questions
+            ));
             adapter.print_info("");
             adapter.print_info(&question.why_asking);
             adapter.print_info("");
@@ -316,7 +321,9 @@ impl CliGatherer {
             }
 
             // Get the actual selected option (without "(default)" suffix)
-            let selected_answer = question.options.get(selected_index)
+            let selected_answer = question
+                .options
+                .get(selected_index)
                 .cloned()
                 .unwrap_or_else(|| question.default.clone());
 
@@ -403,13 +410,16 @@ impl CliGatherer {
                         })
                         .collect();
 
-                    let options_refs: Vec<&str> = options_with_default.iter().map(|s| s.as_str()).collect();
+                    let options_refs: Vec<&str> =
+                        options_with_default.iter().map(|s| s.as_str()).collect();
 
                     let selected_index = adapter
                         .ask_select(&question.question, &options_refs)
                         .map_err(Self::convert_interaction_error)?;
 
-                    let selected_answer = question.options.get(selected_index)
+                    let selected_answer = question
+                        .options
+                        .get(selected_index)
                         .cloned()
                         .unwrap_or_else(|| question.default.clone());
 
@@ -437,7 +447,10 @@ impl CliGatherer {
 
         // Show what clarifier understood
         if !output.analysis.understood_intent.is_empty() {
-            adapter.print_info(&format!("I understand you want to: {}", output.analysis.understood_intent));
+            adapter.print_info(&format!(
+                "I understand you want to: {}",
+                output.analysis.understood_intent
+            ));
             adapter.print_info("");
         }
 
@@ -517,12 +530,12 @@ impl Default for CliGatherer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::clarifier::{ClarifierAnalysis, ClarifierQuestion};
+    use super::*;
     use specks_core::interaction::{InteractionResult, ProgressHandle};
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
     /// A configurable mock adapter for testing (thread-safe)
     struct ConfigurableMockAdapter {
@@ -624,16 +637,34 @@ mod tests {
         fn end_progress(&self, _handle: ProgressHandle, _success: bool) {}
 
         fn print_info(&self, message: &str) {
-            self.printed_messages.lock().unwrap().push(message.to_string());
+            self.printed_messages
+                .lock()
+                .unwrap()
+                .push(message.to_string());
         }
         fn print_warning(&self, message: &str) {
-            self.printed_messages.lock().unwrap().push(message.to_string());
+            self.printed_messages
+                .lock()
+                .unwrap()
+                .push(message.to_string());
         }
         fn print_error(&self, message: &str) {
-            self.printed_messages.lock().unwrap().push(message.to_string());
+            self.printed_messages
+                .lock()
+                .unwrap()
+                .push(message.to_string());
         }
         fn print_success(&self, message: &str) {
-            self.printed_messages.lock().unwrap().push(message.to_string());
+            self.printed_messages
+                .lock()
+                .unwrap()
+                .push(message.to_string());
+        }
+        fn print_header(&self, message: &str) {
+            self.printed_messages
+                .lock()
+                .unwrap()
+                .push(message.to_string());
         }
     }
 
@@ -649,18 +680,28 @@ mod tests {
             questions: vec![
                 ClarifierQuestion {
                     question: "What type of cache should be used?".to_string(),
-                    options: vec!["In-memory".to_string(), "Redis".to_string(), "File-based".to_string()],
+                    options: vec![
+                        "In-memory".to_string(),
+                        "Redis".to_string(),
+                        "File-based".to_string(),
+                    ],
                     why_asking: "Different cache types have different trade-offs".to_string(),
                     default: "In-memory".to_string(),
                 },
                 ClarifierQuestion {
                     question: "Should the cache have a TTL?".to_string(),
-                    options: vec!["Yes, 5 minutes".to_string(), "Yes, 1 hour".to_string(), "No TTL".to_string()],
+                    options: vec![
+                        "Yes, 5 minutes".to_string(),
+                        "Yes, 1 hour".to_string(),
+                        "No TTL".to_string(),
+                    ],
                     why_asking: "TTL affects data freshness vs performance".to_string(),
                     default: "Yes, 5 minutes".to_string(),
                 },
             ],
-            assumptions_if_no_answer: vec!["Will use in-memory cache with 5 minute TTL".to_string()],
+            assumptions_if_no_answer: vec![
+                "Will use in-memory cache with 5 minute TTL".to_string(),
+            ],
         }
     }
 
@@ -689,7 +730,9 @@ mod tests {
         let context = LoopContext::new_idea("add a caching layer".to_string(), vec![]);
         let clarifier_output = sample_clarifier_output_with_questions();
 
-        let result = gatherer.gather(&adapter, &context, Some(&clarifier_output)).unwrap();
+        let result = gatherer
+            .gather(&adapter, &context, Some(&clarifier_output))
+            .unwrap();
 
         assert!(result.user_confirmed);
         assert!(result.requirements.contains("add a caching layer"));
@@ -698,20 +741,26 @@ mod tests {
         assert!(result.enriched.is_some());
         let enriched = result.enriched.unwrap();
         assert_eq!(enriched.user_answers.len(), 2);
-        assert_eq!(enriched.user_answers.get("What type of cache should be used?"), Some(&"In-memory".to_string()));
+        assert_eq!(
+            enriched
+                .user_answers
+                .get("What type of cache should be used?"),
+            Some(&"In-memory".to_string())
+        );
     }
 
     #[test]
     fn test_cli_gatherer_with_empty_clarifier_questions() {
         // Mock adapter: confirm "no additional context", then confirm final
-        let adapter = ConfigurableMockAdapter::new()
-            .with_confirm_responses(vec![false, true]); // No additional context, then confirm
+        let adapter = ConfigurableMockAdapter::new().with_confirm_responses(vec![false, true]); // No additional context, then confirm
 
         let gatherer = CliGatherer::new();
         let context = LoopContext::new_idea("add hello world command".to_string(), vec![]);
         let clarifier_output = sample_clarifier_output_empty();
 
-        let result = gatherer.gather(&adapter, &context, Some(&clarifier_output)).unwrap();
+        let result = gatherer
+            .gather(&adapter, &context, Some(&clarifier_output))
+            .unwrap();
 
         assert!(result.user_confirmed);
         assert!(result.requirements.contains("add hello world command"));
@@ -732,12 +781,17 @@ mod tests {
         let context = LoopContext::new_idea("add hello command".to_string(), vec![]);
         let clarifier_output = sample_clarifier_output_empty();
 
-        let result = gatherer.gather(&adapter, &context, Some(&clarifier_output)).unwrap();
+        let result = gatherer
+            .gather(&adapter, &context, Some(&clarifier_output))
+            .unwrap();
 
         assert!(result.user_confirmed);
         assert!(result.enriched.is_some());
         let enriched = result.enriched.unwrap();
-        assert_eq!(enriched.user_answers.get("additional_context"), Some(&"Also support color output".to_string()));
+        assert_eq!(
+            enriched.user_answers.get("additional_context"),
+            Some(&"Also support color output".to_string())
+        );
     }
 
     #[test]
@@ -751,7 +805,9 @@ mod tests {
         let context = LoopContext::new_idea("cancelled idea".to_string(), vec![]);
         let clarifier_output = sample_clarifier_output_with_questions();
 
-        let result = gatherer.gather(&adapter, &context, Some(&clarifier_output)).unwrap();
+        let result = gatherer
+            .gather(&adapter, &context, Some(&clarifier_output))
+            .unwrap();
 
         assert!(!result.user_confirmed);
         assert!(result.requirements.is_empty());
@@ -761,8 +817,7 @@ mod tests {
     #[test]
     fn test_cli_gatherer_no_clarifier_output() {
         // Test behavior when no clarifier output is provided
-        let adapter = ConfigurableMockAdapter::new()
-            .with_confirm_responses(vec![true, true]); // Confirm proceed, confirm create
+        let adapter = ConfigurableMockAdapter::new().with_confirm_responses(vec![true, true]); // Confirm proceed, confirm create
 
         let gatherer = CliGatherer::new();
         let context = LoopContext::new_idea("simple idea".to_string(), vec![]);
@@ -797,18 +852,19 @@ mod tests {
             .with_confirm_responses(vec![true]); // Confirm
 
         let gatherer = CliGatherer::new();
-        let context = LoopContext::revision(
-            PathBuf::from("/project/.specks/specks-1.md"),
-            vec![],
-        );
+        let context = LoopContext::revision(PathBuf::from("/project/.specks/specks-1.md"), vec![]);
 
-        let result = gatherer.gather(&adapter, &context, Some(&clarifier_output)).unwrap();
+        let result = gatherer
+            .gather(&adapter, &context, Some(&clarifier_output))
+            .unwrap();
 
         assert!(result.user_confirmed);
         assert!(result.enriched.is_some());
         let enriched = result.enriched.unwrap();
         assert_eq!(
-            enriched.user_answers.get("Which error types should be handled?"),
+            enriched
+                .user_answers
+                .get("Which error types should be handled?"),
             Some(&"Only network errors".to_string())
         );
     }
@@ -821,10 +877,7 @@ mod tests {
             .with_confirm_responses(vec![true]); // Confirm revision
 
         let gatherer = CliGatherer::new();
-        let context = LoopContext::revision(
-            PathBuf::from("/project/.specks/specks-1.md"),
-            vec![],
-        );
+        let context = LoopContext::revision(PathBuf::from("/project/.specks/specks-1.md"), vec![]);
 
         let result = gatherer.gather(&adapter, &context, None).unwrap();
 
@@ -845,10 +898,7 @@ mod tests {
             .with_confirm_responses(vec![false]); // Cancel revision
 
         let gatherer = CliGatherer::new();
-        let context = LoopContext::revision(
-            PathBuf::from("/project/.specks/specks-1.md"),
-            vec![],
-        );
+        let context = LoopContext::revision(PathBuf::from("/project/.specks/specks-1.md"), vec![]);
 
         let result = gatherer.gather(&adapter, &context, None).unwrap();
 
@@ -858,8 +908,7 @@ mod tests {
 
     #[test]
     fn test_cli_gatherer_with_context_files() {
-        let adapter = ConfigurableMockAdapter::new()
-            .with_confirm_responses(vec![false, true]); // No additional context, confirm
+        let adapter = ConfigurableMockAdapter::new().with_confirm_responses(vec![false, true]); // No additional context, confirm
 
         let gatherer = CliGatherer::new();
         let context = LoopContext::new_idea(
@@ -868,7 +917,9 @@ mod tests {
         );
         let clarifier_output = sample_clarifier_output_empty();
 
-        let result = gatherer.gather(&adapter, &context, Some(&clarifier_output)).unwrap();
+        let result = gatherer
+            .gather(&adapter, &context, Some(&clarifier_output))
+            .unwrap();
 
         assert!(result.user_confirmed);
         assert!(result.requirements.contains("Additional Context"));
@@ -889,8 +940,12 @@ mod tests {
 
         // Verify analysis summary was displayed
         let messages = adapter.get_printed_messages();
-        assert!(messages.iter().any(|m| m.contains("Clarifier Analysis")));
-        assert!(messages.iter().any(|m| m.contains("Create a caching layer")));
+        assert!(messages.iter().any(|m| m.contains("*** Analysis ***")));
+        assert!(
+            messages
+                .iter()
+                .any(|m| m.contains("Create a caching layer"))
+        );
     }
 
     #[test]
@@ -904,11 +959,15 @@ mod tests {
         let context = LoopContext::new_idea("cache".to_string(), vec![]);
         let clarifier_output = sample_clarifier_output_with_questions();
 
-        let result = gatherer.gather(&adapter, &context, Some(&clarifier_output)).unwrap();
+        let result = gatherer
+            .gather(&adapter, &context, Some(&clarifier_output))
+            .unwrap();
 
         let enriched = result.enriched.unwrap();
         assert_eq!(
-            enriched.user_answers.get("What type of cache should be used?"),
+            enriched
+                .user_answers
+                .get("What type of cache should be used?"),
             Some(&"Redis".to_string())
         );
         assert_eq!(
@@ -948,8 +1007,11 @@ mod tests {
         let _ = std::fs::create_dir_all(&temp_dir);
         let speck_path = temp_dir.join("test-speck-h2.md");
 
-        std::fs::write(&speck_path, "# Main Title\n\n## Authentication Feature\n\nSome content.\n")
-            .unwrap();
+        std::fs::write(
+            &speck_path,
+            "# Main Title\n\n## Authentication Feature\n\nSome content.\n",
+        )
+        .unwrap();
 
         let gatherer = CliGatherer::new();
         let summary = gatherer.read_speck_summary(&speck_path);
