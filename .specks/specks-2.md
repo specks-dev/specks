@@ -2242,25 +2242,25 @@ The interviewer agent no longer generates questions - the clarifier does that. T
 5. **Present critic feedback** (unchanged from before)
 
 **Tasks:**
-- [ ] Update `agents/specks-interviewer.md`:
+- [x] Update `agents/specks-interviewer.md`:
   - Update description: "Presents clarifier questions and critic feedback to users in Claude Code mode"
   - Update Gather Mode section: receives clarifier output (does NOT generate questions)
   - Add note: "Used in Claude Code mode only. CLI mode presents directly."
   - Remove any question-generation logic from prompt
   - Keep punch list behavior for critic feedback presentation
-- [ ] Update `.claude/agents/specks-interviewer.md` (mirrored copy):
+- [x] Update `.claude/agents/specks-interviewer.md` (mirrored copy):
   - Apply same changes as above
   - Ensure files match exactly
 
 **Tests:**
 - [ ] Manual test: Interviewer presents clarifier questions in Claude Code
-- [ ] Agent file validates correctly
+- [x] Agent file validates correctly
 
 **Checkpoint:**
-- [ ] `specks validate` passes
-- [ ] Interviewer agent description accurately reflects new role
-- [ ] Interviewer still has AskUserQuestion in tools list
-- [ ] `agents/specks-interviewer.md` and `.claude/agents/specks-interviewer.md` are identical
+- [x] `specks validate` passes
+- [x] Interviewer agent description accurately reflects new role
+- [x] Interviewer still has AskUserQuestion in tools list
+- [x] `agents/specks-interviewer.md` and `.claude/agents/specks-interviewer.md` are identical
 
 **Rollback:**
 - Revert agents/specks-interviewer.md to previous version

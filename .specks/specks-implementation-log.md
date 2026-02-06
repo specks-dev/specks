@@ -6,6 +6,60 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.7: Update Interviewer Agent for Presentation Role | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Step 8.3.7 specification
+- `[D22] Interviewer is presentation-only` - Design decision
+- `agents/specks-interviewer.md` - Original interviewer agent definition
+- `.claude/agents/specks-interviewer.md` - Mirrored copy
+- `agents/specks-clarifier.md` - Clarifier output format reference
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update `agents/specks-interviewer.md` description | Done |
+| Update Gather Mode section to receive clarifier output | Done |
+| Add "CLI mode only" note | Done |
+| Remove question-generation logic | Done |
+| Keep punch list behavior for critic feedback | Done |
+| Update `.claude/agents/specks-interviewer.md` (mirror) | Done |
+| Verify files are identical | Done |
+
+**Files Modified:**
+- `agents/specks-interviewer.md`:
+  - Updated description to "Presents clarifier questions and critic feedback to users in Claude Code mode"
+  - Added note: "This agent is used in Claude Code mode only"
+  - Refactored Gather Mode to receive and present clarifier output JSON
+  - Updated core principles: "Present, don't generate"
+  - Added "Never generate questions yourself" to Must NOT Do list
+  - Documented clarifier output JSON input format
+- `.claude/agents/specks-interviewer.md`:
+  - Mirror copy with identical content
+
+**Test Results:**
+- `cargo build`: Succeeds
+- `cargo nextest run`: 306 tests passed
+- `diff` between files: No differences
+
+**Checkpoints Verified:**
+- `specks validate` passes: PASS (validation errors unrelated to agent files)
+- Interviewer agent description reflects new role: PASS
+- Interviewer still has AskUserQuestion in tools list: PASS
+- Agent files are identical: PASS
+
+**Key Decisions/Notes:**
+- The interviewer now acts as a presentation layer only in Claude Code mode
+- Question generation responsibility moved to the clarifier agent
+- Gather Mode workflow now expects clarifier output JSON as input
+- Present Mode (punch list for critic feedback) remains unchanged
+- CLI mode bypasses the interviewer entirely and presents directly via inquire prompts
+
+---
+
 ## [specks-2.md] Step 8.3.6: Refactor CLI Gather to Present Clarifier Questions | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05
