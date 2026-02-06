@@ -6,6 +6,65 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.6.1: Fix Critic-to-Clarifier Data Flow | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Step 8.3.6.1 specification
+- `crates/specks/src/planning_loop/clarifier.rs` - ClarifierInput and prompt generation
+- `crates/specks/src/planning_loop/cli_present.rs` - CriticSummary and PunchListItem types
+- `crates/specks/src/planning_loop/mod.rs` - Planning loop run_clarifier method
+- `agents/specks-clarifier.md` - Agent definition
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add `critic_issues: Vec<PunchListItem>` to ClarifierInput::CriticFeedback | Done |
+| Update to_prompt() to format structured issues with priority labels | Done |
+| Make parse_critic_feedback() a static method | Done |
+| Update planning loop to parse critic feedback before clarifier | Done |
+| Update agents/specks-clarifier.md with revision mode examples | Done |
+| Convert .claude/agents/specks-*.md to symlinks | Done |
+
+**Files Modified:**
+- `crates/specks/src/planning_loop/clarifier.rs`:
+  - Added `critic_issues: Vec<PunchListItem>` field to CriticFeedback variant
+  - Updated `to_prompt()` to format issues as `[HIGH]`, `[MEDIUM]`, `[LOW]` labeled list
+  - Added import for Priority and PunchListItem
+  - Added test `test_clarifier_input_revision_prompt_with_issues`
+- `crates/specks/src/planning_loop/cli_present.rs`:
+  - Changed `parse_critic_feedback(&self, ...)` to static `parse_critic_feedback(...)`
+  - Updated call sites to use `Self::parse_critic_feedback()`
+  - Updated tests to use static method
+- `crates/specks/src/planning_loop/mod.rs`:
+  - Added call to `CliPresenter::parse_critic_feedback()` before creating ClarifierInput
+  - Pass `critic_summary.punch_list` to clarifier
+- `agents/specks-clarifier.md`:
+  - Updated revision mode to document structured `critic_issues` input
+  - Added comprehensive example showing issue-to-question transformation
+- `.claude/agents/specks-*.md`:
+  - Converted from copies to symlinks pointing to `../../agents/specks-*.md`
+
+**Test Results:**
+- `cargo nextest run`: 311 tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo nextest run` passes: PASS
+- Unit test for structured prompt added: PASS
+- Agent definition files are symlinks: PASS
+- Symlinks resolve correctly: PASS
+
+**Key Decisions/Notes:**
+- Made `parse_critic_feedback()` a static method since it doesn't use `self`
+- Converted `.claude/agents/specks-*.md` from copies to symlinks to prevent sync drift
+- Kept `code-architect.md` and `code-planner.md` as regular files (not specks agents)
+- The structured prompt format helps clarifier generate one question per issue with actionable options
+
+---
+
 ## [specks-2.md] Step 8.3.7.5: Mark SUPERSEDED Checkboxes | DOCUMENTATION | 2026-02-06
 
 **Completed:** 2026-02-06

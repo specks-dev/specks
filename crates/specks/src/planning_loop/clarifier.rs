@@ -15,6 +15,8 @@ use specks_core::SpecksError;
 
 use crate::agent::{AgentRunner, clarifier_config};
 
+use super::cli_present::{Priority, PunchListItem};
+
 /// Input to the clarifier agent.
 ///
 /// The clarifier operates in two modes:
@@ -35,6 +37,8 @@ pub enum ClarifierInput {
         critic_feedback: String,
         /// Path to the current draft speck
         speck_path: String,
+        /// Parsed punch list items from critic feedback (structured issues)
+        critic_issues: Vec<PunchListItem>,
     },
 }
 
@@ -105,20 +109,44 @@ Return ONLY valid JSON, no markdown code blocks or other text."#,
             ClarifierInput::CriticFeedback {
                 critic_feedback,
                 speck_path,
+                critic_issues,
             } => {
-                format!(
+                let mut prompt = format!(
                     r#"Analyze the critic's feedback and generate questions about what to revise.
 
 Input mode: revision
 
-Critic's feedback:
+"#
+                );
+
+                // Add structured issues if available
+                if !critic_issues.is_empty() {
+                    prompt.push_str("Issues to address:\n");
+                    for (i, issue) in critic_issues.iter().enumerate() {
+                        let priority_label = match issue.priority {
+                            Priority::High => "HIGH",
+                            Priority::Medium => "MEDIUM",
+                            Priority::Low => "LOW",
+                        };
+                        prompt.push_str(&format!(
+                            "{}. [{}] {}\n",
+                            i + 1,
+                            priority_label,
+                            issue.description
+                        ));
+                    }
+                    prompt.push_str("\nFor each issue, generate a question with options for how to fix it.\n\n");
+                }
+
+                prompt.push_str(&format!(
+                    r#"Full critic's feedback:
 {}
 
 Current speck path: {}
 
 Read the speck file and the critic's feedback. Generate questions about:
-1. How to address each issue
-2. Priorities for which issues to fix
+1. How to address each issue (focus on the structured issues above if present)
+2. Priorities for which issues to fix first
 3. Any trade-offs the user should decide
 
 Return your response as JSON matching this format:
@@ -142,7 +170,9 @@ Return your response as JSON matching this format:
 
 Return ONLY valid JSON, no markdown code blocks or other text."#,
                     critic_feedback, speck_path
-                )
+                ));
+
+                prompt
             }
         }
     }
@@ -574,6 +604,7 @@ mod tests {
         let input = ClarifierInput::CriticFeedback {
             critic_feedback: "needs more detail".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
+            critic_issues: vec![],
         };
         assert_eq!(input.mode(), "revision");
     }
@@ -597,12 +628,38 @@ mod tests {
         let input = ClarifierInput::CriticFeedback {
             critic_feedback: "step 3 is vague".to_string(),
             speck_path: ".specks/specks-1.md".to_string(),
+            critic_issues: vec![],
         };
         let prompt = input.to_prompt();
 
         assert!(prompt.contains("step 3 is vague"));
         assert!(prompt.contains(".specks/specks-1.md"));
         assert!(prompt.contains("Input mode: revision"));
+    }
+
+    #[test]
+    fn test_clarifier_input_revision_prompt_with_issues() {
+        let input = ClarifierInput::CriticFeedback {
+            critic_feedback: "step 3 is vague".to_string(),
+            speck_path: ".specks/specks-1.md".to_string(),
+            critic_issues: vec![
+                PunchListItem::new(Priority::High, "Missing error handling"),
+                PunchListItem::new(Priority::Medium, "Vague test strategy"),
+                PunchListItem::new(Priority::Low, "Could add more comments"),
+            ],
+        };
+        let prompt = input.to_prompt();
+
+        // Should contain structured issues section
+        assert!(prompt.contains("Issues to address:"));
+        assert!(prompt.contains("[HIGH] Missing error handling"));
+        assert!(prompt.contains("[MEDIUM] Vague test strategy"));
+        assert!(prompt.contains("[LOW] Could add more comments"));
+        assert!(prompt.contains("For each issue, generate a question with options for how to fix it."));
+
+        // Should still contain the full feedback
+        assert!(prompt.contains("step 3 is vague"));
+        assert!(prompt.contains(".specks/specks-1.md"));
     }
 
     #[test]

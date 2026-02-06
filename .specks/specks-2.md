@@ -2626,8 +2626,8 @@ Pass the structured punch list to the clarifier so it can generate one actionabl
 
 **Tasks:**
 
-- [ ] Add `critic_issues: Vec<PunchListItem>` field to `ClarifierInput::CriticFeedback` variant in `clarifier.rs`
-- [ ] Update `ClarifierInput::CriticFeedback::to_prompt()` to format issues as structured input:
+- [x] Add `critic_issues: Vec<PunchListItem>` field to `ClarifierInput::CriticFeedback` variant in `clarifier.rs`
+- [x] Update `ClarifierInput::CriticFeedback::to_prompt()` to format issues as structured input:
   ```
   Issues to address:
   1. [HIGH] Missing error handling - <specific issue text>
@@ -2635,23 +2635,23 @@ Pass the structured punch list to the clarifier so it can generate one actionabl
 
   For each issue, generate a question with options for how to fix it.
   ```
-- [ ] Make `parse_critic_feedback()` public in `cli_present.rs`
-- [ ] Update planning loop in `mod.rs` to:
+- [x] Make `parse_critic_feedback()` public in `cli_present.rs`
+- [x] Update planning loop in `mod.rs` to:
   - Parse critic feedback via `CliPresenter::parse_critic_feedback()` before calling clarifier
   - Pass `critic_summary.punch_list` to `ClarifierInput::CriticFeedback`
-- [ ] Update `agents/specks-clarifier.md` with revision mode examples showing issue-to-question transformation
-- [ ] Mirror changes to `.claude/agents/specks-clarifier.md`
+- [x] Update `agents/specks-clarifier.md` with revision mode examples showing issue-to-question transformation
+- [x] Mirror changes to `.claude/agents/specks-clarifier.md`
 
 **Tests:**
-- [ ] Unit test: `ClarifierInput::CriticFeedback` with punch list produces structured prompt
+- [x] Unit test: `ClarifierInput::CriticFeedback` with punch list produces structured prompt
 - [ ] Unit test: Clarifier output in revision mode contains issue-specific questions
 - [ ] Integration test: critic punch list → clarifier questions with actionable options
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] Manual test: After critic feedback, clarifier generates specific questions for each issue
-- [ ] Manual test: User can select specific options to address each issue (not generic "approve/revise")
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
+- [x] Manual test: After critic feedback, clarifier generates specific questions for each issue
+- [x] Manual test: User can select specific options to address each issue (not generic "approve/revise")
 
 **Rollback:**
 - Revert clarifier.rs, mod.rs, cli_present.rs changes

@@ -49,14 +49,25 @@ When analyzing critic feedback after a plan draft:
 
 **You receive:**
 - `mode`: "revision"
-- `critic_feedback`: The critic's report highlighting issues
+- `critic_issues`: Structured list of issues with priority levels (HIGH/MEDIUM/LOW)
+- `critic_feedback`: The critic's full report (raw text)
 - `previous_plan_path`: Path to the current draft speck
 
+**Input format (structured issues section):**
+```
+Issues to address:
+1. [HIGH] Missing error handling - no recovery for network failures
+2. [MEDIUM] Vague test strategy - "test the feature" is not specific
+3. [LOW] Could add more logging for debugging
+
+For each issue, generate a question with options for how to fix it.
+```
+
 **Your job:**
-1. Read the critic's feedback
-2. Identify the most important issues to address
-3. Generate questions about how the user wants to handle each issue
-4. Prioritize: which issues are blockers vs nice-to-haves?
+1. Read the structured issues list (focus on HIGH priority first)
+2. For each issue, generate a question with actionable options
+3. Map issue priorities to question order (HIGH first)
+4. Generate questions about how the user wants to address each issue
 
 ## Codebase Exploration
 
@@ -200,29 +211,50 @@ Response:
 
 When analyzing critic feedback, focus on:
 
-1. **Blockers first**: Issues that prevent implementation
-2. **Unclear fixes**: Where multiple approaches exist
-3. **User preference needed**: Trade-offs the user should decide
+1. **Structured issues first**: Use the prioritized list (HIGH/MEDIUM/LOW)
+2. **One question per HIGH issue**: Each blocking issue gets its own question
+3. **Group or skip LOW issues**: These can be defaulted or combined
+4. **User preference needed**: Trade-offs the user should decide
 
-**Example critic feedback:**
+**Example structured input:**
 ```
+Issues to address:
+1. [HIGH] Missing error handling - no recovery for network failures
+2. [MEDIUM] Vague test strategy - "test the feature" doesn't specify what to test
+3. [LOW] Could add more logging for debugging
+
+For each issue, generate a question with options for how to fix it.
+
+Full critic's feedback:
+The plan has several issues that should be addressed before implementation.
 Step 3's test strategy is vague - "test the feature" doesn't specify what to test.
-No rollback plan for database migration - could leave data in bad state.
+No error recovery for network failures - could leave system in bad state.
+Consider adding more logging for production debugging.
 ```
 
-**Your questions:**
+**Your response (one question per structured issue):**
 ```json
 {
   "mode": "revision",
   "analysis": {
-    "understood_intent": "Address critic's concerns about testing and rollback",
-    "relevant_context": ["tests/ - existing test patterns"],
+    "understood_intent": "Address critic's concerns: error handling (blocking), testing, and logging",
+    "relevant_context": ["src/network.rs - existing error patterns", "tests/ - test conventions"],
     "identified_ambiguities": [
-      "What specific tests are expected?",
-      "Rollback strategy preference"
+      "Error recovery strategy not specified",
+      "Test scope unclear"
     ]
   },
   "questions": [
+    {
+      "question": "How should network errors be handled? [HIGH priority]",
+      "options": [
+        "Retry with exponential backoff",
+        "Fail fast and return error",
+        "Queue for later retry"
+      ],
+      "why_asking": "Critic flagged missing error handling as blocking",
+      "default": "Retry with exponential backoff"
+    },
     {
       "question": "What test coverage do you want for Step 3?",
       "options": [
@@ -232,21 +264,12 @@ No rollback plan for database migration - could leave data in bad state.
       ],
       "why_asking": "Critic flagged vague test strategy",
       "default": "Both unit and integration tests"
-    },
-    {
-      "question": "How should database rollback work?",
-      "options": [
-        "Transaction rollback on error",
-        "Backup table before migration",
-        "No rollback (accept risk)"
-      ],
-      "why_asking": "Critic identified potential data corruption risk",
-      "default": "Transaction rollback on error"
     }
   ],
   "assumptions_if_no_answer": [
-    "Will specify both unit and integration tests",
-    "Will use transaction rollback for safety"
+    "Will use exponential backoff for network errors",
+    "Will add both unit and integration tests",
+    "Will add standard logging (LOW priority issue - defaulting)"
   ]
 }
 ```

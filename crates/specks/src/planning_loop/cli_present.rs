@@ -143,7 +143,7 @@ impl CliPresenter {
 
         // Parse and display critic feedback
         let critic_summary = if let Some(ref feedback) = context.critic_feedback {
-            let summary = self.parse_critic_feedback(feedback);
+            let summary = Self::parse_critic_feedback(feedback);
             self.display_critic_feedback(adapter, &summary);
             summary
         } else {
@@ -168,7 +168,9 @@ impl CliPresenter {
     ///
     /// Extracts approval status, assessment, and punch list items from the feedback.
     /// Filters out "thinking" lines like "I'll...", "Let me...", etc.
-    pub fn parse_critic_feedback(&self, feedback: &str) -> CriticSummary {
+    ///
+    /// This is a static method so it can be called without a `CliPresenter` instance.
+    pub fn parse_critic_feedback(feedback: &str) -> CriticSummary {
         let mut summary = CriticSummary::default();
 
         // Check for approval indicators
@@ -618,10 +620,8 @@ mod tests {
 
     #[test]
     fn test_parse_critic_feedback_approved() {
-        let presenter = CliPresenter::new();
-
         let feedback = "The plan has been approved. Ready for implementation.\n\n- Minor suggestion: consider adding logging";
-        let summary = presenter.parse_critic_feedback(feedback);
+        let summary = CliPresenter::parse_critic_feedback(feedback);
 
         assert!(summary.approved);
         assert!(summary.assessment.contains("approved"));
@@ -629,11 +629,9 @@ mod tests {
 
     #[test]
     fn test_parse_critic_feedback_not_approved() {
-        let presenter = CliPresenter::new();
-
         let feedback =
             "The plan needs revision.\n\n- Critical: missing error handling\n- Should add tests";
-        let summary = presenter.parse_critic_feedback(feedback);
+        let summary = CliPresenter::parse_critic_feedback(feedback);
 
         assert!(!summary.approved);
         assert_eq!(summary.punch_list.len(), 2);
@@ -641,8 +639,6 @@ mod tests {
 
     #[test]
     fn test_parse_critic_feedback_extracts_punch_list() {
-        let presenter = CliPresenter::new();
-
         let feedback = r#"Overall assessment looks good but needs work.
 
 - Critical issue: missing required field
@@ -652,7 +648,7 @@ mod tests {
 1. Numbered item recommendation
 "#;
 
-        let summary = presenter.parse_critic_feedback(feedback);
+        let summary = CliPresenter::parse_critic_feedback(feedback);
 
         // Should extract bullet and numbered items
         assert!(summary.punch_list.len() >= 4);

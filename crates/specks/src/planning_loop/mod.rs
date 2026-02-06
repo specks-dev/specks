@@ -309,7 +309,9 @@ impl PlanningLoop {
             }
         } else {
             // Subsequent iterations: analyze critic feedback
+            // Per Step 8.3.6.1: Parse critic feedback to extract structured issues
             let critic_feedback = self.context.critic_feedback.clone().unwrap_or_default();
+            let critic_summary = CliPresenter::parse_critic_feedback(&critic_feedback);
             let speck_path = self
                 .context
                 .speck_path
@@ -320,6 +322,7 @@ impl PlanningLoop {
             ClarifierInput::CriticFeedback {
                 critic_feedback,
                 speck_path,
+                critic_issues: critic_summary.punch_list,
             }
         };
 
