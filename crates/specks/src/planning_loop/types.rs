@@ -6,9 +6,15 @@
 //! - First iteration: analyzes the user's idea
 //! - Subsequent iterations: analyzes critic feedback for revision questions
 //!
-//! Flow: Start -> Clarifier -> Present -> Planner -> Critic -> Present -> (Approve | loop)
+//! Flow: Start -> Clarifier -> Present -> Planner -> Critic -> CriticPresent -> (Approve | loop)
 
 use std::path::PathBuf;
+
+// Re-export clarifier types for convenience (used by external consumers of this module)
+#[allow(unused_imports)]
+pub use super::clarifier::{
+    ClarifierAnalysis, ClarifierInput, ClarifierOutput, ClarifierQuestion, EnrichedRequirements,
+};
 
 /// Planning loop state per Concept C02 and [D21]/[D24]
 ///
@@ -91,6 +97,7 @@ pub enum PlanningMode {
     Cli,
     /// Claude Code mode: interviewer agent handles user interaction via AskUserQuestion.
     /// This mode is used when running via slash commands inside Claude Code.
+    #[allow(dead_code)] // Will be used when Claude Code invocation is implemented
     ClaudeCode,
 }
 

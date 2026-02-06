@@ -6,6 +6,81 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.5: Add Clarifier Invocation to Planning Loop | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Step 8.3.5 specification
+- `[D21] Clarifier generates questions` - Design decision
+- `[D24] Clarifier runs every iteration` - Design decision
+- `agents/specks-clarifier.md` - Clarifier agent definition (JSON output format)
+- `crates/specks/src/agent.rs` - Agent infrastructure patterns
+- `crates/specks/src/planning_loop/mod.rs` - Existing planning loop
+- `crates/specks/src/planning_loop/types.rs` - Existing types
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `clarifier.rs` with ClarifierOutput struct | Done |
+| Create ClarifierQuestion struct | Done |
+| Create ClarifierInput enum (Idea/CriticFeedback) | Done |
+| Implement `invoke_clarifier()` function | Done |
+| Implement JSON parsing with markdown stripping | Done |
+| Add `EnrichedRequirements` struct with fields | Done |
+| Implement `to_planner_prompt()` method | Done |
+| Update `PlanningLoop::run()` to invoke clarifier every iteration | Done |
+| Wire clarifier using existing agent infrastructure | Done |
+| Handle empty questions array case | Done |
+| **BONUS: Enforce warnings-as-errors policy** | Done |
+
+**Files Created:**
+- `crates/specks/src/planning_loop/clarifier.rs` - Full clarifier module (~500 lines)
+  - `ClarifierInput` enum: `Idea` and `CriticFeedback` variants
+  - `ClarifierOutput`, `ClarifierAnalysis`, `ClarifierQuestion` structs
+  - `invoke_clarifier()` function with JSON parsing
+  - `EnrichedRequirements` struct with `to_planner_prompt()` method
+  - 21 unit tests for all functionality
+- `.cargo/config.toml` - Project-wide warnings-as-errors policy
+
+**Files Modified:**
+- `crates/specks/src/planning_loop/mod.rs`:
+  - Added `clarifier` module
+  - Re-exported clarifier types
+  - Added `clarifier_output` and `enriched_requirements` fields to `PlanningLoop`
+  - Updated `run()` to start with `Clarifier` state
+  - Added `run_clarifier()` method
+  - Revision loops now go through Clarifier (not directly to Present)
+- `crates/specks/src/planning_loop/types.rs`:
+  - Added re-exports of clarifier types
+- `crates/specks/src/interaction/mod.rs`:
+  - Removed unused `setup_ctrl_c_handler` re-export
+- `crates/specks/src/interaction/cli_adapter.rs`:
+  - Added `#[allow(dead_code)]` for test utilities
+  - Fixed unused variable in test
+- `CLAUDE.md`:
+  - Added "Build Policy" section documenting warnings-as-errors
+  - Updated agent count from 10 to 11 (added Clarifier)
+
+**Test Results:**
+- `cargo nextest run`: 304 tests passed (20 new clarifier tests)
+- `./tests/integration/plan-tests.sh`: All 8 plan integration tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds (with warnings-as-errors): PASS
+- `cargo nextest run` passes: PASS
+- Clarifier phase runs in planning loop: PASS
+- Empty questions case handled gracefully: PASS
+
+**Key Decisions/Notes:**
+- **Warnings-as-errors policy enforced**: Created `.cargo/config.toml` with `rustflags = ["-D", "warnings"]`. This ensures no warnings accumulate as technical debt. All existing warnings were fixed.
+- **Clarifier runs EVERY iteration**: Per [D24], first iteration analyzes idea, subsequent iterations analyze critic feedback
+- **Graceful JSON parsing**: If clarifier returns malformed JSON, falls back to empty output with warning (loop continues)
+- **EnrichedRequirements ready for Step 8.3.6**: The struct and methods exist but are marked `#[allow(dead_code)]` until CLI gather is refactored to use them
+
+---
+
 ## [specks-2.md] Step 8.3.4: Create Clarifier Agent Definition | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

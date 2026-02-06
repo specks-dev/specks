@@ -2124,36 +2124,36 @@ The clarifier does NOT use `AskUserQuestion` - it's pure analysis. The presentat
 - Updated `crates/specks/src/planning_loop/types.rs` - Add new types
 
 **Tasks:**
-- [ ] Create `clarifier.rs` with:
+- [x] Create `clarifier.rs` with:
   - `ClarifierOutput` struct matching JSON output format
   - `ClarifierQuestion` struct with question, options, why_asking, default
   - `ClarifierInput` enum: `Idea(String)` or `CriticFeedback(String)`
   - `invoke_clarifier(input: ClarifierInput, project_root: &Path) -> Result<ClarifierOutput>`
   - JSON parsing for clarifier response
-- [ ] Add `EnrichedRequirements` to `types.rs`:
+- [x] Add `EnrichedRequirements` to `types.rs`:
   - `original_idea: String`
   - `clarifier_analysis: Option<ClarifierOutput>`
   - `user_answers: HashMap<String, String>`
   - `critic_feedback: Option<String>` - From previous iteration
   - `fn to_planner_prompt(&self) -> String` - Format for planner input
-- [ ] Update `PlanningLoop::run()` to invoke clarifier in EVERY iteration:
+- [x] Update `PlanningLoop::run()` to invoke clarifier in EVERY iteration:
   - First iteration: `invoke_clarifier(ClarifierInput::Idea(idea))`
   - Subsequent iterations: `invoke_clarifier(ClarifierInput::CriticFeedback(feedback))`
   - Parse JSON response into ClarifierOutput
   - Pass to presentation layer
-- [ ] Wire clarifier invocation using existing agent infrastructure
-- [ ] Handle case where clarifier returns empty questions array (proceed directly to planner)
+- [x] Wire clarifier invocation using existing agent infrastructure
+- [x] Handle case where clarifier returns empty questions array (proceed directly to planner)
 
 **Tests:**
-- [ ] Unit test: `ClarifierOutput` parsing from JSON
-- [ ] Unit test: `ClarifierQuestion` serialization
-- [ ] Unit test: `EnrichedRequirements::to_planner_prompt()` formatting
-- [ ] Integration test: Clarifier invocation with mock agent
+- [x] Unit test: `ClarifierOutput` parsing from JSON
+- [x] Unit test: `ClarifierQuestion` serialization
+- [x] Unit test: `EnrichedRequirements::to_planner_prompt()` formatting
+- [x] Integration test: Clarifier invocation with mock agent
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] Clarifier phase runs (even if questions not presented yet)
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
+- [x] Clarifier phase runs (even if questions not presented yet)
 
 **Rollback:**
 - Remove clarifier.rs, revert mod.rs and types.rs changes

@@ -17,6 +17,7 @@
 //! The `PlanningMode` enum is passed explicitly to `PlanningLoop::new()` so the
 //! caller specifies which mode is in use.
 
+mod clarifier;
 mod cli_gather;
 mod cli_present;
 mod types;
@@ -31,10 +32,19 @@ use crate::agent::AgentRunner;
 // Re-export types from the types module
 pub use types::{LoopContext, LoopOutcome, LoopState, PlanMode, PlanningMode, UserDecision};
 
-// Re-export CLI gather types
+// Re-export clarifier types (public API for this module)
+#[allow(unused_imports)]
+pub use clarifier::{
+    invoke_clarifier, ClarifierAnalysis, ClarifierInput, ClarifierOutput, ClarifierQuestion,
+    EnrichedRequirements,
+};
+
+// Re-export CLI gather types (public API for this module)
+#[allow(unused_imports)]
 pub use cli_gather::{CliGatherer, GatherResult};
 
-// Re-export CLI present types
+// Re-export CLI present types (public API for this module)
+#[allow(unused_imports)]
 pub use cli_present::{CliPresenter, CriticSummary, Priority, PunchListItem};
 
 /// Planning loop manager
@@ -59,6 +69,10 @@ pub struct PlanningLoop {
     adapter: Box<dyn InteractionAdapter>,
     /// Planning mode: CLI or Claude Code
     mode: PlanningMode,
+    /// Current clarifier output (from most recent clarifier invocation)
+    clarifier_output: Option<ClarifierOutput>,
+    /// Enriched requirements (from clarifier + user answers)
+    enriched_requirements: Option<EnrichedRequirements>,
 }
 
 impl PlanningLoop {
@@ -97,6 +111,8 @@ impl PlanningLoop {
             quiet,
             adapter,
             mode,
+            clarifier_output: None,
+            enriched_requirements: None,
         }
     }
 
@@ -161,18 +177,21 @@ impl PlanningLoop {
 
         // Start the loop
         // Per [D21] and [D24], the flow is: Clarifier -> Present -> Planner -> Critic -> CriticPresent
-        // For now, we skip Clarifier phase (will be implemented in Step 8.3.5) and go directly to Present
-        self.transition(LoopState::Present);
+        // The clarifier runs in EVERY iteration to generate context-aware questions
+        self.transition(LoopState::Clarifier);
 
         while !self.is_complete() {
             match self.state {
                 LoopState::Clarifier => {
-                    // Clarifier phase - will be implemented in Step 8.3.5
-                    // For now, skip to Present
+                    // Run clarifier to generate context-aware questions
+                    // Per [D21] and [D24], clarifier runs in every iteration:
+                    // - First iteration: analyzes the user's idea
+                    // - Subsequent iterations: analyzes critic feedback for revision questions
+                    self.run_clarifier()?;
                     self.transition(LoopState::Present);
                 }
                 LoopState::Present => {
-                    // Gather requirements (previously InterviewerGather)
+                    // Gather requirements (present clarifier questions to user)
                     self.run_interviewer_gather()?;
                     self.transition(LoopState::Planner);
                 }
@@ -185,7 +204,7 @@ impl PlanningLoop {
                     self.transition(LoopState::CriticPresent);
                 }
                 LoopState::CriticPresent => {
-                    // Present critic results (previously InterviewerPresent)
+                    // Present critic results and get user decision
                     let user_decision = self.run_interviewer_present()?;
                     match user_decision {
                         UserDecision::Approve => {
@@ -195,8 +214,8 @@ impl PlanningLoop {
                             self.context.revision_feedback = Some(feedback);
                             self.context.iteration += 1;
                             // Per [D24], revision loops back through clarifier
-                            // For now, skip to Present until clarifier is implemented
-                            self.transition(LoopState::Present);
+                            // Clarifier will analyze critic feedback for revision questions
+                            self.transition(LoopState::Clarifier);
                         }
                         UserDecision::Abort => {
                             self.transition(LoopState::Aborted);
@@ -204,8 +223,8 @@ impl PlanningLoop {
                     }
                 }
                 LoopState::Revise => {
-                    // This state is handled by transitioning to Clarifier (or Present for now)
-                    self.transition(LoopState::Present);
+                    // This state transitions through Clarifier
+                    self.transition(LoopState::Clarifier);
                 }
                 LoopState::Start | LoopState::Approved | LoopState::Aborted => {
                     // Terminal states or handled above
@@ -262,6 +281,85 @@ impl PlanningLoop {
                 reason: err.to_string(),
             },
         }
+    }
+
+    /// Run the clarifier phase.
+    ///
+    /// Per [D21] and [D24], the clarifier runs in EVERY iteration:
+    /// - First iteration: analyzes the user's idea and generates clarifying questions
+    /// - Subsequent iterations: analyzes critic feedback and generates revision questions
+    ///
+    /// The clarifier output is stored for the presentation phase.
+    fn run_clarifier(&mut self) -> Result<(), SpecksError> {
+        let progress_msg = if self.context.iteration == 0 {
+            "Clarifier analyzing idea..."
+        } else {
+            "Clarifier analyzing feedback..."
+        };
+
+        let progress_handle = if !self.quiet {
+            Some(self.adapter.start_progress(progress_msg))
+        } else {
+            None
+        };
+
+        // Build clarifier input based on iteration
+        let input = if self.context.iteration == 0 {
+            // First iteration: analyze the user's idea
+            ClarifierInput::Idea {
+                idea: self.context.input.clone(),
+                context_files: self.context.context_files.clone(),
+            }
+        } else {
+            // Subsequent iterations: analyze critic feedback
+            let critic_feedback = self.context.critic_feedback.clone().unwrap_or_default();
+            let speck_path = self
+                .context
+                .speck_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            ClarifierInput::CriticFeedback {
+                critic_feedback,
+                speck_path,
+            }
+        };
+
+        // Invoke the clarifier agent
+        let result = invoke_clarifier(&input, &self.runner, &self.project_root, self.timeout_secs);
+
+        // End progress spinner
+        if let Some(handle) = progress_handle {
+            self.adapter.end_progress(handle, result.is_ok());
+        }
+
+        let output = result?;
+
+        // Store clarifier output for the presentation phase
+        self.clarifier_output = Some(output.clone());
+
+        // Initialize enriched requirements for this iteration
+        if self.context.iteration == 0 {
+            self.enriched_requirements =
+                Some(EnrichedRequirements::new(self.context.input.clone()).with_clarifier_output(output));
+        } else {
+            let mut req = EnrichedRequirements::for_revision(
+                self.context.input.clone(),
+                self.context.critic_feedback.clone().unwrap_or_default(),
+            );
+            req = req.with_clarifier_output(output);
+            self.enriched_requirements = Some(req);
+        }
+
+        // Log if clarifier returned no questions
+        if let Some(ref output) = self.clarifier_output {
+            if output.has_no_questions() && !self.quiet {
+                self.adapter.print_info("Clarifier found no ambiguities - proceeding with clear requirements.");
+            }
+        }
+
+        Ok(())
     }
 
     /// Run the interviewer gather phase

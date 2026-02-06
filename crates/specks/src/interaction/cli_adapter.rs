@@ -94,6 +94,7 @@ impl CliAdapter {
     /// Create a new CLI adapter with explicit TTY setting
     ///
     /// This is useful for testing or when you want to override TTY detection.
+    #[allow(dead_code)] // Test utility
     pub fn with_tty(is_tty: bool) -> Self {
         setup_ctrl_c_handler();
         Self {
@@ -104,6 +105,7 @@ impl CliAdapter {
     }
 
     /// Check if stdin is a TTY
+    #[allow(dead_code)] // Part of public API, used in tests
     pub fn is_tty(&self) -> bool {
         self.is_tty
     }
@@ -334,14 +336,8 @@ mod tests {
 
     #[test]
     fn test_empty_options_error_for_select() {
-        let adapter = CliAdapter::with_tty(true);
-        // Note: This still requires TTY check to pass first, so we test the error conversion
-        let adapter_no_tty = CliAdapter::with_tty(false);
-        // First check returns NonTty, so let's test empty options separately
-        // by checking the error type from a mock scenario
-
-        // Actually, for empty options, it returns NonTty first if not TTY
-        // Let's test the empty options check works
+        // Test that the InvalidInput error type exists and works
+        // (actual empty options validation would require TTY which we can't test here)
         let err = InteractionError::InvalidInput("options cannot be empty".to_string());
         assert!(matches!(err, InteractionError::InvalidInput(_)));
     }

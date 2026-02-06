@@ -24,6 +24,17 @@ crates/
         └── error.rs     # Error types
 ```
 
+## Build Policy
+
+**WARNINGS ARE ERRORS.** This project enforces `-D warnings` via `.cargo/config.toml`.
+
+- `cargo build` will fail if there are any warnings
+- `cargo nextest run` will fail if tests have any warnings
+- Fix warnings immediately; do not leave them for later
+- Use `#[allow(dead_code)]` sparingly and only with a comment explaining why
+
+If you see warnings, fix them before completing your task. No exceptions.
+
 ## Key Conventions
 
 ### Speck Format
@@ -105,14 +116,15 @@ The implementation log at `.specks/specks-implementation-log.md` tracks complete
 
 ## Agent Suite
 
-Ten agents work together:
+Eleven agents work together:
 1. **Director** - Orchestrates workflow (hub)
-2. **Planner** - Creates specks from ideas
-3. **Critic** - Reviews plan quality
-4. **Architect** - Creates implementation strategies
-5. **Implementer** - Executes strategies, writes code
-6. **Monitor** - Tracks progress, detects drift
-7. **Reviewer** - Reviews completed work
-8. **Auditor** - Verifies code quality
-9. **Logger** - Records activity
-10. **Committer** - Handles git operations
+2. **Clarifier** - Generates context-aware clarifying questions
+3. **Planner** - Creates specks from ideas
+4. **Critic** - Reviews plan quality
+5. **Architect** - Creates implementation strategies
+6. **Implementer** - Executes strategies, writes code
+7. **Monitor** - Tracks progress, detects drift
+8. **Reviewer** - Reviews completed work
+9. **Auditor** - Verifies code quality
+10. **Logger** - Records activity
+11. **Committer** - Handles git operations

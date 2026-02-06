@@ -5,4 +5,4 @@
 
 mod cli_adapter;
 
-pub use cli_adapter::{CliAdapter, reset_cancellation, setup_ctrl_c_handler};
+pub use cli_adapter::{CliAdapter, reset_cancellation};
