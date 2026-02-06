@@ -147,6 +147,11 @@ pub enum SpecksError {
         missing: Vec<String>,
         searched: Vec<String>,
     },
+
+    // === Interaction errors (E027) ===
+    /// E027: Interaction failed (non-TTY, timeout, etc.)
+    #[error("E027: Interaction failed: {reason}")]
+    InteractionFailed { reason: String },
 }
 
 impl SpecksError {
@@ -182,6 +187,7 @@ impl SpecksError {
             SpecksError::UserAborted => "E024",
             SpecksError::SkillsNotFound { .. } => "E025",
             SpecksError::RequiredAgentsMissing { .. } => "E026",
+            SpecksError::InteractionFailed { .. } => "E027",
         }
     }
 
@@ -247,6 +253,8 @@ impl SpecksError {
             SpecksError::SkillsNotFound { .. } => 7, // Skills not found
 
             SpecksError::RequiredAgentsMissing { .. } => 8, // Required agents missing
+
+            SpecksError::InteractionFailed { .. } => 1, // Interaction errors
         }
     }
 }
@@ -355,5 +363,16 @@ mod tests {
         assert!(err.to_string().contains("specks plan"));
         assert!(err.to_string().contains("specks-interviewer"));
         assert!(err.to_string().contains("specks-critic"));
+    }
+
+    #[test]
+    fn test_interaction_failed_error() {
+        let err = SpecksError::InteractionFailed {
+            reason: "stdin is not a TTY".to_string(),
+        };
+        assert_eq!(err.code(), "E027");
+        assert_eq!(err.exit_code(), 1);
+        assert!(err.to_string().contains("Interaction failed"));
+        assert!(err.to_string().contains("stdin is not a TTY"));
     }
 }

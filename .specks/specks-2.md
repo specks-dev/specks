@@ -377,6 +377,54 @@ specks plan [idea OR existing-speck-path]
 
 ---
 
+#### [D18] CLI is the Interviewer in CLI Mode (DECIDED) {#d18-cli-is-interviewer}
+
+**Decision:** In CLI mode, the CLI code itself handles all user interaction (gathering requirements, presenting results, asking for approval). The interviewer agent is NOT invoked in CLI mode.
+
+**Rationale:**
+- The interviewer agent uses `AskUserQuestion` which only works inside Claude Code
+- `inquire` prompts provide excellent terminal UX with validation, colors, and Ctrl+C handling
+- This removes the fundamental incompatibility without changing agent design
+
+**Implications:**
+- `PlanningLoop` has separate code paths for CLI vs Claude Code modes
+- CLI mode: CLI gather -> planner -> critic -> CLI present (all CLI-driven)
+- Claude Code mode: interviewer-gather -> planner -> critic -> interviewer-present (agent-driven)
+- The interviewer agent is ONLY used in Claude Code mode
+
+---
+
+#### [D19] Mode Detection via Explicit Parameter (DECIDED) {#d19-mode-detection}
+
+**Decision:** The planning loop accepts an explicit `PlanningMode` enum (`Cli` or `ClaudeCode`) rather than trying to auto-detect the mode.
+
+**Rationale:**
+- Auto-detection is fragile and error-prone
+- The caller always knows which mode it's in (CLI binary vs skill invocation)
+- Explicit is better than implicit
+
+**Implications:**
+- `PlanningLoop::new()` takes a `PlanningMode` parameter
+- CLI `plan` command passes `PlanningMode::Cli`
+- Skill uses `Task` tool which inherently runs in Claude Code context
+
+---
+
+#### [D20] Shared Agent Invocation Logic (DECIDED) {#d20-shared-agent-invocation}
+
+**Decision:** Planner and critic agent invocations are identical in both modes. Only the interaction phases differ.
+
+**Rationale:**
+- Reduces code duplication
+- Ensures consistent planning results regardless of mode
+- Agents are pure workers: input -> processing -> output
+
+**Implications:**
+- Extract planner/critic invocation into shared helper functions
+- Only the gather and present phases have mode-specific implementations
+
+---
+
 ### Deep Dives {#deep-dives}
 
 #### Agent Invocation Architecture {#agent-invocation-arch}
@@ -1815,136 +1863,331 @@ ctrlc = "3.4"        # Ctrl+C handling
 
 ---
 
-##### Step 8.3.3: Planning Loop Adapter Integration {#step-8-3-3}
+##### Step 8.3.3: Create PlanningMode and Restructure Module {#step-8-3-3}
 
 **Depends on:** #step-8-3-2
 
-**Commit:** `feat(plan): integrate InteractionAdapter into planning loop`
+**Commit:** `refactor(plan): add PlanningMode and restructure planning loop module`
 
-**References:** [D15] CLI interaction, (#d15-cli-interaction, #planning-loop)
+**References:** [D18] CLI is interviewer, [D19] Mode detection, (#d18-cli-is-interviewer, #d19-mode-detection)
 
 **Artifacts:**
-- Updated `crates/specks/src/commands/plan.rs` - Use adapter for all user interaction
-- Updated `crates/specks-core/src/planning_loop.rs` - Accept adapter parameter
+- `crates/specks/src/planning_loop.rs` -> `crates/specks/src/planning_loop/mod.rs`
+- `crates/specks/src/planning_loop/types.rs` - Shared types and PlanningMode enum
 
 **Tasks:**
-- [ ] Update `PlanningLoop` to accept `Box<dyn InteractionAdapter>` parameter
-- [ ] Replace direct stdin reads with `adapter.ask_text()`
-- [ ] Replace yes/no prompts with `adapter.ask_confirm()`
-- [ ] Add progress spinners for agent invocation:
-  - "Interviewer gathering requirements..."
-  - "Planner creating speck..."
-  - "Critic reviewing speck..."
-- [ ] Use `adapter.print_*` for status messages
-- [ ] Update `plan` command to create `CliAdapter` and pass to loop
-- [ ] Handle `InteractionError::Cancelled` - clean exit with message
-- [ ] Handle `InteractionError::NonTty` - fail fast with helpful message
-
-**Interaction Flow (CLI mode):**
-```
-1. specks plan "add feature X"
-2. CLI creates CliAdapter
-3. PlanningLoop uses adapter for all prompts
-4. Interviewer agent runs WITHOUT AskUserQuestion tool
-5. CLI gathers input via adapter, passes to interviewer as context
-6. Loop continues until user approves or cancels
-```
+- [ ] Create `planning_loop/` directory
+- [ ] Move `planning_loop.rs` to `planning_loop/mod.rs`
+- [ ] Create `types.rs` with:
+  - `PlanningMode` enum (`Cli`, `ClaudeCode`)
+  - Move `LoopState`, `PlanMode`, `LoopOutcome`, `LoopContext`, `UserDecision` to types.rs
+- [ ] Update `PlanningLoop::new()` to accept `mode: PlanningMode` parameter
+- [ ] Store mode in `PlanningLoop` struct
+- [ ] Update mod.rs to re-export types
+- [ ] Update imports in `commands/plan.rs` (pass `PlanningMode::Cli`)
 
 **Tests:**
-- [ ] Integration test: planning loop with mock adapter
-- [ ] Integration test: cancellation handling
+- [ ] Existing tests continue to pass
+- [ ] Unit test: `PlanningMode` serialization/display
 
 **Checkpoint:**
 - [ ] `cargo build` succeeds
 - [ ] `cargo nextest run` passes
-- [ ] `specks plan "test"` uses interactive prompts (manual test)
-- [ ] Ctrl+C during planning exits gracefully
+- [ ] Module structure is clean
 
 **Rollback:**
-- Revert changes to plan.rs and planning_loop.rs
+- Revert to single-file planning_loop.rs
 
 **Commit after all checkpoints pass.**
 
 ---
 
-##### Step 8.3.4: Mode-Aware Agent Configuration {#step-8-3-4}
+##### Step 8.3.4: Implement CLI-Mode Gather Phase {#step-8-3-4}
 
 **Depends on:** #step-8-3-3
 
-**Commit:** `feat(agents): add mode-aware tool configuration for interviewer`
+**Commit:** `feat(plan): implement CLI-mode requirement gathering with inquire prompts`
 
-**References:** [D15] CLI interaction, [D16] CC interaction, (#d15-cli-interaction, #d16-cc-interaction)
+**References:** [D18] CLI is interviewer, (#d18-cli-is-interviewer)
 
 **Artifacts:**
-- Updated `crates/specks-core/src/agent.rs` - Mode-aware config generation
-- Updated interviewer agent documentation
+- `crates/specks/src/planning_loop/cli_gather.rs` - CLI gather implementation
+- Updated `crates/specks/src/planning_loop/mod.rs` - Wire up CLI gather
+
+**Concept: CLI Gather Workflow**
+
+When gathering requirements in CLI mode, the CLI performs these interactions:
+
+1. **Display the idea**: Print what the user provided
+2. **Explore codebase**: Show progress spinner while analyzing
+3. **Ask clarifying questions** (if needed):
+   - "What scope should this feature have? [Full/Minimal/Custom]"
+   - "Should this include tests? [Yes/No]"
+   - Custom text prompts based on idea analysis
+4. **Confirm understanding**: "I'll create a plan for [summary]. Continue? [Y/n]"
+
+The gathered information becomes the prompt for the planner agent.
 
 **Tasks:**
-- [ ] Add `InteractionMode` enum: `Cli`, `ClaudeCode`
-- [ ] Add `interviewer_config(mode: InteractionMode)` function
-- [ ] CLI mode config: Remove `AskUserQuestion` from tool list
-- [ ] Claude Code mode config: Include `AskUserQuestion` in tool list
-- [ ] Update agent loading to accept mode parameter
-- [ ] Document the mode difference in interviewer agent header
-
-**Agent Tool Sets:**
-```
-CLI mode:       Read, Grep, Glob, Bash, Task
-Claude Code:    Read, Grep, Glob, Bash, Task, AskUserQuestion
-```
+- [ ] Create `cli_gather.rs` with `CliGatherer` struct
+- [ ] Implement `CliGatherer::gather(&self, adapter: &dyn InteractionAdapter, context: &LoopContext) -> Result<GatherResult, SpecksError>`
+- [ ] `GatherResult` contains:
+  - `requirements: String` - Formatted requirements for planner
+  - `user_confirmed: bool` - Whether user confirmed understanding
+- [ ] Implement gathering workflow:
+  - Display idea/speck path being worked on
+  - Ask scope question (if new idea): `ask_select` with Full/Minimal/Custom
+  - Ask tests question: `ask_confirm` for including tests
+  - Show understanding summary
+  - Ask confirmation: `ask_confirm` to proceed
+- [ ] For revision mode:
+  - Read and display current speck summary
+  - Ask what to change: `ask_text` for revision description
+- [ ] Format gathered info into prompt for planner
+- [ ] Update `PlanningLoop` to branch on mode in gather phase:
+  - `Cli`: Use `CliGatherer::gather()`
+  - `ClaudeCode`: Use interviewer agent invocation
 
 **Tests:**
-- [ ] Unit test: `interviewer_config(Cli)` excludes AskUserQuestion
-- [ ] Unit test: `interviewer_config(ClaudeCode)` includes AskUserQuestion
+- [ ] Unit test: `CliGatherer` with mock adapter returns expected format
+- [ ] Unit test: Revision mode prompt includes existing speck info
 
 **Checkpoint:**
 - [ ] `cargo build` succeeds
 - [ ] `cargo nextest run` passes
-- [ ] Interviewer agent in CLI mode does not attempt AskUserQuestion
 
 **Rollback:**
-- Revert agent.rs changes
+- Remove cli_gather.rs, revert mod.rs changes
 
 **Commit after all checkpoints pass.**
 
 ---
 
-##### Step 8.3.5: Non-Interactive Mode Support {#step-8-3-5}
+##### Step 8.3.5: Implement CLI-Mode Present Phase {#step-8-3-5}
 
 **Depends on:** #step-8-3-4
 
-**Commit:** `feat(cli): add non-interactive mode with --yes flag and CI detection`
+**Commit:** `feat(plan): implement CLI-mode result presentation with inquire prompts`
+
+**References:** [D18] CLI is interviewer, (#d18-cli-is-interviewer)
+
+**Artifacts:**
+- `crates/specks/src/planning_loop/cli_present.rs` - CLI present implementation
+- Updated `crates/specks/src/planning_loop/mod.rs` - Wire up CLI present
+
+**Concept: CLI Present Workflow**
+
+When presenting results in CLI mode, the CLI performs these interactions:
+
+1. **Show speck path**: Print where the speck was created
+2. **Show summary**: Brief overview of what the plan covers
+3. **Show critic feedback**: Formatted critic assessment with colors
+4. **Present punch list** (if issues):
+   - High priority items in red
+   - Medium priority items in yellow
+   - Low priority items in normal text
+5. **Ask for decision**: Select prompt with options:
+   - "Approve this plan"
+   - "Revise (provide feedback)"
+   - "Abort planning"
+6. **If revise**: Text prompt for feedback, loops back to planner
+
+**Color Scheme:**
+- Approved items: green
+- High priority issues: red
+- Medium priority issues: yellow
+- Low priority issues: default
+- Speck path: cyan
+- Section headers: bold
+
+**Tasks:**
+- [ ] Create `cli_present.rs` with `CliPresenter` struct
+- [ ] Implement `CliPresenter::present(&self, adapter: &dyn InteractionAdapter, context: &LoopContext) -> Result<UserDecision, SpecksError>`
+- [ ] Implement presentation workflow:
+  - Print speck path with success message
+  - Print speck summary (title, step count, scope)
+  - Print critic feedback formatted with colors:
+    - Issues: red/yellow based on severity
+    - Approval status: green if approved, yellow if concerns
+  - Build punch list from critic feedback
+  - Present punch list with priority colors
+- [ ] Implement decision prompt:
+  - `ask_select` with options: ["Approve this plan", "Revise with feedback", "Abort planning"]
+  - If "Revise": `ask_text` for feedback
+  - Return `UserDecision::Approve`, `UserDecision::Revise(feedback)`, or `UserDecision::Abort`
+- [ ] Update `PlanningLoop` to branch on mode in present phase:
+  - `Cli`: Use `CliPresenter::present()`
+  - `ClaudeCode`: Use interviewer agent invocation
+
+**Tests:**
+- [ ] Unit test: `CliPresenter` with mock adapter returns correct decision types
+- [ ] Unit test: Punch list formatting is correct
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+
+**Rollback:**
+- Remove cli_present.rs, revert mod.rs changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.6: Integrate Mode-Aware Loop and Test CLI End-to-End {#step-8-3-6}
+
+**Depends on:** #step-8-3-5
+
+**Commit:** `feat(plan): integrate mode-aware planning loop for CLI`
+
+**References:** [D18] CLI is interviewer, [D20] Shared agent invocation, (#d18-cli-is-interviewer, #d20-shared-agent-invocation)
+
+**Artifacts:**
+- Updated `crates/specks/src/planning_loop/mod.rs` - Full mode-aware run()
+- Updated `crates/specks/src/commands/plan.rs` - Pass CLI mode
+
+**Tasks:**
+- [ ] Refactor `PlanningLoop::run()` to use mode-aware gather and present
+- [ ] Verify planner and critic invocations are unchanged (shared between modes)
+- [ ] Update `commands/plan.rs` to explicitly pass `PlanningMode::Cli`
+- [ ] Test full CLI flow manually:
+  - Run `specks plan "add a greeting command"`
+  - Verify: CLI prompts appear (not spinner-then-hang)
+  - Verify: Can answer questions interactively
+  - Verify: See planner progress spinner
+  - Verify: See critic progress spinner
+  - Verify: See formatted results
+  - Verify: Can approve, revise, or abort
+- [ ] Test Ctrl+C handling at each prompt stage
+- [ ] Test revision mode: `specks plan .specks/specks-1.md`
+
+**Manual Test Script:**
+```bash
+# Test 1: New idea with approval
+specks plan "add a hello world command"
+# Expected: CLI prompts, interactive flow, creates speck
+
+# Test 2: Ctrl+C during gather
+specks plan "add another command"
+# Press Ctrl+C during prompts
+# Expected: Clean exit with message
+
+# Test 3: Revision mode
+specks plan .specks/specks-2.md
+# Expected: Shows current speck, asks what to change
+
+# Test 4: Revise loop
+specks plan "simple feature"
+# At decision prompt, select "Revise with feedback"
+# Provide feedback
+# Expected: Loop back to planner, new draft, present again
+```
+
+**Tests:**
+- [ ] Integration test: CLI mode creates speck (with mock Claude CLI)
+- [ ] Integration test: Cancellation returns UserAborted
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Manual test: `specks plan "test"` uses interactive prompts
+- [ ] Manual test: Ctrl+C exits cleanly at any stage
+- [ ] Manual test: Revision mode works
+
+**Rollback:**
+- Revert integration changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.7: Verify and Document Claude Code Mode {#step-8-3-7}
+
+**Depends on:** #step-8-3-6
+
+**Commit:** `docs: verify Claude Code mode and update skill documentation`
+
+**References:** [D16] CC interaction, (#d16-cc-interaction)
+
+**Artifacts:**
+- Updated `.claude/skills/specks-plan/SKILL.md` - Document interaction behavior
+- Updated `agents/specks-interviewer.md` - Clarify when agent is used
+
+**Tasks:**
+- [ ] Verify `/specks-plan` skill invokes interviewer agent (not CLI gather)
+- [ ] Update SKILL.md to explain:
+  - Inside Claude Code: interviewer agent handles all user interaction
+  - CLI commands: CLI handles interaction, agents do work
+- [ ] Add "Interaction Modes" section to SKILL.md explaining the difference
+- [ ] Update interviewer agent header to note: "Used in Claude Code mode only"
+- [ ] Create manual test for Claude Code mode:
+  1. Open Claude Code in test project
+  2. Run: `/specks-plan "add a greeting command"`
+  3. Verify: Interviewer asks questions via AskUserQuestion
+  4. Verify: Can answer naturally
+  5. Verify: Planning loop completes
+  6. Verify: Speck is created
+- [ ] Document any differences in behavior between modes
+
+**Checkpoint:**
+- [ ] `/specks-plan` works in Claude Code (manual test)
+- [ ] Interviewer uses AskUserQuestion correctly
+- [ ] Documentation is accurate
+- [ ] Both modes produce equivalent specks
+
+**Rollback:**
+- Revert documentation changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.8: Polish UX and Add Non-Interactive Support {#step-8-3-8}
+
+**Depends on:** #step-8-3-7
+
+**Commit:** `feat(cli): polish CLI UX and add --yes flag for non-interactive mode`
 
 **References:** [D17] Non-TTY fallback, (#d17-non-tty)
 
 **Artifacts:**
 - `crates/specks/src/interaction/non_interactive.rs` - NonInteractiveAdapter
 - Updated CLI argument parsing
+- Updated `crates/specks/src/commands/plan.rs`
 
 **Tasks:**
-- [ ] Create `NonInteractiveAdapter` implementing `InteractionAdapter`
-- [ ] `ask_confirm` returns `true` (accept defaults)
-- [ ] `ask_text` returns default or empty string
-- [ ] `ask_select` returns first option
-- [ ] Progress methods are no-ops or minimal output
-- [ ] Add `--yes` / `-y` flag to bypass confirmations
+- [ ] Create `NonInteractiveAdapter` implementing `InteractionAdapter`:
+  - `ask_confirm` returns `true` (accept defaults)
+  - `ask_text` returns default or empty string
+  - `ask_select` returns first option
+  - Progress methods print minimal output
+  - Print methods write to stdout/stderr normally
+- [ ] Add `--yes` / `-y` flag to `specks plan` command
+- [ ] Add `--non-interactive` flag as alias
 - [ ] Detect CI environment: `CI=true`, `GITHUB_ACTIONS`, `JENKINS_URL`
 - [ ] Auto-select non-interactive mode when:
   - `--yes` flag provided
   - CI environment detected
-  - stdin is not a TTY
-- [ ] Print warning when using non-interactive defaults
+  - stdin is not a TTY (already handled by CliAdapter)
+- [ ] Print informative message when using defaults: "Running in non-interactive mode, using defaults"
+- [ ] Polish error messages:
+  - "Not a terminal - use --yes for non-interactive mode"
+  - "Cancelled by user"
+  - "Planning loop aborted"
+- [ ] Verify NO_COLOR environment variable is respected (owo-colors handles this)
+- [ ] Test on multiple terminals: macOS Terminal, iTerm2, VS Code terminal
 
 **Tests:**
 - [ ] Unit test: CI detection works for common CI systems
 - [ ] Unit test: NonInteractiveAdapter returns expected defaults
-- [ ] Integration test: `specks plan --yes` runs without prompts
+- [ ] Integration test: `specks plan --yes "test"` runs without prompts
 
 **Checkpoint:**
 - [ ] `cargo build` succeeds
 - [ ] `cargo nextest run` passes
 - [ ] `CI=true specks plan "test"` does not hang
 - [ ] `specks plan --yes "test"` accepts defaults
+- [ ] NO_COLOR=1 produces uncolored output
 
 **Rollback:**
 - Remove non_interactive.rs, revert CLI changes
@@ -1953,75 +2196,38 @@ Claude Code:    Read, Grep, Glob, Bash, Task, AskUserQuestion
 
 ---
 
-##### Step 8.3.6: Claude Code Path Verification {#step-8-3-6}
+##### Step 8.3.9: Create Architecture Documentation {#step-8-3-9}
 
-**Depends on:** #step-8-3-5
+**Depends on:** #step-8-3-8
 
-**Commit:** `test: verify Claude Code interaction path works correctly`
+**Commit:** `docs: add interaction adapter architecture documentation`
 
-**References:** [D16] CC interaction, (#d16-cc-interaction)
-
-**Artifacts:**
-- Updated skill SKILL.md files with interaction mode documentation
-- Test script for Claude Code path
-
-**Tasks:**
-- [ ] Verify `/specks-plan` skill works in Claude Code
-- [ ] Verify interviewer agent can use AskUserQuestion in CC mode
-- [ ] Document interaction mode in skill SKILL.md files
-- [ ] Create manual test script for Claude Code path
-- [ ] Verify director coordination works with Task tool
-
-**Test Script (manual):**
-```
-1. Open Claude Code in test project
-2. Run: /specks-plan "add a greeting command"
-3. Verify: Interviewer asks questions via AskUserQuestion
-4. Verify: Planning loop completes
-5. Verify: Speck is created
-```
-
-**Checkpoint:**
-- [ ] `/specks-plan` works in Claude Code (manual test)
-- [ ] Interviewer uses AskUserQuestion correctly
-- [ ] No adapter code is invoked in Claude Code path
-
-**Rollback:**
-- N/A (verification step)
-
-**Commit after all checkpoints pass.**
-
----
-
-##### Step 8.3.7: Interaction Polish and Documentation {#step-8-3-7}
-
-**Depends on:** #step-8-3-6
-
-**Commit:** `docs: add interaction adapter documentation and polish UX`
-
-**References:** (#d15-cli-interaction, #d16-cc-interaction, #d17-non-tty)
+**References:** [D15] CLI interaction, [D16] CC interaction, [D17] Non-TTY fallback, [D18] CLI is interviewer, (#d15-cli-interaction, #d16-cc-interaction, #d17-non-tty, #d18-cli-is-interviewer)
 
 **Artifacts:**
-- `docs/architecture/interaction-adapter.md` - Architecture documentation
+- `docs/architecture/interaction-system.md` - Architecture documentation
 - Updated `docs/getting-started.md` - Note about interaction modes
 - Updated README
 
 **Tasks:**
-- [ ] Create architecture documentation for interaction adapter
-- [ ] Document the two modes and when each is used
-- [ ] Add troubleshooting section for non-TTY issues
-- [ ] Polish spinner messages for consistency
-- [ ] Add helpful error messages for common issues:
-  - "Not a terminal - use --yes for non-interactive mode"
-  - "Cancelled by user"
-- [ ] Verify color output respects NO_COLOR environment variable
-- [ ] Test on macOS Terminal, iTerm2, VS Code terminal
+- [ ] Create `docs/architecture/interaction-system.md` documenting:
+  - The dual-mode architecture (CLI vs Claude Code)
+  - Why CLI mode doesn't use interviewer agent
+  - The `InteractionAdapter` trait and implementations
+  - How to add new interaction methods
+- [ ] Add "Interaction Modes" section to getting started guide
+- [ ] Update README with:
+  - CLI usage examples: `specks plan "idea"`
+  - Claude Code usage examples: `/specks-plan "idea"`
+  - Note about interactive vs non-interactive modes
+- [ ] Add troubleshooting section for common issues:
+  - "specks plan hangs" - likely non-TTY, use --yes
+  - "No prompts appear" - check terminal capabilities
 
 **Checkpoint:**
 - [ ] Documentation is complete and accurate
-- [ ] Error messages are helpful
-- [ ] Colors work correctly in tested terminals
-- [ ] NO_COLOR is respected
+- [ ] Getting started guide covers both modes
+- [ ] README examples work as documented
 
 **Rollback:**
 - Revert documentation changes
@@ -2031,11 +2237,14 @@ Claude Code:    Read, Grep, Glob, Bash, Task, AskUserQuestion
 ---
 
 **Step 8.3 Completion Checkpoint:**
-- [ ] All substeps completed
-- [ ] `specks plan "test"` works interactively in CLI
+- [ ] Steps 8.3.1 through 8.3.9 completed
+- [ ] `specks plan "test"` works interactively in CLI with excellent UX
 - [ ] `specks plan --yes "test"` works non-interactively
-- [ ] `/specks-plan` works in Claude Code
-- [ ] Documentation complete
+- [ ] `/specks-plan "test"` works in Claude Code with interviewer agent
+- [ ] Ctrl+C exits cleanly at any stage
+- [ ] Progress spinners show elapsed time
+- [ ] Colored output is clear and consistent
+- [ ] Documentation is complete
 - [ ] No regressions in existing functionality
 
 ---

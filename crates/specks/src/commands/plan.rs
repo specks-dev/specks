@@ -6,9 +6,11 @@
 #[allow(unused_imports)]
 use std::path::{Path, PathBuf};
 
+use specks_core::interaction::InteractionAdapter;
 use specks_core::{SpecksError, find_project_root};
 
 use crate::agent::verify_required_agents;
+use crate::interaction::{CliAdapter, reset_cancellation};
 use crate::output::{JsonIssue, JsonResponse, PlanData, PlanValidation};
 use crate::planning_loop::{
     LoopContext, PlanMode, PlanningLoop, detect_input_type, resolve_speck_path,
@@ -146,10 +148,15 @@ pub fn run_plan(
         }
     };
 
+    // Create the interaction adapter for CLI mode
+    // Reset cancellation flag at start of new session
+    reset_cancellation();
+    let adapter = CliAdapter::new();
+
     if !quiet {
         match mode {
-            PlanMode::New => eprintln!("Creating new speck from idea: {}", input),
-            PlanMode::Revision => eprintln!("Revising existing speck: {}", input),
+            PlanMode::New => adapter.print_info(&format!("Creating new speck from idea: {}", input)),
+            PlanMode::Revision => adapter.print_info(&format!("Revising existing speck: {}", input)),
         }
     }
 
@@ -161,6 +168,7 @@ pub fn run_plan(
         name,
         json_output,
         quiet,
+        Box::new(adapter),
     );
 
     match planning_loop.run() {
@@ -282,6 +290,15 @@ pub fn run_plan(
             let message = format!("Agent invocation failed: {}", reason);
             if json_output {
                 output_error_json("plan", "E020", &message);
+            } else {
+                eprintln!("error: {}", message);
+            }
+            Ok(1)
+        }
+        Err(SpecksError::InteractionFailed { reason }) => {
+            let message = format!("Interaction failed: {}", reason);
+            if json_output {
+                output_error_json("plan", "E027", &message);
             } else {
                 eprintln!("error: {}", message);
             }

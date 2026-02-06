@@ -5,9 +5,13 @@
 //!
 //! The loop runs: interviewer -> planner -> critic -> interviewer -> (approve | revise)
 //! until the user approves the speck or aborts.
+//!
+//! The loop uses an `InteractionAdapter` for all user interaction, enabling mode-specific
+//! behavior (CLI prompts vs Claude Code's AskUserQuestion).
 
 use std::path::{Path, PathBuf};
 
+use specks_core::interaction::{InteractionAdapter, InteractionError};
 use specks_core::SpecksError;
 
 use crate::agent::AgentRunner;
@@ -163,10 +167,22 @@ pub struct PlanningLoop {
     _json_output: bool,
     /// Whether to suppress progress messages
     quiet: bool,
+    /// Interaction adapter for user interaction
+    adapter: Box<dyn InteractionAdapter>,
 }
 
 impl PlanningLoop {
     /// Create a new planning loop
+    ///
+    /// # Arguments
+    ///
+    /// * `context` - The loop context with input and mode
+    /// * `project_root` - Path to the project root
+    /// * `timeout_secs` - Timeout per agent invocation in seconds
+    /// * `speck_name` - Optional name for the speck
+    /// * `json_output` - Whether to output in JSON format
+    /// * `quiet` - Whether to suppress progress messages
+    /// * `adapter` - Interaction adapter for user prompts and progress
     pub fn new(
         context: LoopContext,
         project_root: PathBuf,
@@ -174,6 +190,7 @@ impl PlanningLoop {
         speck_name: Option<String>,
         json_output: bool,
         quiet: bool,
+        adapter: Box<dyn InteractionAdapter>,
     ) -> Self {
         let runner = AgentRunner::new(project_root.clone());
 
@@ -186,6 +203,7 @@ impl PlanningLoop {
             speck_name,
             _json_output: json_output,
             quiet,
+            adapter,
         }
     }
 
@@ -194,6 +212,12 @@ impl PlanningLoop {
     pub fn with_runner(mut self, runner: AgentRunner) -> Self {
         self.runner = runner;
         self
+    }
+
+    /// Get a reference to the interaction adapter
+    #[allow(dead_code)]
+    pub fn adapter(&self) -> &dyn InteractionAdapter {
+        self.adapter.as_ref()
     }
 
     /// Get the current state
@@ -227,6 +251,11 @@ impl PlanningLoop {
     /// Run the planning loop to completion
     ///
     /// Returns the outcome or an error if the loop fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SpecksError::UserAborted` if the user cancels via Ctrl+C or explicit abort.
+    /// Returns `SpecksError::InteractionFailed` if interaction fails (e.g., non-TTY environment).
     pub fn run(&mut self) -> Result<LoopOutcome, SpecksError> {
         // Verify claude CLI is available
         self.runner.check_claude_cli()?;
@@ -294,6 +323,10 @@ impl PlanningLoop {
         // Run validation to get error/warning counts
         let (validation_errors, validation_warnings) = self.validate_speck(&speck_path)?;
 
+        if !self.quiet {
+            self.adapter.print_success("Planning complete!");
+        }
+
         Ok(LoopOutcome {
             speck_path,
             speck_name,
@@ -306,11 +339,27 @@ impl PlanningLoop {
         })
     }
 
+    /// Convert an InteractionError to a SpecksError
+    fn convert_interaction_error(err: InteractionError) -> SpecksError {
+        match err {
+            InteractionError::Cancelled => SpecksError::UserAborted,
+            InteractionError::NonTty => SpecksError::InteractionFailed {
+                reason: "stdin is not a TTY - interactive input unavailable. Use --yes for non-interactive mode.".to_string(),
+            },
+            InteractionError::Timeout { secs } => SpecksError::AgentTimeout { secs },
+            _ => SpecksError::InteractionFailed {
+                reason: err.to_string(),
+            },
+        }
+    }
+
     /// Run the interviewer gather phase
     fn run_interviewer_gather(&mut self) -> Result<(), SpecksError> {
-        if !self.quiet {
-            eprintln!("Gathering requirements...");
-        }
+        let progress_handle = if !self.quiet {
+            Some(self.adapter.start_progress("Interviewer gathering requirements..."))
+        } else {
+            None
+        };
 
         let prompt = match self.context.mode {
             PlanMode::New => {
@@ -338,24 +387,34 @@ impl PlanningLoop {
         let config =
             crate::agent::interviewer_config(&self.project_root).with_timeout(self.timeout_secs);
 
-        let result = self.runner.invoke_agent(&config, &prompt)?;
-        self.context.requirements = Some(result.output);
+        let result = self.runner.invoke_agent(&config, &prompt);
+
+        // End progress spinner
+        if let Some(handle) = progress_handle {
+            self.adapter.end_progress(handle, result.is_ok());
+        }
+
+        self.context.requirements = Some(result?.output);
 
         Ok(())
     }
 
     /// Run the planner phase
     fn run_planner(&mut self) -> Result<(), SpecksError> {
-        if !self.quiet {
-            if self.context.iteration == 0 {
-                eprintln!("Creating speck...");
-            } else {
-                eprintln!(
-                    "Revising speck (iteration {})...",
-                    self.context.iteration + 1
-                );
-            }
-        }
+        let progress_msg = if self.context.iteration == 0 {
+            "Planner creating speck...".to_string()
+        } else {
+            format!(
+                "Planner revising speck (iteration {})...",
+                self.context.iteration + 1
+            )
+        };
+
+        let progress_handle = if !self.quiet {
+            Some(self.adapter.start_progress(&progress_msg))
+        } else {
+            None
+        };
 
         let mut prompt = String::new();
 
@@ -406,7 +465,14 @@ impl PlanningLoop {
         let config =
             crate::agent::planner_config(&self.project_root).with_timeout(self.timeout_secs);
 
-        let _result = self.runner.invoke_agent(&config, &prompt)?;
+        let result = self.runner.invoke_agent(&config, &prompt);
+
+        // End progress spinner
+        if let Some(handle) = progress_handle {
+            self.adapter.end_progress(handle, result.is_ok());
+        }
+
+        let _result = result?;
 
         // Update context with speck path
         self.context.speck_path = Some(speck_path);
@@ -416,9 +482,11 @@ impl PlanningLoop {
 
     /// Run the critic phase
     fn run_critic(&mut self) -> Result<(), SpecksError> {
-        if !self.quiet {
-            eprintln!("Reviewing speck...");
-        }
+        let progress_handle = if !self.quiet {
+            Some(self.adapter.start_progress("Critic reviewing speck..."))
+        } else {
+            None
+        };
 
         let speck_path =
             self.context
@@ -436,17 +504,25 @@ impl PlanningLoop {
         let config =
             crate::agent::critic_config(&self.project_root).with_timeout(self.timeout_secs);
 
-        let result = self.runner.invoke_agent(&config, &prompt)?;
-        self.context.critic_feedback = Some(result.output);
+        let result = self.runner.invoke_agent(&config, &prompt);
+
+        // End progress spinner
+        if let Some(handle) = progress_handle {
+            self.adapter.end_progress(handle, result.is_ok());
+        }
+
+        self.context.critic_feedback = Some(result?.output);
 
         Ok(())
     }
 
     /// Run the interviewer present phase and get user decision
     fn run_interviewer_present(&mut self) -> Result<UserDecision, SpecksError> {
-        if !self.quiet {
-            eprintln!("Presenting results...");
-        }
+        let progress_handle = if !self.quiet {
+            Some(self.adapter.start_progress("Interviewer presenting results..."))
+        } else {
+            None
+        };
 
         let speck_path =
             self.context
@@ -475,7 +551,14 @@ impl PlanningLoop {
         let config =
             crate::agent::interviewer_config(&self.project_root).with_timeout(self.timeout_secs);
 
-        let result = self.runner.invoke_agent(&config, &prompt)?;
+        let result = self.runner.invoke_agent(&config, &prompt);
+
+        // End progress spinner
+        if let Some(handle) = progress_handle {
+            self.adapter.end_progress(handle, result.is_ok());
+        }
+
+        let result = result?;
 
         // Parse the response
         let output = result.output.trim();
@@ -580,6 +663,55 @@ pub fn resolve_speck_path(input: &str, project_root: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use specks_core::interaction::{InteractionResult, ProgressHandle};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// A mock adapter for testing
+    struct MockAdapter {
+        progress_counter: AtomicU64,
+    }
+
+    impl MockAdapter {
+        fn new() -> Self {
+            Self {
+                progress_counter: AtomicU64::new(0),
+            }
+        }
+    }
+
+    impl InteractionAdapter for MockAdapter {
+        fn ask_text(&self, _prompt: &str, default: Option<&str>) -> InteractionResult<String> {
+            Ok(default.unwrap_or("mock").to_string())
+        }
+
+        fn ask_select(&self, _prompt: &str, _options: &[&str]) -> InteractionResult<usize> {
+            Ok(0)
+        }
+
+        fn ask_confirm(&self, _prompt: &str, default: bool) -> InteractionResult<bool> {
+            Ok(default)
+        }
+
+        fn ask_multi_select(&self, _prompt: &str, _options: &[&str]) -> InteractionResult<Vec<usize>> {
+            Ok(vec![0])
+        }
+
+        fn start_progress(&self, message: &str) -> ProgressHandle {
+            let id = self.progress_counter.fetch_add(1, Ordering::SeqCst);
+            ProgressHandle::new(id, message)
+        }
+
+        fn end_progress(&self, _handle: ProgressHandle, _success: bool) {}
+
+        fn print_info(&self, _message: &str) {}
+        fn print_warning(&self, _message: &str) {}
+        fn print_error(&self, _message: &str) {}
+        fn print_success(&self, _message: &str) {}
+    }
+
+    fn create_mock_adapter() -> Box<dyn InteractionAdapter> {
+        Box::new(MockAdapter::new())
+    }
 
     #[test]
     fn test_loop_state_transitions() {
@@ -659,7 +791,15 @@ mod tests {
         let ctx = LoopContext::new_idea("test idea".to_string(), vec![]);
         let project_root = PathBuf::from("/project");
 
-        let loop_instance = PlanningLoop::new(ctx, project_root, 300, None, false, false);
+        let loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            false,
+            create_mock_adapter(),
+        );
 
         assert_eq!(*loop_instance.state(), LoopState::Start);
         assert!(!loop_instance.is_complete());
@@ -670,7 +810,15 @@ mod tests {
         let ctx = LoopContext::new_idea("test idea".to_string(), vec![]);
         let project_root = PathBuf::from("/project");
 
-        let mut loop_instance = PlanningLoop::new(ctx, project_root, 300, None, false, false);
+        let mut loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            false,
+            create_mock_adapter(),
+        );
 
         // Manual state transitions
         loop_instance.transition(LoopState::InterviewerGather);
@@ -739,7 +887,15 @@ mod tests {
     fn test_extract_speck_name() {
         let ctx = LoopContext::new_idea("test".to_string(), vec![]);
         let project_root = PathBuf::from("/project");
-        let loop_instance = PlanningLoop::new(ctx, project_root, 300, None, false, false);
+        let loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            false,
+            create_mock_adapter(),
+        );
 
         // Standard name extraction
         assert_eq!(
@@ -817,5 +973,48 @@ mod tests {
         assert_eq!(outcome.iterations, 2);
         assert!(outcome.critic_approved);
         assert!(outcome.user_approved);
+    }
+
+    #[test]
+    fn test_convert_interaction_error_cancelled() {
+        let err = PlanningLoop::convert_interaction_error(InteractionError::Cancelled);
+        assert!(matches!(err, SpecksError::UserAborted));
+    }
+
+    #[test]
+    fn test_convert_interaction_error_non_tty() {
+        let err = PlanningLoop::convert_interaction_error(InteractionError::NonTty);
+        assert!(matches!(err, SpecksError::InteractionFailed { .. }));
+        if let SpecksError::InteractionFailed { reason } = err {
+            assert!(reason.contains("TTY"));
+        }
+    }
+
+    #[test]
+    fn test_convert_interaction_error_timeout() {
+        let err = PlanningLoop::convert_interaction_error(InteractionError::Timeout { secs: 30 });
+        assert!(matches!(err, SpecksError::AgentTimeout { secs: 30 }));
+    }
+
+    #[test]
+    fn test_planning_loop_has_adapter() {
+        let ctx = LoopContext::new_idea("test idea".to_string(), vec![]);
+        let project_root = PathBuf::from("/project");
+
+        let loop_instance = PlanningLoop::new(
+            ctx,
+            project_root,
+            300,
+            None,
+            false,
+            false,
+            create_mock_adapter(),
+        );
+
+        // Verify the adapter is accessible and works
+        let adapter = loop_instance.adapter();
+        let handle = adapter.start_progress("test");
+        assert_eq!(handle.message(), "test");
+        adapter.end_progress(handle, true);
     }
 }

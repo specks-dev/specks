@@ -226,7 +226,7 @@ impl InteractionAdapter for CliAdapter {
         let pb = ProgressBar::new_spinner();
         pb.set_style(
             ProgressStyle::default_spinner()
-                .template("{spinner:.cyan} {msg}")
+                .template("{spinner:.cyan} {msg} [{elapsed}]")
                 .expect("valid template")
                 .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
         );
@@ -245,10 +245,16 @@ impl InteractionAdapter for CliAdapter {
         if let Ok(mut progress_map) = self.active_progress.lock() {
             if let Some(pb) = progress_map.remove(&handle.id()) {
                 let msg = handle.message();
+                let elapsed = pb.elapsed();
+                let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
+
+                // Clear the spinner line completely, then print the final status
+                pb.finish_and_clear();
+
                 if success {
-                    pb.finish_with_message(format!("{} {}", "✓".green(), msg.green()));
+                    println!("{} {} [{}]", "✓".green(), msg.green(), elapsed_str);
                 } else {
-                    pb.finish_with_message(format!("{} {}", "✗".red(), msg.red()));
+                    println!("{} {} [{}]", "✗".red(), msg.red(), elapsed_str);
                 }
             }
         }

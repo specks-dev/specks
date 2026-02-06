@@ -6,6 +6,62 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3 Redesign: Interaction System Architecture | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Phase 2.0 plan file, Steps 8.3.3 through 8.3.7 (old design)
+- `crates/specks/src/planning_loop.rs` - Current planning loop implementation
+- `crates/specks/src/commands/plan.rs` - Plan command entry point
+- `crates/specks/src/interaction/cli_adapter.rs` - CLI adapter implementation
+- `agents/specks-interviewer.md` - Interviewer agent definition
+- `.claude/skills/specks-plan/SKILL.md` - Claude Code skill definition
+
+**Summary:**
+
+Discovered critical UX problem: CLI mode invoked interviewer agent which uses `AskUserQuestion` tool, but this doesn't work in `--print` mode. Users experienced minutes-long spinners with no feedback. The core insight: **the interviewer agent is the ONLY agent that needs user interaction**. All other agents (planner, critic, etc.) just do work.
+
+**Solution:** In CLI mode, the CLI itself acts as the interviewer using `inquire` prompts. The interviewer agent is only used in Claude Code mode where `AskUserQuestion` works.
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Identified root cause of CLI mode UX problem | Done |
+| Designed dual-mode architecture (CLI vs Claude Code) | Done |
+| Added design decisions D18, D19, D20 to speck | Done |
+| Rewrote Steps 8.3.3 through 8.3.9 with proper CLI-driven approach | Done |
+| Fixed spinner artifact bug (spinner char left behind) | Done |
+| Added elapsed time to progress spinners | Done |
+
+**Files Modified:**
+- `.specks/specks-2.md` - Added D18, D19, D20; Replaced Steps 8.3.3-8.3.7 with new Steps 8.3.3-8.3.9
+- `crates/specks/src/interaction/cli_adapter.rs` - Fixed `end_progress` to use `finish_and_clear()` and show elapsed time
+
+**New Design Decisions Added:**
+- **D18**: CLI is the Interviewer in CLI Mode - CLI handles all user interaction directly
+- **D19**: Mode Detection via Explicit Parameter - `PlanningMode::Cli` vs `PlanningMode::ClaudeCode`
+- **D20**: Shared Agent Invocation Logic - Planner/Critic identical in both modes
+
+**New Steps (replacing old 8.3.3-8.3.7):**
+- Step 8.3.3: Create PlanningMode and Restructure Module
+- Step 8.3.4: Implement CLI-Mode Gather Phase
+- Step 8.3.5: Implement CLI-Mode Present Phase
+- Step 8.3.6: Integrate Mode-Aware Loop and Test CLI End-to-End
+- Step 8.3.7: Verify and Document Claude Code Mode
+- Step 8.3.8: Polish UX and Add Non-Interactive Support
+- Step 8.3.9: Create Architecture Documentation
+
+**Key Decisions/Notes:**
+- The old Step 8.3.3 "Planning Loop Adapter Integration" was fundamentally flawed - it added adapter plumbing but still invoked the interviewer agent in CLI mode
+- CLI mode flow: CLI prompts → Planner (spinner) → Critic (spinner) → CLI presents → CLI approve/revise
+- Claude Code flow: Interviewer (AskUserQuestion) → Planner → Critic → Interviewer (AskUserQuestion)
+- Progress spinners now show elapsed time: `⠸ Planner creating speck... [1m 23s]`
+- Spinner artifact fixed: clean line with checkmark after completion, no leftover spinner character
+
+---
+
 ## [specks-2.md] Step 8.3.2: CLI Adapter Implementation | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05
