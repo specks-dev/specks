@@ -20,6 +20,9 @@ pub mod validator;
 /// Beads integration utilities
 pub mod beads;
 
+/// Interaction adapter for mode-agnostic user interaction
+pub mod interaction;
+
 // Re-exports for convenience
 pub use beads::{BeadStatus, BeadsCli, Issue, IssueDetails, is_valid_bead_id};
 pub use config::{
@@ -36,3 +39,4 @@ pub use validator::{
     Severity, ValidationConfig, ValidationIssue, ValidationLevel, ValidationResult, validate_speck,
     validate_speck_with_config,
 };
+pub use interaction::{InteractionAdapter, InteractionError, InteractionResult, ProgressHandle};

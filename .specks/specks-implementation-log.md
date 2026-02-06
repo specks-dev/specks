@@ -6,6 +6,56 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.1: Core Interaction Adapter Trait | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Phase 2.0 plan file, Step 8.3.1 specification
+- Design decisions D15 (CLI interaction), D16 (CC interaction), D17 (Non-TTY fallback)
+- `crates/specks-core/src/lib.rs` - Existing module structure and exports
+- `crates/specks-core/src/error.rs` - Error type patterns
+- `Cargo.toml` - Workspace dependency management
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add dependencies to `crates/specks-core/Cargo.toml`: `inquire`, `indicatif`, `owo-colors` | Done |
+| Create `interaction.rs` module with `InteractionAdapter` trait | Done |
+| Define trait methods (ask_text, ask_select, ask_confirm, ask_multi_select, start_progress, end_progress, print_info/warning/error/success) | Done |
+| Define `ProgressHandle` type for tracking spinners | Done |
+| Define `InteractionError` enum with variants for cancellation, timeout, non-tty | Done |
+| Export trait and types from lib.rs | Done |
+| Unit test: trait is object-safe (can use `dyn InteractionAdapter`) | Done |
+| Unit test: error types implement std::error::Error | Done |
+
+**Files Created:**
+- `crates/specks-core/src/interaction.rs` - InteractionAdapter trait, ProgressHandle, InteractionError, and comprehensive tests
+
+**Files Modified:**
+- `Cargo.toml` - Added workspace dependencies: `inquire = "0.7"`, `indicatif = "0.17"`, `owo-colors = "4"`
+- `crates/specks-core/Cargo.toml` - Added dependencies from workspace
+- `crates/specks-core/src/lib.rs` - Added `pub mod interaction` and re-exports for `InteractionAdapter`, `InteractionError`, `InteractionResult`, `ProgressHandle`
+- `.specks/specks-2.md` - Checked off all tasks and checkpoints for Step 8.3.1
+
+**Test Results:**
+- `cargo nextest run`: 230 tests passed (7 new tests added)
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo nextest run` passes: PASS
+- Trait compiles and is usable as trait object: PASS
+
+**Key Decisions/Notes:**
+- **Trait is Send + Sync**: Required for thread-safety when used across async boundaries
+- **InteractionError variants**: `Cancelled`, `Timeout { secs }`, `NonTty`, `Io(String)`, `InvalidInput(String)`, `Other(String)`
+- **ProgressHandle design**: Contains `id: u64` and `message: String`, is Clone + Debug
+- **MockAdapter in tests**: Used to verify object-safety without requiring actual terminal interaction
+- **From impl**: Added `From<std::io::Error>` for `InteractionError` for ergonomic error conversion
+
+---
+
 ## [specks-2.md] Step 8 Dependencies: Plan Reorganization | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

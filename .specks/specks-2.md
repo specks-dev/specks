@@ -1730,9 +1730,9 @@ ctrlc = "3.4"        # Ctrl+C handling
 - Updated `crates/specks-core/src/lib.rs` - Export interaction module
 
 **Tasks:**
-- [ ] Add dependencies to `crates/specks-core/Cargo.toml`: `inquire`, `indicatif`, `owo-colors`
-- [ ] Create `interaction.rs` module with `InteractionAdapter` trait
-- [ ] Define trait methods:
+- [x] Add dependencies to `crates/specks-core/Cargo.toml`: `inquire`, `indicatif`, `owo-colors`
+- [x] Create `interaction.rs` module with `InteractionAdapter` trait
+- [x] Define trait methods:
   - `ask_text(&self, prompt: &str, default: Option<&str>) -> Result<String>`
   - `ask_select(&self, prompt: &str, options: &[&str]) -> Result<usize>`
   - `ask_confirm(&self, prompt: &str, default: bool) -> Result<bool>`
@@ -1743,18 +1743,18 @@ ctrlc = "3.4"        # Ctrl+C handling
   - `print_warning(&self, message: &str)`
   - `print_error(&self, message: &str)`
   - `print_success(&self, message: &str)`
-- [ ] Define `ProgressHandle` type for tracking spinners
-- [ ] Define `InteractionError` enum with variants for cancellation, timeout, non-tty
-- [ ] Export trait and types from lib.rs
+- [x] Define `ProgressHandle` type for tracking spinners
+- [x] Define `InteractionError` enum with variants for cancellation, timeout, non-tty
+- [x] Export trait and types from lib.rs
 
 **Tests:**
-- [ ] Unit test: trait is object-safe (can use `dyn InteractionAdapter`)
-- [ ] Unit test: error types implement std::error::Error
+- [x] Unit test: trait is object-safe (can use `dyn InteractionAdapter`)
+- [x] Unit test: error types implement std::error::Error
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] Trait compiles and is usable as trait object
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
+- [x] Trait compiles and is usable as trait object
 
 **Rollback:**
 - Remove interaction.rs, revert Cargo.toml changes
