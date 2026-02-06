@@ -2361,13 +2361,27 @@ specks plan "add a greeting command"
 
 ##### Step 8.3.7.5: Complete Full-Featured Terminal Streaming with Anchored Spinner {#step-8-3-7-5}
 
-**Depends on:** #step-8-3-6-5
+**STATUS: SUPERSEDED** - See Design Decision [D26] below.
 
-**Commit:** `feat(cli): complete terminal streaming with indicatif MultiProgress for anchored spinner`
+**Design Decision [D26]: Scrolling Spinner with Tool Status Updates** {#d26-scrolling-spinner}
 
-**References:** [D25] Streaming agent output with fixed spinner, (#d25-streaming-spinner, #terminal-streaming-architecture)
+After investigation, we backed away from anchored/pinned spinners in favor of a simpler model:
 
-**Problem Statement:**
+1. **Scrolling spinner at bottom of content** - The spinner scrolls naturally with terminal output rather than being pinned to a fixed position. This avoids the complexity of cursor positioning and works reliably across all terminals.
+
+2. **Tool call and byte download status updates** - Instead of streaming raw LLM content, we provide meaningful status updates: current tool being used, bytes downloaded, elapsed time. This gives users visibility into long-running operations without overwhelming them with token-by-token output.
+
+3. **Dialoguer for clarifier Q&A** - All interactive prompts use `dialoguer` with our custom `SpacedTheme`. This replaces any previous use of `inquire` or other prompt libraries.
+
+The current implementation in `streaming.rs` provides:
+- Inline spinner with elapsed time, tool count, and current tool name
+- Byte download progress for large operations
+- Success (green checkmark) / Error (red X) finish states
+- Non-TTY fallback (simple line output without spinner)
+
+This approach is simpler, more reliable, and provides better user feedback for our use case than attempting to stream raw LLM tokens.
+
+**Original Problem Statement (for reference):**
 
 Step 8.3.6.5 attempted streaming but has fundamental failures:
 
@@ -2426,8 +2440,8 @@ indicatif = "0.17"
 
 *Phase 1: Core StreamingDisplay Rewrite*
 
-- [ ] Add `indicatif = "0.17"` to `crates/specks/Cargo.toml` (make explicit)
-- [ ] Rewrite `StreamingDisplay` struct to use `indicatif::MultiProgress`:
+- [❌] Add `indicatif = "0.17"` to `crates/specks/Cargo.toml` (make explicit)
+- [❌] Rewrite `StreamingDisplay` struct to use `indicatif::MultiProgress`:
   ```rust
   pub struct StreamingDisplay {
       message: String,
@@ -2440,71 +2454,71 @@ indicatif = "0.17"
       term_width: u16,
   }
   ```
-- [ ] Implement `start()`:
+- [❌] Implement `start()`:
   - Create `MultiProgress::new()`
   - Create spinner with `mp.add(ProgressBar::new_spinner())`
   - Set style with braille frames: `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`
   - Enable auto-tick: `spinner.enable_steady_tick(Duration::from_millis(100))`
   - Non-TTY: just `println!` the message
-- [ ] Implement `write_content()`:
+- [❌] Implement `write_content()`:
   - Accumulate tokens into `line_buffer`
   - On newline: extract complete line and call `mp.println(&line)`
   - `mp.println()` automatically prints ABOVE the spinner
-- [ ] Implement `flush_buffer()`:
+- [❌] Implement `flush_buffer()`:
   - Print any remaining partial line on finish
-- [ ] Implement `finish_success()`:
+- [❌] Implement `finish_success()`:
   - Flush buffer
   - Call `spinner.finish_and_clear()`
   - Print success message: `✓ {message} [{elapsed}]` (green)
-- [ ] Implement `finish_error()`:
+- [❌] Implement `finish_error()`:
   - Flush buffer
   - Call `spinner.finish_and_clear()`
   - Print error message: `✗ {message} [{elapsed}]: {error}` (red)
-- [ ] Remove all cursor save/restore logic
-- [ ] Remove all `Clear(ClearType::*)` calls
-- [ ] Remove `at_line_start` tracking (no longer needed)
+- [❌] Remove all cursor save/restore logic
+- [❌] Remove all `Clear(ClearType::*)` calls
+- [❌] Remove `at_line_start` tracking (no longer needed)
 
 *Phase 2: Agent Runner Integration*
 
-- [ ] Simplify `invoke_agent_streaming()` in `agent.rs`:
+- [❌] Simplify `invoke_agent_streaming()` in `agent.rs`:
   - Remove manual spinner tick calls (indicatif handles it)
   - Keep thread-based stdout reading (unchanged)
   - Keep 100ms receive timeout (for cancellation checks only, not spinner)
   - The main loop just calls `display.write_content(&content)` on receive
-- [ ] Verify cancellation still works via `display.is_cancelled()`
-- [ ] Verify timeout detection still works
+- [❌] Verify cancellation still works via `display.is_cancelled()`
+- [❌] Verify timeout detection still works
 
 *Phase 3: Word Wrapping and Polish*
 
-- [ ] Add word wrapping for long lines:
+- [❌] Add word wrapping for long lines:
   ```rust
   fn wrap_line(&self, line: &str) -> Vec<String> {
       // Split at word boundaries to fit term_width
   }
   ```
-- [ ] Get terminal width: `crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80)`
-- [ ] Handle terminal resize gracefully (re-query width on demand, not critical)
+- [❌] Get terminal width: `crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80)`
+- [❌] Handle terminal resize gracefully (re-query width on demand, not critical)
 
 *Phase 4: Cleanup*
 
-- [ ] Remove unused imports from streaming.rs (cursor::SavePosition, etc.)
-- [ ] Update doc comments to reflect MultiProgress approach
-- [ ] Ensure Drop impl calls `spinner.finish_and_clear()` for unexpected drops
+- [❌] Remove unused imports from streaming.rs (cursor::SavePosition, etc.)
+- [❌] Update doc comments to reflect MultiProgress approach
+- [❌] Ensure Drop impl calls `spinner.finish_and_clear()` for unexpected drops
 
 **Tests:**
 
 Unit tests:
-- [ ] `StreamingDisplay::new()` initializes correctly
-- [ ] `write_content()` buffers partial tokens until newline
-- [ ] `write_content()` with multiple newlines flushes multiple lines
-- [ ] Non-TTY mode prints directly without MultiProgress
-- [ ] `finish_success()` outputs correct format
-- [ ] `finish_error()` outputs correct format
-- [ ] Word wrap splits long lines correctly
+- [❌] `StreamingDisplay::new()` initializes correctly
+- [❌] `write_content()` buffers partial tokens until newline
+- [❌] `write_content()` with multiple newlines flushes multiple lines
+- [❌] Non-TTY mode prints directly without MultiProgress
+- [❌] `finish_success()` outputs correct format
+- [❌] `finish_error()` outputs correct format
+- [❌] Word wrap splits long lines correctly
 
 Integration tests:
-- [ ] Streaming invocation with mock agent captures all output
-- [ ] Spinner remains visible during streaming (visual verification)
+- [❌] Streaming invocation with mock agent captures all output
+- [❌] Spinner remains visible during streaming (visual verification)
 
 **Manual Test Script:**
 
@@ -2549,16 +2563,16 @@ specks plan "test idea"
 
 **Checkpoint:**
 
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] `indicatif` is explicit dependency in Cargo.toml
-- [ ] **Manual test: Content streams in real-time** (not all-at-once dump)
-- [ ] **Manual test: Spinner stays fixed at bottom** (never scrolls away)
-- [ ] **Manual test: Spinner animates continuously** (braille pattern cycles)
-- [ ] **Manual test: Text flows naturally** (not token-per-line)
-- [ ] **Manual test: Ctrl+C exits cleanly** (no terminal corruption)
-- [ ] No cursor save/restore calls in streaming.rs
-- [ ] No Clear(ClearType::*) calls in streaming.rs
+- [❌] `cargo build` succeeds
+- [❌] `cargo nextest run` passes
+- [❌] `indicatif` is explicit dependency in Cargo.toml
+- [❌] **Manual test: Content streams in real-time** (not all-at-once dump)
+- [❌] **Manual test: Spinner stays fixed at bottom** (never scrolls away)
+- [❌] **Manual test: Spinner animates continuously** (braille pattern cycles)
+- [❌] **Manual test: Text flows naturally** (not token-per-line)
+- [❌] **Manual test: Ctrl+C exits cleanly** (no terminal corruption)
+- [❌] No cursor save/restore calls in streaming.rs
+- [❌] No Clear(ClearType::*) calls in streaming.rs
 
 **Acceptance Criteria (from user):**
 
@@ -2574,6 +2588,172 @@ This step is complete when the terminal experience matches Claude Code's behavio
 
 - Revert streaming.rs to pre-indicatif version
 - Remove indicatif explicit dependency
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.6.1: Fix Critic-to-Clarifier Data Flow {#step-8-3-6-1}
+
+**STATUS: NEW - BLOCKING**
+
+**Depends on:** #step-8-3-6
+
+**Commit:** `fix(planning): pass structured critic issues to clarifier for actionable questions`
+
+**References:** [D24] Clarifier runs every iteration, (#d24-clarifier-every-iteration)
+
+**Problem Statement:**
+
+When the critic returns feedback requesting revisions, the clarifier receives raw text instead of structured issues. The `CliPresenter::parse_critic_feedback()` already extracts a punch list with prioritized items, but this parsed data is **never passed to the clarifier**. As a result, the clarifier generates generic "approve or revise" style questions instead of actionable choices for each specific issue.
+
+**Root Cause:**
+
+1. `ClarifierInput::CriticFeedback::to_prompt()` in `clarifier.rs` passes raw critic feedback string
+2. `CliPresenter::parse_critic_feedback()` in `cli_present.rs` extracts punch list items with priority (High/Medium/Low)
+3. Planning loop in `mod.rs` creates `ClarifierInput::CriticFeedback` with raw string only
+4. Parsed `CriticSummary` and `PunchListItem` data never reaches the clarifier
+
+**Solution:**
+
+Pass the structured punch list to the clarifier so it can generate one actionable question per issue, with specific options for how to address each problem.
+
+**Artifacts:**
+- Updated `crates/specks/src/planning_loop/clarifier.rs` - Add `critic_issues` field
+- Updated `crates/specks/src/planning_loop/mod.rs` - Parse critic feedback before clarifier
+- Updated `crates/specks/src/planning_loop/cli_present.rs` - Make `parse_critic_feedback` public
+- Updated `agents/specks-clarifier.md` - Add revision mode examples
+
+**Tasks:**
+
+- [ ] Add `critic_issues: Vec<PunchListItem>` field to `ClarifierInput::CriticFeedback` variant in `clarifier.rs`
+- [ ] Update `ClarifierInput::CriticFeedback::to_prompt()` to format issues as structured input:
+  ```
+  Issues to address:
+  1. [HIGH] Missing error handling - <specific issue text>
+  2. [MEDIUM] Vague test strategy - <specific issue text>
+
+  For each issue, generate a question with options for how to fix it.
+  ```
+- [ ] Make `parse_critic_feedback()` public in `cli_present.rs`
+- [ ] Update planning loop in `mod.rs` to:
+  - Parse critic feedback via `CliPresenter::parse_critic_feedback()` before calling clarifier
+  - Pass `critic_summary.punch_list` to `ClarifierInput::CriticFeedback`
+- [ ] Update `agents/specks-clarifier.md` with revision mode examples showing issue-to-question transformation
+- [ ] Mirror changes to `.claude/agents/specks-clarifier.md`
+
+**Tests:**
+- [ ] Unit test: `ClarifierInput::CriticFeedback` with punch list produces structured prompt
+- [ ] Unit test: Clarifier output in revision mode contains issue-specific questions
+- [ ] Integration test: critic punch list → clarifier questions with actionable options
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Manual test: After critic feedback, clarifier generates specific questions for each issue
+- [ ] Manual test: User can select specific options to address each issue (not generic "approve/revise")
+
+**Rollback:**
+- Revert clarifier.rs, mod.rs, cli_present.rs changes
+
+**Commit after all checkpoints pass.**
+
+---
+
+##### Step 8.3.6.2: Implement Semantic Color Theme {#step-8-3-6-2}
+
+**STATUS: NEW**
+
+**Depends on:** #step-8-3-6-1
+
+**Commit:** `feat(cli): add semantic color theme for consistent terminal output`
+
+**References:** [D26] Scrolling spinner with tool status updates, (#d26-scrolling-spinner)
+
+**Problem Statement:**
+
+Colors are hardcoded across multiple files without semantic naming or centralization:
+- `streaming.rs` line 190: `\x1b[36m` (hardcoded ANSI cyan)
+- `cli_adapter.rs`: `.green()`, `.red()`, `.yellow()`, `.cyan().bold()`
+- No constants like `ACTIVE_COLOR`, `SUCCESS_COLOR`, etc.
+
+**Solution:**
+
+Create a centralized color theme module with semantic color constants that can be used consistently across all terminal output.
+
+**Design Decision [D27]: Semantic Color Theme** {#d27-semantic-colors}
+
+Define four semantic colors for terminal output:
+- `ACTIVE` => blue - Spinners, headers, active elements
+- `SUCCESS` => green - Completed operations, success messages
+- `WARNING` => yellow - Warnings, suggestions, medium-priority items
+- `FAIL` => red - Errors, critical issues, high-priority items
+
+These map to punch list severity: HIGH=FAIL, MEDIUM=WARNING, LOW=ACTIVE.
+
+**Artifacts:**
+- New `crates/specks/src/colors.rs` - Semantic color constants
+- Updated `crates/specks/src/streaming.rs` - Use semantic colors
+- Updated `crates/specks/src/interaction/cli_adapter.rs` - Use semantic colors
+- Updated `crates/specks/src/planning_loop/cli_present.rs` - Punch list coloring
+
+**Tasks:**
+
+- [ ] Create `crates/specks/src/colors.rs`:
+  ```rust
+  use owo_colors::Style;
+
+  pub struct SemanticColors {
+      pub active: Style,   // blue - spinners, headers
+      pub success: Style,  // green - completed
+      pub warning: Style,  // yellow - warnings
+      pub fail: Style,     // red - errors
+  }
+
+  impl Default for SemanticColors {
+      fn default() -> Self {
+          Self {
+              active: Style::new().blue(),
+              success: Style::new().green(),
+              warning: Style::new().yellow(),
+              fail: Style::new().red(),
+          }
+      }
+  }
+
+  /// Global default theme
+  pub static COLORS: once_cell::sync::Lazy<SemanticColors> =
+      once_cell::sync::Lazy::new(SemanticColors::default);
+  ```
+- [ ] Add `mod colors;` to `lib.rs`
+- [ ] Update `streaming.rs`:
+  - Replace hardcoded ANSI cyan with `COLORS.active`
+  - Replace hardcoded green checkmark with `COLORS.success`
+  - Replace hardcoded red X with `COLORS.fail`
+- [ ] Update `cli_adapter.rs`:
+  - Use `COLORS.success` for success messages
+  - Use `COLORS.fail` for error messages
+  - Use `COLORS.warning` for warnings
+  - Use `COLORS.active` for headers and prompts
+- [ ] Update `cli_present.rs`:
+  - HIGH priority punch list items: `COLORS.fail`
+  - MEDIUM priority items: `COLORS.warning`
+  - LOW priority items: `COLORS.active`
+
+**Tests:**
+- [ ] Unit test: `SemanticColors::default()` returns expected styles
+- [ ] Visual verification: colors appear correctly in terminal
+
+**Checkpoint:**
+- [ ] `cargo build` succeeds
+- [ ] `cargo nextest run` passes
+- [ ] Manual test: Spinner uses blue (active) color
+- [ ] Manual test: Success messages use green (success) color
+- [ ] Manual test: Error messages use red (fail) color
+- [ ] Manual test: Punch list items colored by priority
+
+**Rollback:**
+- Remove colors.rs, revert changes to streaming.rs, cli_adapter.rs, cli_present.rs
 
 **Commit after all checkpoints pass.**
 
@@ -2631,18 +2811,22 @@ The interviewer agent no longer generates questions - the clarifier does that. T
 
 ##### Step 8.3.8: Integrate and Test End-to-End {#step-8-3-8}
 
-**Depends on:** #step-8-3-6, #step-8-3-7
+**STATUS: REVISED** - Updated to include fixed clarifier flow and semantic colors.
+
+**Depends on:** #step-8-3-6-1, #step-8-3-6-2, #step-8-3-7
 
 **Commit:** `feat(plan): integrate clarifier-based planning flow end-to-end`
 
-**References:** [D21] Clarifier generates questions, [D23] CLI presents directly, [D24] Clarifier runs every iteration, (#d21-clarifier-generates, #d23-cli-presents-directly, #d24-clarifier-every-iteration)
+**References:** [D21] Clarifier generates questions, [D23] CLI presents directly, [D24] Clarifier runs every iteration, [D26] Scrolling spinner, [D27] Semantic colors, (#d21-clarifier-generates, #d23-cli-presents-directly, #d24-clarifier-every-iteration, #d26-scrolling-spinner, #d27-semantic-colors)
 
 **Artifacts:**
 - Updated `crates/specks/src/planning_loop/mod.rs` - Full integration
-- Updated `crates/specks/src/planning_loop/cli_present.rs` - Minor updates if needed
+- Updated `crates/specks/src/planning_loop/cli_present.rs` - Semantic colors for punch list
 - Integration tests
 
 **Tasks:**
+
+*Core Flow Verification:*
 - [ ] Ensure full flow works: clarifier → present questions → planner → critic → present feedback
 - [ ] Verify planner receives enriched requirements with user answers
 - [ ] Test with various idea types:
@@ -2652,23 +2836,53 @@ The interviewer agent no longer generates questions - the clarifier does that. T
 - [ ] Verify user answers appear in generated plan context
 - [ ] Test cancellation at each prompt stage
 
+*Fixed Clarifier Flow Verification (from Step 8.3.6.1):*
+- [ ] Trigger critic revision and verify:
+  - Punch list items displayed with semantic colors (HIGH=red, MEDIUM=yellow, LOW=blue)
+  - Clarifier generates issue-specific questions with actionable options
+  - User can select specific fix approaches for each issue (not generic "approve/revise")
+- [ ] Verify critic issues flow through to clarifier questions
+- [ ] Verify user choices for each issue are reflected in revised plan
+
+*Terminal Feedback Verification:*
+- [ ] Spinner displays at bottom of content (scrolling, not anchored)
+- [ ] Tool call status updates visible during long operations
+- [ ] Byte download progress visible when applicable
+- [ ] Success (green checkmark) / Error (red X) finish states work correctly
+- [ ] All interactive prompts use dialoguer with SpacedTheme
+
 **Manual Test Script:**
 ```bash
 # Test 1: Vague idea - expect clarifying questions
 specks plan "add a greeting command"
 # Expected: Clarifier asks about CLI/library, output format, etc.
 # NOT hard-coded "What scope?" questions
+# VERIFY: Spinner scrolls at bottom, tool status updates visible
 
 # Test 2: Detailed idea - expect minimal questions
 specks plan "add a CLI greeting command that prints 'Hello, World!' to stdout and exits with code 0"
 # Expected: Clarifier may have no questions, proceeds to planner
 
-# Test 3: Verify answers affect plan
+# Test 3: Critic revision flow (THE KEY TEST)
 specks plan "add error handling"
-# Answer the clarifier questions
-# Verify the generated plan reflects your answers
+# 1. Answer initial clarifier questions
+# 2. Wait for planner to generate speck
+# 3. Wait for critic to review
+# 4. When critic has issues, choose "Revise"
+# EXPECTED: Clarifier generates SPECIFIC questions for each critic issue:
+#   - "How should we address the missing error handling?" with options
+#   - "What test coverage level do you want?" with options
+# NOT: Generic "approve or revise" choice
 
-# Test 4: Ctrl+C handling
+# Test 4: Semantic colors
+# VERIFY during Test 3:
+#   - HIGH priority issues: red
+#   - MEDIUM priority issues: yellow
+#   - LOW priority issues: blue
+#   - Success messages: green
+#   - Spinner: blue
+
+# Test 5: Ctrl+C handling
 specks plan "test idea"
 # Press Ctrl+C during clarifier questions
 # Expected: Clean exit with message
@@ -2676,15 +2890,19 @@ specks plan "test idea"
 
 **Tests:**
 - [ ] Integration test: Full flow with mock clarifier
-- [ ] Integration test: Clarifier questions presented via adapter
+- [ ] Integration test: Clarifier questions presented via dialoguer
 - [ ] Integration test: User answers included in planner prompt
 - [ ] Integration test: Empty questions case skips to planner
+- [ ] Integration test: Critic issues → clarifier questions with options
 
 **Checkpoint:**
 - [ ] `cargo build` succeeds
 - [ ] `cargo nextest run` passes
 - [ ] Manual test: CLI shows intelligent questions (not "What scope?")
 - [ ] Manual test: Answers affect generated plan
+- [ ] Manual test: Critic issues become specific clarifier questions with options
+- [ ] Manual test: Punch list items colored by priority
+- [ ] Manual test: Spinner scrolls at bottom with tool status
 - [ ] Manual test: Ctrl+C exits cleanly
 
 **Rollback:**
@@ -2763,16 +2981,27 @@ After completing Steps 8.3.1-8.3.9, you will have:
 
 - **Infrastructure** (8.3.1-8.3.3): InteractionAdapter trait, CliAdapter, PlanningMode enum
 - **Clarifier agent** (8.3.4-8.3.5): Generates intelligent, context-aware questions
-- **CLI presentation** (8.3.6): Presents clarifier questions via inquire (no hard-coded prompts)
+- **CLI presentation** (8.3.6): Presents clarifier questions via dialoguer (no hard-coded prompts)
+- **Terminal feedback** (8.3.6.5, 8.3.7.5 SUPERSEDED): Scrolling spinner with tool status updates [D26]
+- **Critic-to-clarifier flow** (8.3.6.1): Structured critic issues → actionable clarifier questions
+- **Semantic colors** (8.3.6.2): Centralized color theme (active/success/warning/fail) [D27]
 - **Interviewer update** (8.3.7): Presentation-only role in Claude Code mode
-- **Integration** (8.3.8): Full flow working end-to-end
+- **Integration** (8.3.8): Full flow working end-to-end with fixed clarifier
 - **Documentation** (8.3.9): Architecture documented, agent suite updated
+
+**Key Design Decisions:**
+- [D26] Scrolling spinner with tool status updates (not anchored/streaming LLM content)
+- [D27] Semantic color theme: ACTIVE=blue, SUCCESS=green, WARNING=yellow, FAIL=red
 
 **Final Step 8.3 Checkpoint:**
 - [ ] `specks plan "vague idea"` asks intelligent questions (not "What scope?")
 - [ ] `specks plan "detailed idea"` asks fewer/no questions
+- [ ] Critic issues become specific clarifier questions with actionable options
 - [ ] Both CLI and Claude Code produce equivalent plans from same input
 - [ ] User answers are reflected in generated plans
+- [ ] Spinner scrolls at bottom with tool status (not anchored)
+- [ ] Terminal output uses semantic colors consistently
+- [ ] All prompts use dialoguer (no vestiges of inquire or other libraries)
 - [ ] All 11 agents documented in CLAUDE.md
 - [ ] No regressions in existing tests
 

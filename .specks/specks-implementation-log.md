@@ -6,6 +6,44 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.7.5: Mark SUPERSEDED Checkboxes | DOCUMENTATION | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Step 8.3.7.5 specification
+- `[D26] Scrolling Spinner with Tool Status Updates` - Design decision documenting the superseded approach
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Mark Phase 1 tasks with ❌ | Done |
+| Mark Phase 2 tasks with ❌ | Done |
+| Mark Phase 3 tasks with ❌ | Done |
+| Mark Phase 4 tasks with ❌ | Done |
+| Mark Unit test tasks with ❌ | Done |
+| Mark Integration test tasks with ❌ | Done |
+| Mark Checkpoint items with ❌ | Done |
+
+**Files Modified:**
+- `.specks/specks-2.md`:
+  - Marked all 38 checkboxes in Step 8.3.7.5 with ❌ to indicate SUPERSEDED status
+  - Affected sections: Phase 1-4 tasks, Unit tests, Integration tests, Checkpoints
+
+**Checkpoints Verified:**
+- All `[ ]` checkboxes in Step 8.3.7.5 replaced with `[❌]`: PASS
+- Design decision [D26] remains intact documenting rationale: PASS
+- No remaining open checkboxes in superseded step: PASS
+
+**Key Decisions/Notes:**
+- Step 8.3.7.5 (anchored spinner via MultiProgress) was superseded in favor of simpler scrolling spinner
+- The ❌ markers make it visually clear these tasks are NOT open work items
+- Features that ARE implemented (tool status updates, dialoguer for Q&A) remain documented in [D26]
+- Next step is 8.3.6.1: Fix Critic-to-Clarifier Data Flow
+
+---
+
 ## Terminal UI Improvements: Streaming, Spacing, and Dialoguer Migration | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05
