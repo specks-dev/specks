@@ -13,7 +13,7 @@ use crate::agent::verify_required_agents;
 use crate::interaction::{CliAdapter, reset_cancellation};
 use crate::output::{JsonIssue, JsonResponse, PlanData, PlanValidation};
 use crate::planning_loop::{
-    LoopContext, PlanMode, PlanningLoop, detect_input_type, resolve_speck_path,
+    LoopContext, PlanMode, PlanningLoop, PlanningMode, detect_input_type, resolve_speck_path,
 };
 
 /// Run the plan command
@@ -160,7 +160,8 @@ pub fn run_plan(
         }
     }
 
-    // Create and run the planning loop
+    // Create and run the planning loop in CLI mode
+    // Per [D19], the mode is explicitly passed rather than auto-detected
     let mut planning_loop = PlanningLoop::new(
         context,
         project_root.clone(),
@@ -169,6 +170,7 @@ pub fn run_plan(
         json_output,
         quiet,
         Box::new(adapter),
+        PlanningMode::Cli,
     );
 
     match planning_loop.run() {

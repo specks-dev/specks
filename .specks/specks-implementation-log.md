@@ -6,6 +6,58 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-2.md] Step 8.3.3: Create PlanningMode and Restructure Module | COMPLETE | 2026-02-05
+
+**Completed:** 2026-02-05
+
+**References Reviewed:**
+- `.specks/specks-2.md` - Phase 2.0 plan, Step 8.3.3 specification
+- `crates/specks/src/planning_loop.rs` - Original single-file planning loop module
+- `crates/specks/src/commands/plan.rs` - Plan command entry point
+- Design decisions D18, D19, D20 in specks-2.md
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `planning_loop/` directory | Done |
+| Move `planning_loop.rs` to `planning_loop/mod.rs` | Done |
+| Create `types.rs` with `PlanningMode` enum and shared types | Done |
+| Update `PlanningLoop::new()` to accept `mode: PlanningMode` parameter | Done |
+| Store mode in `PlanningLoop` struct | Done |
+| Update mod.rs to re-export types | Done |
+| Update imports in `commands/plan.rs` (pass `PlanningMode::Cli`) | Done |
+| Existing tests continue to pass | Done |
+| Unit test: `PlanningMode` serialization/display | Done |
+
+**Files Created:**
+- `crates/specks/src/planning_loop/mod.rs` - Main module with `PlanningLoop` struct, now accepts `PlanningMode` parameter
+- `crates/specks/src/planning_loop/types.rs` - Shared types: `PlanningMode`, `LoopState`, `PlanMode`, `LoopOutcome`, `LoopContext`, `UserDecision`
+
+**Files Modified:**
+- `crates/specks/src/commands/plan.rs` - Added `PlanningMode` import, passes `PlanningMode::Cli` to `PlanningLoop::new()`
+
+**Files Deleted:**
+- `crates/specks/src/planning_loop.rs` - Replaced by `planning_loop/` module directory
+
+**Test Results:**
+- `cargo nextest run`: 250 tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo nextest run` passes: PASS (250 tests)
+- Module structure is clean: PASS
+
+**Key Decisions/Notes:**
+- Per [D19], the `PlanningMode` enum is passed explicitly rather than auto-detected
+- `PlanningMode::Cli` indicates CLI handles interaction; `PlanningMode::ClaudeCode` indicates interviewer agent handles it
+- Added `planning_mode()` accessor method to `PlanningLoop` for testing/introspection
+- Tests verify both Cli and ClaudeCode modes can be constructed
+- `types.rs` contains all shared types that don't depend on `AgentRunner`
+- Re-exports in `mod.rs` maintain the same public API
+
+---
+
 ## [specks-2.md] Step 8.3 Redesign: Interaction System Architecture | COMPLETE | 2026-02-05
 
 **Completed:** 2026-02-05

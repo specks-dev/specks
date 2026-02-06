@@ -1876,24 +1876,24 @@ ctrlc = "3.4"        # Ctrl+C handling
 - `crates/specks/src/planning_loop/types.rs` - Shared types and PlanningMode enum
 
 **Tasks:**
-- [ ] Create `planning_loop/` directory
-- [ ] Move `planning_loop.rs` to `planning_loop/mod.rs`
-- [ ] Create `types.rs` with:
+- [x] Create `planning_loop/` directory
+- [x] Move `planning_loop.rs` to `planning_loop/mod.rs`
+- [x] Create `types.rs` with:
   - `PlanningMode` enum (`Cli`, `ClaudeCode`)
   - Move `LoopState`, `PlanMode`, `LoopOutcome`, `LoopContext`, `UserDecision` to types.rs
-- [ ] Update `PlanningLoop::new()` to accept `mode: PlanningMode` parameter
-- [ ] Store mode in `PlanningLoop` struct
-- [ ] Update mod.rs to re-export types
-- [ ] Update imports in `commands/plan.rs` (pass `PlanningMode::Cli`)
+- [x] Update `PlanningLoop::new()` to accept `mode: PlanningMode` parameter
+- [x] Store mode in `PlanningLoop` struct
+- [x] Update mod.rs to re-export types
+- [x] Update imports in `commands/plan.rs` (pass `PlanningMode::Cli`)
 
 **Tests:**
-- [ ] Existing tests continue to pass
-- [ ] Unit test: `PlanningMode` serialization/display
+- [x] Existing tests continue to pass
+- [x] Unit test: `PlanningMode` serialization/display
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` passes
-- [ ] Module structure is clean
+- [x] `cargo build` succeeds
+- [x] `cargo nextest run` passes
+- [x] Module structure is clean
 
 **Rollback:**
 - Revert to single-file planning_loop.rs
