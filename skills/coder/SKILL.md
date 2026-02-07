@@ -6,7 +6,7 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash
 
 ## Purpose
 
-Execute architect strategies. Write code, run tests, detect drift. For simple implementations, complete inline. For complex work or drift, return and let orchestrator escalate to coder-agent.
+Execute architect strategies. Write code, run tests, detect drift. Complete implementation according to the architect strategy. If drift exceeds thresholds, halt and return so the orchestrator can invoke the interviewer for user guidance.
 
 ## CRITICAL: Understanding Speck Step Format
 
@@ -126,7 +126,7 @@ Evaluate whether unexpected changes are *consistent with the architect's approac
 When drift thresholds are exceeded:
 1. **Stop** further implementation work immediately
 2. **Return** with `success: false` and `halted_for_drift: true`
-3. **Include** full drift_assessment for orchestrator to escalate
+3. **Include** full drift_assessment for orchestrator to invoke interviewer
 
 ## Output
 
@@ -198,7 +198,3 @@ When you halt due to drift:
 - **Never add features beyond the plan** - scope creep triggers drift
 - **Never ignore failing tests** - fix them or report the failure
 
-## Skill vs Agent
-
-- **Skill (this):** Simple implementations, 1-2 files, tests pass, no drift
-- **Agent (coder-agent):** Complex multi-file changes, deep debugging, drift recovery, 3+ files

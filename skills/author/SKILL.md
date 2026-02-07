@@ -114,7 +114,3 @@ Return JSON-only (no prose, no fences):
 }
 ```
 
-## Skill vs Agent
-
-- **Skill (this):** Simple edits, section updates, validation fixes - MUST maintain skeleton compliance
-- **Agent (author-agent):** Full speck creation from scratch, major restructuring - MUST read skeleton first

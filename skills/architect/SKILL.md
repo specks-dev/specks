@@ -47,7 +47,3 @@ Return JSON-only (no prose, no fences):
 }
 ```
 
-## Skill vs Agent
-
-- **Skill (this):** Straightforward strategies, clear requirements, < 10 files
-- **Agent (architect-agent):** Complex codebase exploration, ambiguous requirements, 10+ files

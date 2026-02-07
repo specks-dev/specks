@@ -6,6 +6,107 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 10.5.4: Update sub-task skills (remove escalation patterns) | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Step 10.5.4 specification (lines 3318-3356)
+- [D08] Two-agent orchestrator architecture
+- Spec S05 (reviewer skill) - ESCALATE is a valid recommendation value
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update `skills/author/SKILL.md` - remove "## Skill vs Agent" section | Done |
+| Update `skills/architect/SKILL.md` - remove "## Skill vs Agent" section | Done |
+| Update `skills/coder/SKILL.md` - remove "## Skill vs Agent" section | Done |
+| Update `skills/coder/SKILL.md` - fix escalation references in Purpose | Done |
+| Verify `skills/interviewer/SKILL.md` has `allowed-tools: AskUserQuestion` | Verified |
+
+**Files Modified:**
+- `skills/author/SKILL.md` - Removed "## Skill vs Agent" section (4 lines)
+- `skills/architect/SKILL.md` - Removed "## Skill vs Agent" section (4 lines)
+- `skills/coder/SKILL.md` - Removed "## Skill vs Agent" section, fixed Purpose text to remove agent escalation reference
+- `.specks/specks-3.md` - Checked off Step 10.5.4 tasks, tests, and checkpoints
+
+**Test Results:**
+- `grep -r "Skill vs Agent" skills/` returns no matches: PASS
+- `grep -ri "agent variant|escalate to agent|coder-agent|author-agent|architect-agent" skills/` returns no matches: PASS
+
+**Checkpoints Verified:**
+- `grep -r "Skill vs Agent" skills/` returns no matches: PASS
+- No skill-to-agent escalation patterns remain: PASS
+- `grep "allowed-tools: AskUserQuestion" skills/interviewer/SKILL.md` succeeds: PASS
+
+**Key Decisions/Notes:**
+
+**ESCALATE verdict preserved in reviewer skill:**
+- The reviewer skill's `ESCALATE` recommendation (per S05 spec) was intentionally retained
+- This is an API enum value meaning "need user input via interviewer" - NOT skill-to-agent escalation
+- The orchestrator handles ESCALATE by invoking the interviewer skill, not by spawning an agent
+- This is consistent with the two-agent architecture where skills never escalate to other agents
+
+**Patterns removed:**
+- "## Skill vs Agent" sections from author, architect, and coder skills
+- References to "escalate to coder-agent" and similar patterns
+- All "agent variant" terminology
+
+---
+
+## [specks-3.md] Step 10.5.3: Create thin entry skill wrappers | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Step 10.5.3 specification (lines 3224-3314)
+- [D08] Two-agent orchestrator architecture
+- (#skill-permissions) - Skill tool permissions table
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update `skills/planner/SKILL.md` to thin wrapper | Done |
+| Create `skills/implementer/SKILL.md` thin wrapper | Done |
+
+**Files Created:**
+- `skills/implementer/SKILL.md` - Thin entry wrapper that spawns implementer-agent
+
+**Files Modified:**
+- `skills/planner/SKILL.md` - Converted from full orchestration skill to thin entry wrapper
+- `.specks/specks-3.md` - Checked off Step 10.5.3 tasks, tests, and checkpoints
+
+**Test Results:**
+- Both skill files parse with valid YAML frontmatter: PASS
+- Drift prevention (both have `allowed-tools: Task` only): PASS
+
+**Checkpoints Verified:**
+- `grep "allowed-tools: Task" skills/planner/SKILL.md` succeeds: PASS
+- `grep "allowed-tools: Task" skills/implementer/SKILL.md` succeeds: PASS
+- `grep "planner-agent" skills/planner/SKILL.md` succeeds: PASS
+- `grep "implementer-agent" skills/implementer/SKILL.md` succeeds: PASS
+
+**Key Decisions/Notes:**
+
+**Architecture:**
+- Entry skills are intentionally minimal ("thin wrappers")
+- Each entry skill has only `allowed-tools: Task` - prevents any other operations
+- Immediately spawns corresponding orchestrator agent via Task tool
+- All setup, validation, and processing delegated to the orchestrator agent
+
+**Invocation Syntax:**
+- Planner: `Task(subagent_type: "specks:planner-agent", prompt: "$ARGUMENTS", description: "Run planning loop")`
+- Implementer: `Task(subagent_type: "specks:implementer-agent", prompt: "$ARGUMENTS", description: "Run implementation loop")`
+
+**Usage Patterns:**
+- Both support string arguments (idea text, speck paths, flags)
+- Both support JSON object input for programmatic use
+- Both support `--resume` flag for session resumption
+
+---
+
 ## [specks-3.md] Step 10.5.2: Create implementer-agent orchestrator | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

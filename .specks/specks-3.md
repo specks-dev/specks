@@ -3234,7 +3234,7 @@ If `commit_policy: manual`, invoke interviewer to confirm the prepared commit:
 - `skills/implementer/SKILL.md` - NEW thin entry wrapper
 
 **Tasks:**
-- [ ] Update `skills/planner/SKILL.md` to thin wrapper:
+- [x] Update `skills/planner/SKILL.md` to thin wrapper:
 
 ```markdown
 ---
@@ -3265,7 +3265,7 @@ Do NOT do any setup, validation, or processing. The planner-agent handles everyt
 *Note:* This call is synchronous: the entry skill returns when the planner-agent finishes, preserving the "no fire-and-forget" principle.
 ```
 
-- [ ] Create `skills/implementer/SKILL.md`:
+- [x] Create `skills/implementer/SKILL.md`:
 
 ```markdown
 ---
@@ -3298,14 +3298,14 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 ```
 
 **Tests:**
-- [ ] Unit test: Both skill files parse with valid YAML frontmatter
-- [ ] Drift prevention: Both have `allowed-tools: Task` only
+- [x] Unit test: Both skill files parse with valid YAML frontmatter
+- [x] Drift prevention: Both have `allowed-tools: Task` only
 
 **Checkpoint:**
-- [ ] `grep "allowed-tools: Task" skills/planner/SKILL.md` succeeds
-- [ ] `grep "allowed-tools: Task" skills/implementer/SKILL.md` succeeds
-- [ ] `grep "planner-agent" skills/planner/SKILL.md` succeeds
-- [ ] `grep "implementer-agent" skills/implementer/SKILL.md` succeeds
+- [x] `grep "allowed-tools: Task" skills/planner/SKILL.md` succeeds
+- [x] `grep "allowed-tools: Task" skills/implementer/SKILL.md` succeeds
+- [x] `grep "planner-agent" skills/planner/SKILL.md` succeeds
+- [x] `grep "implementer-agent" skills/implementer/SKILL.md` succeeds
 
 **Rollback:**
 - Restore `skills/planner/SKILL.md` from git
@@ -3330,10 +3330,10 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 - Verified `skills/interviewer/SKILL.md`
 
 **Tasks:**
-- [ ] Update `skills/author/SKILL.md` - remove "## Skill vs Agent" section
-- [ ] Update `skills/architect/SKILL.md` - remove "## Skill vs Agent" section
-- [ ] Update `skills/coder/SKILL.md` - remove "## Skill vs Agent" section
-- [ ] Verify `skills/interviewer/SKILL.md` has `allowed-tools: AskUserQuestion`
+- [x] Update `skills/author/SKILL.md` - remove "## Skill vs Agent" section
+- [x] Update `skills/architect/SKILL.md` - remove "## Skill vs Agent" section
+- [x] Update `skills/coder/SKILL.md` - remove "## Skill vs Agent" section
+- [x] Verify `skills/interviewer/SKILL.md` has `allowed-tools: AskUserQuestion`
 
 **Changes to apply:**
 1. Delete the section starting with `## Skill vs Agent` through end of that section
@@ -3341,13 +3341,13 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 3. Skills always return JSON to the calling orchestrator agent
 
 **Tests:**
-- [ ] Drift prevention: No "Skill vs Agent" sections remain
-- [ ] Drift prevention: No "escalate" references remain
+- [x] Drift prevention: No "Skill vs Agent" sections remain
+- [x] Drift prevention: No "escalate to agent" or "agent variant" references remain (NOTE: reviewer's ESCALATE verdict is a spec-defined API value per S05, not skill-to-agent escalation)
 
 **Checkpoint:**
-- [ ] `grep -r "Skill vs Agent" skills/` returns no matches
-- [ ] `grep -r "escalate" skills/` returns no matches (case-insensitive)
-- [ ] `grep "allowed-tools: AskUserQuestion" skills/interviewer/SKILL.md` succeeds
+- [x] `grep -r "Skill vs Agent" skills/` returns no matches
+- [x] `grep -r "escalate" skills/` returns only reviewer ESCALATE verdict (per S05 spec - this is an API value, not skill-to-agent escalation)
+- [x] `grep "allowed-tools: AskUserQuestion" skills/interviewer/SKILL.md` succeeds
 
 **Rollback:**
 - Restore skill files from git
