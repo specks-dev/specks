@@ -6,6 +6,52 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 4.4: Add director run directory audit trail | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#step-4-4), (#run-directory), (#run-structure)
+- (#session-id) - Session ID format and generation methods
+- (#run-metadata) - Metadata JSON schema
+- (#json-persistence) - Write patterns using Write tool
+- `agents/specks-director.md` - Current director agent definition
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Session initialization - Generate session ID format | Done |
+| UUID generation with fallback chain (uuidgen → /dev/urandom → PID+RANDOM) | Done |
+| Mode-based subdirectory creation (planning/ or execution/) | Done |
+| Create `.specks/runs/<session-id>/` directory via Bash | Done |
+| Write `metadata.json` at session start with correct schema | Done |
+| Update `metadata.json` with status "completed"/"failed" at end | Done |
+| Skill output persistence with sequential numbering | Done |
+| Agent output persistence with sequential numbering | Done |
+
+**Files Modified:**
+- `agents/specks-director.md` - Replaced "Run Persistence" section with comprehensive "Run Directory Audit Trail" section; added session ID generation with fallbacks; added metadata.json schema; added sequential numbering for skill/agent outputs; added "Persist output:" notes after each workflow step; consolidated "Run Directory Structure" section into "Execution Summary"
+- `crates/specks/tests/agent_integration_tests.rs` - Updated `test_run_directory_structure_documented` to expect new file names per spec (metadata.json, architect.json, reviewer.json, auditor.json)
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 313 tests passed
+
+**Checkpoints Verified:**
+- Director creates run directory on session start: PASS
+- `metadata.json` written with correct structure: PASS
+- Skill outputs persisted with sequential numbering: PASS
+- `metadata.json` updated on session end: PASS
+
+**Key Decisions/Notes:**
+- Updated test to match new spec file names (was checking for old invocation.json and .md files)
+- Added explicit "Persist output:" reminders after each skill/agent invocation in workflows
+- Step 4 is now complete (all substeps 4.1-4.4 done)
+- Director is fully updated as pure orchestrator with planning, execution, and audit trail
+
+---
+
 ## [specks-3.md] Step 4.3: Implement director Execution Phase Flow | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06

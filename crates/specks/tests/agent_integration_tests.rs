@@ -532,12 +532,12 @@ fn test_run_directory_structure_documented() {
         "Director must document run directory location"
     );
 
-    // Director must document expected files
+    // Director must document expected files (per specks-3.md #run-structure)
     let expected_files = [
-        "invocation.json",
-        "architect-plan.md",
-        "reviewer-report.md",
-        "auditor-report.md",
+        "metadata.json",
+        "architect.json",
+        "reviewer.json",
+        "auditor.json",
     ];
 
     for file in expected_files {

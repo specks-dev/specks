@@ -55,28 +55,148 @@ Skills invoke you via the Task tool with `subagent_type: "specks:director"`.
 | `commit-policy` | no | `manual` | `manual` or `auto` |
 | `checkpoint-mode` | no | `step` | `step`, `milestone`, or `continuous` |
 
-## Run Persistence
+## Run Directory Audit Trail
 
-At the start of every invocation, you MUST:
+Every session creates a complete audit trail. You MUST follow these procedures exactly.
 
-1. Generate a UUID for this run
-2. Create the run directory: `.specks/runs/{uuid}/`
-3. Write `invocation.json` with your parameters:
+### Session Initialization
+
+At the start of every invocation:
+
+**1. Generate session ID** using format: `YYYYMMDD-HHMMSS-<mode>-<short-uuid>`
+
+```bash
+# Primary method (uuidgen)
+SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-6)"
+
+# Fallback 1: /dev/urandom
+SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$(head -c 3 /dev/urandom | xxd -p)"
+
+# Fallback 2: PID + RANDOM (final fallback, always works on macOS/Linux)
+SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$$${RANDOM}"
+```
+
+Examples:
+- `20260206-143022-plan-a1b2c3`
+- `20260206-150145-execute-d4e5f6`
+
+**2. Create run directory structure** via Bash:
+
+```bash
+mkdir -p .specks/runs/${SESSION_ID}/planning   # for mode=plan
+mkdir -p .specks/runs/${SESSION_ID}/execution  # for mode=execute
+```
+
+**3. Write metadata.json** at session start via Write tool:
 
 ```json
 {
-  "uuid": "<generated-uuid>",
-  "timestamp": "<ISO-8601>",
-  "speck": "<path-to-speck>",
-  "mode": "plan|execute",
-  "commit_policy": "manual|auto",
-  "checkpoint_mode": "step|milestone|continuous",
-  "start_step": "<anchor-or-null>",
-  "end_step": "<anchor-or-null>"
+  "session_id": "20260206-143022-plan-a1b2c3",
+  "mode": "plan",
+  "started_at": "2026-02-06T14:30:22Z",
+  "speck_path": ".specks/specks-3.md",
+  "status": "in_progress",
+  "completed_at": null
 }
 ```
 
-All agent reports are written to this run directory for audit trail.
+### Output Persistence
+
+**Director is the single source of truth for the audit trail.** Skills and agents return JSON to director; director persists all outputs.
+
+#### Tool Usage Pattern
+
+| Tool | Used for |
+|------|----------|
+| Bash | `mkdir -p` (directory creation), session ID generation |
+| Write | All JSON file writes (metadata.json, skill outputs, agent outputs) |
+| Read | Reading speck files, checking existing state |
+
+**Why Write, not Bash for JSON:** Write tool handles content exactly as provided - no escaping needed. More reliable than heredocs or echo for JSON with special characters.
+
+#### Sequential Numbering
+
+Maintain an invocation counter starting at 1. After each skill or agent invocation, persist output with sequential numbering:
+
+**Planning phase** (files in `planning/` subdirectory):
+- `001-clarifier.json` - Clarifying questions generated
+- `002-interviewer.json` - User answers received
+- `003-planner.json` - Draft speck produced
+- `004-critic.json` - Quality review
+- ... (numbered by invocation order)
+
+**Execution phase** (files in `execution/step-N/` subdirectories):
+- `architect.json` - Implementation strategy
+- `implementer.json` - Code changes made (includes drift_assessment)
+- `reviewer.json` - Plan adherence check
+- `auditor.json` - Code quality check
+- `logger.json` - Log entry added
+- `committer.json` - Commit details
+
+#### Skill Output Persistence
+
+After each skill invocation, write the output to the run directory:
+
+```
+Write(
+  file_path: ".specks/runs/${SESSION_ID}/planning/001-clarifier.json",
+  content: <skill JSON output>
+)
+```
+
+Increment the counter for the next invocation.
+
+#### Agent Output Persistence
+
+After each agent returns, write a summary to the run directory:
+
+```
+Write(
+  file_path: ".specks/runs/${SESSION_ID}/planning/003-planner.json",
+  content: <agent JSON output>
+)
+```
+
+### Session Completion
+
+At session end, update `metadata.json` with final status:
+
+```json
+{
+  "session_id": "20260206-143022-plan-a1b2c3",
+  "mode": "plan",
+  "started_at": "2026-02-06T14:30:22Z",
+  "speck_path": ".specks/specks-3.md",
+  "status": "completed",
+  "completed_at": "2026-02-06T14:45:33Z"
+}
+```
+
+Status values: `"in_progress"`, `"completed"`, `"failed"`
+
+### Directory Structure
+
+```
+.specks/runs/<session-id>/
+├── metadata.json              # Session info, start time, mode, speck path
+├── planning/                  # Planning phase artifacts
+│   ├── 001-clarifier.json     # Clarifying questions generated
+│   ├── 002-interviewer.json   # User answers received
+│   ├── 003-planner.json       # Draft speck produced
+│   ├── 004-critic.json        # Quality review
+│   └── ...                    # Numbered by invocation order
+└── execution/                 # Execution phase artifacts
+    ├── step-0/
+    │   ├── architect.json     # Implementation strategy
+    │   ├── implementer.json   # Code changes made (includes drift_assessment)
+    │   ├── reviewer.json      # Plan adherence check
+    │   ├── auditor.json       # Code quality check
+    │   ├── logger.json        # Log entry added
+    │   └── committer.json     # Commit details
+    ├── step-1/
+    │   └── ...
+    └── summary.json           # Overall execution status
+```
 
 ## Planning Mode Workflow
 
@@ -110,6 +230,8 @@ Clarifier returns:
 }
 ```
 
+**Persist output:** Write to `planning/001-clarifier.json`
+
 ### Step 3: Get User Answers (if questions exist)
 
 IF clarifier returned questions:
@@ -133,6 +255,8 @@ Interviewer returns:
 }
 ```
 
+**Persist output:** Write to `planning/002-interviewer.json`
+
 ### Step 4: Spawn Planner Agent
 
 ```
@@ -149,6 +273,8 @@ Planner receives:
 - Clarifier assumptions
 
 Planner returns: draft speck path (e.g., `.specks/specks-new.md`)
+
+**Persist output:** Write to `planning/003-planner.json`
 
 ### Step 5: Invoke CRITIC to Review Plan Quality
 
@@ -174,7 +300,7 @@ Critic returns:
 }
 ```
 
-Persist critic output to run directory: `planning/NNN-critic.json`
+**Persist output:** Write to `planning/004-critic.json` (increment counter for subsequent invocations)
 
 ### Step 6: Handle Critic Recommendation
 
@@ -203,7 +329,8 @@ Re-invoke clarifier with critic_feedback, then loop back to Step 4.
 
 ### Step 7: Return Approved Speck
 
-Return the approved speck path to the calling skill.
+1. Update `metadata.json` with `status: "completed"` and `completed_at` timestamp
+2. Return the approved speck path to the calling skill
 
 Output: `.specks/specks-{name}.md`
 
@@ -278,7 +405,10 @@ Architect returns JSON:
 }
 ```
 
-Persist architect output to run directory: `execution/step-N/architect.json`
+**Persist output:** Create step directory and write to `execution/step-N/architect.json`
+```bash
+mkdir -p .specks/runs/${SESSION_ID}/execution/step-N
+```
 
 #### Phase 2: Implementation (with Self-Monitoring)
 
@@ -314,6 +444,8 @@ Implementer returns JSON:
 }
 ```
 
+**Persist output:** Write to `execution/step-N/implementer.json`
+
 **Drift Handling:**
 
 IF `implementer.halted_for_drift == true`:
@@ -346,7 +478,7 @@ Skill(skill: "specks:auditor", args: <JSON with speck_path, step_anchor, files_t
 Reviewer returns: `{tasks_complete, tests_match_plan, artifacts_produced, issues[], recommendation}`
 Auditor returns: `{categories{}, issues[], drift_notes, recommendation}`
 
-Persist both outputs to run directory.
+**Persist outputs:** Write to `execution/step-N/reviewer.json` and `execution/step-N/auditor.json`
 
 **Evaluate Reports:**
 
@@ -368,6 +500,8 @@ Skill(skill: "specks:logger", args: <JSON with speck_path, step_anchor, summary,
 
 Logger updates `.specks/specks-implementation-log.md`.
 
+**Persist output:** Write to `execution/step-N/logger.json`
+
 ```
 Skill(skill: "specks:committer", args: <JSON with speck_path, step_anchor, proposed_message, files_to_stage, auto_commit, bead_id>)
 ```
@@ -376,6 +510,8 @@ Committer:
 - Stages files
 - Commits changes (if auto_commit=true)
 - Closes bead (if bead_id provided)
+
+**Persist output:** Write to `execution/step-N/committer.json`
 
 IF commit-policy=manual:
 → Spawn interviewer to prompt user for commit confirmation
@@ -389,8 +525,9 @@ Mark step complete and proceed to next step in dependency order.
 When all steps complete:
 1. Invoke logger skill with phase completion summary
 2. Update speck metadata Status = "done"
-3. Write final `status.json` to run directory
-4. Report success to user
+3. Write `execution/summary.json` to run directory
+4. Update `metadata.json` with `status: "completed"` and `completed_at` timestamp
+5. Report success to user
 
 ### Execution Flow Summary
 
@@ -589,27 +726,13 @@ Before invoking implementer, ensure architect has provided:
 | Bead not found | Log, suggest `specks beads sync` |
 | Bead already closed | Log info, skip to next step |
 
-## Run Directory Structure (D15)
+## Execution Summary
 
-Each invocation creates a complete audit trail:
-
-```
-.specks/runs/{uuid}/
-├── invocation.json      # Director config at start
-├── architect-plan.md    # Architect's strategy for current/last step
-├── monitor-log.jsonl    # Monitor observations (append-only)
-├── reviewer-report.md   # Reviewer assessment
-├── auditor-report.md    # Auditor findings
-├── committer-prep.md    # Commit preparation details
-├── .halt                # Halt signal file (if monitor halted)
-└── status.json          # Final run status
-```
-
-### status.json Format
+At the end of execution mode, write `execution/summary.json`:
 
 ```json
 {
-  "uuid": "<run-uuid>",
+  "session_id": "<session-id>",
   "outcome": "success" | "failure" | "halted" | "partial",
   "steps_completed": ["#step-0", "#step-1"],
   "steps_remaining": ["#step-2"],
@@ -620,6 +743,8 @@ Each invocation creates a complete audit trail:
   "timestamp_end": "..."
 }
 ```
+
+See **Run Directory Audit Trail** section for complete directory structure and persistence patterns.
 
 ## Output
 

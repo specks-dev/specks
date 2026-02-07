@@ -1748,28 +1748,28 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 - Updated `agents/director.md` (audit trail implementation)
 
 **Tasks:**
-- [ ] **Session initialization**:
-  - [ ] Generate session ID at start using format: `YYYYMMDD-HHMMSS-<mode>-<short-uuid>`
-  - [ ] UUID generation: `uuidgen` → fallback `/dev/urandom` → fallback `date +%N`
-  - [ ] Mode is `plan` or `execute` based on entry point
-  - [ ] Create `.specks/runs/<session-id>/` directory via Bash
-  - [ ] Create `planning/` or `execution/` subdirectory based on mode
-- [ ] **Metadata management**:
-  - [ ] Write `metadata.json` at session start with: session_id, mode, speck_path, started_at, status: "in_progress"
-  - [ ] Update `metadata.json` with status: "completed"/"failed" and completed_at at end
-- [ ] **Skill output persistence**:
-  - [ ] After each skill invocation, write output to run directory
-  - [ ] Naming: `NNN-<skill-name>.json` (e.g., `001-clarifier.json`, `002-critic.json`)
-  - [ ] Increment counter for each invocation
-- [ ] **Agent output persistence**:
-  - [ ] After each agent completion, write summary to run directory
-  - [ ] Naming: `NNN-<agent-name>.json` (e.g., `003-planner.json`)
+- [x] **Session initialization**:
+  - [x] Generate session ID at start using format: `YYYYMMDD-HHMMSS-<mode>-<short-uuid>`
+  - [x] UUID generation: `uuidgen` → fallback `/dev/urandom` → fallback `date +%N`
+  - [x] Mode is `plan` or `execute` based on entry point
+  - [x] Create `.specks/runs/<session-id>/` directory via Bash
+  - [x] Create `planning/` or `execution/` subdirectory based on mode
+- [x] **Metadata management**:
+  - [x] Write `metadata.json` at session start with: session_id, mode, speck_path, started_at, status: "in_progress"
+  - [x] Update `metadata.json` with status: "completed"/"failed" and completed_at at end
+- [x] **Skill output persistence**:
+  - [x] After each skill invocation, write output to run directory
+  - [x] Naming: `NNN-<skill-name>.json` (e.g., `001-clarifier.json`, `002-critic.json`)
+  - [x] Increment counter for each invocation
+- [x] **Agent output persistence**:
+  - [x] After each agent completion, write summary to run directory
+  - [x] Naming: `NNN-<agent-name>.json` (e.g., `003-planner.json`)
 
 **Checkpoint:**
-- [ ] Director creates run directory on session start
-- [ ] `metadata.json` written with correct structure
-- [ ] Skill outputs persisted with sequential numbering
-- [ ] `metadata.json` updated on session end
+- [x] Director creates run directory on session start
+- [x] `metadata.json` written with correct structure
+- [x] Skill outputs persisted with sequential numbering
+- [x] `metadata.json` updated on session end
 
 **Rollback:**
 - Revert from git
