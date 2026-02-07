@@ -1,8 +1,7 @@
 ---
 name: execute
 description: Execute a speck through agent orchestration
-disable-model-invocation: true
-allowed-tools: Task
+allowed-tools: Task, Bash, Write, Read
 argument-hint: "path/to/speck.md [options]"
 ---
 
@@ -12,7 +11,7 @@ Execute a speck through the multi-agent orchestration loop. Invoke with `/specks
 
 ## Your Role
 
-You orchestrate the specks execution workflow by invoking the director agent with `mode=execute`. The director coordinates agents (architect, implementer, interviewer) and skills (reviewer, auditor, logger, committer) to implement each step.
+You orchestrate the specks execution workflow. You handle the initial setup (creating the run directory) then invoke the director agent with `mode=execute`. The director coordinates agents (architect, implementer, interviewer) and skills (reviewer, auditor, logger, committer) to implement each step.
 
 ## Invocation
 
@@ -31,6 +30,48 @@ You orchestrate the specks execution workflow by invoking the director agent wit
 | `--end-step <anchor>` | all | Step anchor to stop after |
 | `--commit-policy <policy>` | `manual` | `manual` (pause for user) or `auto` (commit automatically) |
 | `--checkpoint-mode <mode>` | `step` | `step`, `milestone`, or `continuous` |
+
+## Pre-Flight Setup (CRITICAL)
+
+**Before spawning the director, YOU must create the run directory structure.** This avoids permission race conditions in nested subagents.
+
+### Step 1: Generate Session ID
+
+```bash
+SESSION_ID="$(date +%Y%m%d-%H%M%S)-execute-$(head -c 3 /dev/urandom | xxd -p)"
+```
+
+### Step 2: Create Run Directory
+
+```bash
+mkdir -p .specks/runs/${SESSION_ID}/execution
+```
+
+### Step 3: Write Initial Metadata
+
+Use the Write tool to create `.specks/runs/${SESSION_ID}/metadata.json`:
+
+```json
+{
+  "session_id": "<SESSION_ID>",
+  "mode": "execute",
+  "speck_path": "<SPECK_PATH>",
+  "started_at": "<ISO8601 timestamp>",
+  "status": "running"
+}
+```
+
+### Step 4: Spawn Director
+
+Pass the session ID to the director so it doesn't need to create directories:
+
+```
+Task(
+  subagent_type: "specks:director",
+  prompt: "mode=execute speck=\"$SPECK_PATH\" session-id=$SESSION_ID start-step=$START end-step=$END commit-policy=$POLICY",
+  description: "Execute speck"
+)
+```
 
 ## Workflow
 
@@ -87,18 +128,19 @@ For each step in the speck (in dependency order):
 
 ## How to Execute
 
-Spawn the director agent with `mode=execute`:
+**After completing Pre-Flight Setup**, spawn the director agent with `mode=execute`:
 
 ```
 Task(
   subagent_type: "specks:director",
-  prompt: "mode=execute speck=\"$SPECK_PATH\" start-step=$START end-step=$END commit-policy=$POLICY checkpoint-mode=$MODE",
+  prompt: "mode=execute speck=\"$SPECK_PATH\" session-id=$SESSION_ID start-step=$START end-step=$END commit-policy=$POLICY checkpoint-mode=$MODE",
   description: "Execute speck"
 )
 ```
 
 Parse the arguments to extract:
 - `speck`: Required path to speck file
+- `session-id`: From Pre-Flight Setup (REQUIRED - do not skip)
 - `start-step`: Optional step anchor
 - `end-step`: Optional step anchor
 - `commit-policy`: Optional, default "manual"

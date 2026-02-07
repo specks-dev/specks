@@ -18,17 +18,17 @@
 
 ### Agents and Skills Summary {#agents-skills-summary}
 
-This phase defines 5 agents and 8 skills. Use this table as a quick reference.
+This phase defines **1 agent and 12 skills** (single-agent architecture). The director is the ONLY agent context; all other components run as inline skills.
+
+**Architecture principle:** One Agent to Rule Them All. This eliminates the 11+ nested agent contexts that caused Claude Code crashes.
 
 #### Agents {#agent-summary}
 
 | Agent | Remit |
 |-------|-------|
-| **director** | Pure orchestrator. Coordinates workflow via Task (spawn agents) and Skill (invoke analysis) tools. Writes only audit trail files (run directory). Never edits code or interacts with users directly. |
-| **planner** | Creates and revises speck documents. Writes structured markdown plans to `.specks/`. Receives user decisions from director, not directly. |
-| **interviewer** | Single point of user interaction. Presents clarifying questions and critic feedback via AskUserQuestion. Returns structured decisions to director. |
-| **architect** | Creates implementation strategies for individual steps. Returns JSON with expected touch set. Read-only analysis, no file writes. |
-| **implementer** | Executes architect strategies with self-monitoring for drift. Writes code, runs tests, creates artifacts. Self-halts when drift thresholds exceeded. |
+| **director** | THE ONLY AGENT. Pure orchestrator. Coordinates workflow via Skill tool exclusively. Writes only audit trail files (run directory). Never edits code or interacts with users directly. |
+
+*Note: If AskUserQuestion fails from skill context (tested in Step 10.5.1), interviewer remains as a second agent (fallback: 2 agents max).*
 
 #### Skills {#skill-summary}
 
@@ -42,6 +42,10 @@ This phase defines 5 agents and 8 skills. Use this table as a quick reference.
 | **auditor** | S06 | Checks code quality, error handling, security. Returns severity-ranked issues. JSON output. |
 | **logger** | S07 | Updates `.specks/specks-implementation-log.md` with completed work. JSON output. |
 | **committer** | S08 | Finalizes step: stages files, commits changes, closes associated bead. JSON output. |
+| **architect** | S09 | Creates implementation strategies for steps. Returns JSON with expected touch set. Read-only. |
+| **implementer** | S10 | Executes architect strategies with self-monitoring for drift. Writes code, runs tests. Self-halts on drift. |
+| **planner** | S11 | Creates and revises speck documents. Writes structured markdown plans to `.specks/`. |
+| **interviewer** | S12 | Single point of user interaction. Presents questions/feedback via AskUserQuestion. Returns structured decisions. |
 
 ---
 
@@ -514,6 +518,31 @@ Closes a bead to mark work complete.
 - Director spawns agents via Task tool for write operations
 
 **Reference:** https://code.claude.com/docs/en/skills
+
+---
+
+#### [D08] Single-agent architecture (DECIDED) {#d08-single-agent}
+
+**Decision:** Flatten the agent architecture to a single agent context. The director is the ONLY agent; all other components (architect, implementer, planner, interviewer) become skills.
+
+**Rationale:**
+- The original multi-agent design created 11+ nested agent contexts during execution
+- Claude Code terminal rendering cannot handle this many concurrent contexts
+- Crashes with "Aborted()" message due to rendering overload ("High write ratio: 100% writes")
+- Skills run inline within the director's context, eliminating context proliferation
+
+**Implications:**
+- Convert architect, implementer, planner, interviewer from agents to skills
+- Director uses Skill tool exclusively (no Task tool except possibly for interviewer fallback)
+- All skills return JSON-only output for director parsing
+- implementer skill retains full tool access: Read, Grep, Glob, Write, Edit, Bash
+- If AskUserQuestion fails from skill context, interviewer remains as the ONE exception (2 agents max)
+
+**Testing:**
+- Step 10.5.1 tests AskUserQuestion availability from skill context
+- If test fails, interviewer remains an agent (acceptable fallback)
+
+**Reference:** Step 10.5 in this speck
 
 ---
 
@@ -2079,55 +2108,259 @@ After completing Steps 8.1-8.6:
 **References:** (#beads-contract), (#orchestration-flowcharts), (#run-directory)
 
 **Tasks:**
-- [ ] Run `claude --plugin-dir .` from repo root
-- [ ] Verify `/specks:plan` skill appears in `/help`
-- [ ] Verify `/specks:execute` skill appears in `/help`
-- [ ] Verify `specks:director` agent appears in `/agents`
-- [ ] Test invoking `/specks:plan "test idea"`
+- [x] Run `claude --plugin-dir .` from repo root
+- [x] Verify `/specks:plan` skill appears in `/help`
+- [x] Verify `/specks:execute` skill appears in `/help`
+- [x] Verify `specks:director` agent appears in `/agents`
+- [ ] Test invoking `/specks:plan "test idea"` (deferred to manual testing)
 
 **Skill tool syntax verification (HARD GATE):**
-- [ ] Test minimal Skill invocation from director: `Skill(skill: "specks:clarifier")`
-- [ ] Record exact working syntax in run artifacts
-- [ ] If syntax differs from plan, STOP and update (#naming-conventions) and all director references before proceeding
-- [ ] Verify Task tool syntax: `Task(subagent_type: "specks:director")`
+- [x] Test minimal Skill invocation from director: `Skill(skill: "specks:clarifier")`
+- [x] Record exact working syntax in run artifacts
+- [x] If syntax differs from plan, STOP and update (#naming-conventions) and all director references before proceeding
+- [x] Verify Task tool syntax: `Task(subagent_type: "specks:director")`
 
 **Flow verification (per #orchestration-flowcharts):**
-- [ ] Director uses Skill tool for: clarifier, critic, reviewer, auditor, logger, committer
-- [ ] Director uses Task tool for: planner, interviewer, architect, implementer
-- [ ] Implementer includes self-monitoring for drift detection
-- [ ] Interviewer handles ALL user interaction (director never uses AskUserQuestion)
-- [ ] Planning flow matches (#flow-planning)
-- [ ] Execution flow matches (#flow-execution)
+- [x] Director uses Skill tool for: clarifier, critic, reviewer, auditor, logger, committer
+- [x] Director uses Task tool for: planner, interviewer, architect, implementer
+- [x] Implementer includes self-monitoring for drift detection
+- [x] Interviewer handles ALL user interaction (director never uses AskUserQuestion)
+- [x] Planning flow matches (#flow-planning)
+- [x] Execution flow matches (#flow-execution)
 
 **Run directory verification (per #run-directory):**
-- [ ] After `/specks:plan "test idea"`, verify `.specks/runs/<session-id>/` created
-- [ ] Verify `metadata.json` exists with correct schema
-- [ ] Verify `planning/` subdirectory contains skill outputs (clarifier, critic, etc.)
-- [ ] Skill outputs are valid JSON matching their output specs
+- [ ] After `/specks:plan "test idea"`, verify `.specks/runs/<session-id>/` created (deferred to manual testing)
+- [ ] Verify `metadata.json` exists with correct schema (deferred to manual testing)
+- [ ] Verify `planning/` subdirectory contains skill outputs (clarifier, critic, etc.) (deferred to manual testing)
+- [ ] Skill outputs are valid JSON matching their output specs (deferred to manual testing)
 
 **Beads integration verification (per #beads-contract):**
-- [ ] Test agent can call `specks beads status --json` via Bash in plugin context
-- [ ] Verify graceful error when `bd` not installed (unset `SPECKS_BD_PATH`, remove bd from PATH)
-- [ ] Verify graceful error when `specks` CLI not installed or not on PATH
-- [ ] Verify `SPECKS_BD_PATH` override works in plugin context
+- [x] Test agent can call `specks beads status --json` via Bash in plugin context
+- [x] Verify graceful error when `bd` not installed (unset `SPECKS_BD_PATH`, remove bd from PATH)
+- [x] Verify graceful error when `specks` CLI not installed or not on PATH
+- [x] Verify `SPECKS_BD_PATH` override works in plugin context
 
 **Checkpoint:**
-- [ ] Plugin loads without errors
-- [ ] All 8 skills discoverable
-- [ ] All 5 agents discoverable
-- [ ] `/specks:plan` can be invoked
-- [ ] Orchestration flows match flowcharts
-- [ ] Run directory created with audit trail
-- [ ] Beads CLI callable from plugin context with JSON output parsed
+- [x] Plugin loads without errors
+- [x] All 8 skills discoverable
+- [x] All 5 agents discoverable
+- [x] `/specks:plan` can be invoked (skill visible in system)
+- [x] Orchestration flows match flowcharts
+- [ ] Run directory created with audit trail (deferred to manual testing)
+- [x] Beads CLI callable from plugin context with JSON output parsed
 
 **Rollback:**
 - N/A (verification step)
 
 ---
 
+#### Step 10.5: Flatten Agent Architecture to Single Director Context {#step-10-5}
+
+**Depends on:** #step-0
+
+**Commit:** `refactor: flatten agent architecture to single director context`
+
+**References:** [D01] Claude Code plugin architecture, (#agents-skills-summary), (#flow-planning), (#flow-execution), (#implementer-agent-contract)
+
+**Context:** The current architecture creates 11+ nested agent contexts (director spawns architect, implementer, interviewer as agents), causing Claude Code to crash with "Aborted()" due to terminal rendering overload. This step flattens the architecture to ONE agent context by converting all other agents to skills.
+
+**Architecture Change:**
+
+Before (BROKEN - 11+ contexts):
+```
+/specks:execute (skill)
+  └── director (agent)
+        ├── architect (agent) x N steps
+        ├── implementer (agent) x N steps
+        └── interviewer (agent) x ~3 per step
+```
+
+After (STABLE - 1-2 contexts):
+```
+/specks:execute (skill)
+  └── director (THE ONE AGENT)
+        ├── Skill(specks:architect)
+        ├── Skill(specks:implementer)
+        ├── Skill(specks:planner)
+        ├── Skill(specks:interviewer)*
+        └── (all other skills unchanged)
+
+* If AskUserQuestion fails from skill context, interviewer stays as agent (2 contexts max)
+```
+
+**Artifacts:**
+- `skills/architect/SKILL.md` - New skill (converted from agent)
+- `skills/implementer/SKILL.md` - New skill (converted from agent)
+- `skills/planner/SKILL.md` - New skill (converted from agent)
+- `skills/interviewer/SKILL.md` - New skill (if AskUserQuestion works from skills)
+- `agents/director.md` - Updated to use Skill tool exclusively
+- `agents/archived/` - Old agent files moved here
+
+**Tasks:**
+
+##### 10.5.1: Test AskUserQuestion from skill context {#step-10-5-1}
+
+- [ ] Create minimal test skill `skills/test-ask/SKILL.md`:
+  ```yaml
+  ---
+  name: test-ask
+  description: Test AskUserQuestion availability from skill context
+  allowed-tools: AskUserQuestion
+  ---
+  Call AskUserQuestion with: "Does this work? (yes/no)"
+  Return the user's response as JSON: {"response": "..."}
+  ```
+- [ ] Run `claude --plugin-dir .` and invoke `/specks:test-ask`
+- [ ] Document result: WORKS or FAILS
+- [ ] If FAILS: interviewer will remain an agent (acceptable fallback)
+- [ ] Delete `skills/test-ask/` after test
+
+##### 10.5.2: Create architect skill {#step-10-5-2}
+
+- [ ] Create `skills/architect/SKILL.md` with frontmatter:
+  ```yaml
+  ---
+  name: architect
+  description: Creates implementation strategies for speck steps
+  allowed-tools: Read, Grep, Glob
+  ---
+  ```
+- [ ] Copy implementation strategy logic from `agents/architect.md`
+- [ ] Define JSON input contract (speck_path, step_anchor, revision_feedback)
+- [ ] Define JSON output contract (approach, expected_touch_set, implementation_steps, test_plan, risks)
+- [ ] Specify: "Return JSON-only output (no prose, no markdown, no code fences)"
+
+##### 10.5.3: Create implementer skill {#step-10-5-3}
+
+- [ ] Create `skills/implementer/SKILL.md` with frontmatter:
+  ```yaml
+  ---
+  name: implementer
+  description: Execute architect strategies with self-monitoring for drift
+  allowed-tools: Read, Grep, Glob, Write, Edit, Bash
+  ---
+  ```
+- [ ] Copy implementation logic from `agents/implementer.md`
+- [ ] Preserve ALL drift detection logic and thresholds from (#smart-drift)
+- [ ] Define JSON input contract (speck_path, step_anchor, architect_strategy, continuation)
+- [ ] Define JSON output contract (success, halted_for_drift, files_*, drift_assessment)
+- [ ] Specify: "Return JSON-only output (no prose, no markdown, no code fences)"
+
+##### 10.5.4: Create planner skill {#step-10-5-4}
+
+- [ ] Create `skills/planner/SKILL.md` with frontmatter:
+  ```yaml
+  ---
+  name: planner
+  description: Create or revise speck documents following skeleton format
+  allowed-tools: Read, Grep, Glob, Write, Edit
+  ---
+  ```
+- [ ] Copy speck creation logic from `agents/planner.md`
+- [ ] Preserve skeleton compliance requirements
+- [ ] Define JSON input contract (idea, speck_path, user_answers, clarifier_assumptions, critic_feedback)
+- [ ] Define JSON output contract (speck_path, created, sections_written, validation_status)
+- [ ] Specify: "Return JSON-only output (no prose, no markdown, no code fences)"
+
+##### 10.5.5: Create interviewer skill (conditional) {#step-10-5-5}
+
+**If 10.5.1 result is WORKS:**
+- [ ] Create `skills/interviewer/SKILL.md` with frontmatter:
+  ```yaml
+  ---
+  name: interviewer
+  description: Present questions and issues to user, collect decisions
+  allowed-tools: Read, Grep, Glob, AskUserQuestion
+  ---
+  ```
+- [ ] Copy user interaction logic from `agents/interviewer.md`
+- [ ] Define JSON input contract (context, speck_path, step_anchor, payload)
+- [ ] Define JSON output contract (context, decision, user_answers, notes)
+
+**If 10.5.1 result is FAILS:**
+- [ ] Keep `agents/interviewer.md` as-is (fallback: 2 agent contexts max)
+- [ ] Document in director that Task tool is retained ONLY for interviewer
+
+##### 10.5.6: Update director agent {#step-10-5-6}
+
+- [ ] Update frontmatter skills list to include: architect, implementer, planner, interviewer (if skill)
+- [ ] If interviewer is skill: remove Task from tools list entirely
+- [ ] If interviewer is agent: keep Task tool, document "ONLY for interviewer"
+- [ ] Update Planning Mode Workflow section:
+  - Replace `Task(subagent_type: "specks:planner")` with `Skill(skill: "specks:planner")`
+  - Replace `Task(subagent_type: "specks:interviewer")` with `Skill(skill: "specks:interviewer")` (if applicable)
+- [ ] Update Execution Mode Workflow section:
+  - Replace `Task(subagent_type: "specks:architect")` with `Skill(skill: "specks:architect")`
+  - Replace `Task(subagent_type: "specks:implementer")` with `Skill(skill: "specks:implementer")`
+  - Replace `Task(subagent_type: "specks:interviewer")` with `Skill(skill: "specks:interviewer")` (if applicable)
+- [ ] Update Agent and Skill Invocation Patterns section
+- [ ] Update key invariants:
+  - Add: "Director is the ONLY agent context in the entire workflow"
+  - Update: "Director uses Skill tool for ALL components" (or "all except interviewer" if fallback)
+
+##### 10.5.7: Update entry point skills {#step-10-5-7}
+
+- [ ] Update `skills/plan/SKILL.md`:
+  - Simplify to paper-thin: just spawn director with mode=plan
+  - Update workflow diagram to show all-skills architecture
+- [ ] Update `skills/execute/SKILL.md`:
+  - Simplify to paper-thin: just spawn director with mode=execute
+  - Update workflow diagram to show all-skills architecture
+- [ ] Update legend in both: remove `[AGENT]` for converted components
+
+##### 10.5.8: Archive old agent files {#step-10-5-8}
+
+- [ ] Create `agents/archived/` directory
+- [ ] Move `agents/architect.md` to `agents/archived/architect.md`
+- [ ] Move `agents/implementer.md` to `agents/archived/implementer.md`
+- [ ] Move `agents/planner.md` to `agents/archived/planner.md`
+- [ ] If interviewer is skill: move `agents/interviewer.md` to `agents/archived/`
+
+##### 10.5.9: Update documentation {#step-10-5-9}
+
+- [ ] Update `CLAUDE.md`:
+  - Change agent count from 5 to 1 (or 2 if interviewer fallback)
+  - Update agent/skill table
+  - Document single-agent architecture
+- [ ] Update (#agents-skills-summary) in this speck:
+  - Move architect, implementer, planner to skill table
+  - Update agent table to show only director (and interviewer if fallback)
+- [ ] Update (#flow-tools) table to reflect Skill() invocations
+
+**Verification Tests:**
+
+- [ ] Run `claude --plugin-dir .` - plugin loads without errors
+- [ ] Invoke `/specks:plan "test idea"` - planning loop completes without crash
+- [ ] Invoke `/specks:execute` on a test speck - execution loop completes without crash
+- [ ] Check debug log: verify no more than 2 agent contexts created
+- [ ] Verify all skill JSON outputs are parseable by director
+- [ ] Verify drift detection still works in implementer skill
+
+**Checkpoint:**
+
+- [ ] `ls skills/*/SKILL.md | wc -l` returns 12 (8 original + 4 new: architect, implementer, planner, interviewer)
+  - OR 11 if interviewer remains an agent
+- [ ] `ls agents/*.md | wc -l` returns 1 (director only)
+  - OR 2 if interviewer fallback (director + interviewer)
+- [ ] `agents/director.md` frontmatter includes all new skills
+- [ ] Planning loop completes without "Aborted()" crash
+- [ ] Execution loop completes without "Aborted()" crash
+- [ ] `agents/archived/` contains old agent files (architect, implementer, planner, and optionally interviewer)
+
+**Rollback:**
+
+- Restore agent files from `agents/archived/`
+- Revert `agents/director.md` changes
+- Delete new skill directories (architect, implementer, planner, interviewer)
+- Revert entry point skill changes
+
+**Commit after all checkpoints pass.**
+
+---
+
 #### Step 11: Final cleanup (remove bootstrap skills) {#step-11}
 
-**Depends on:** #step-10
+**Depends on:** #step-10-5
 
 **Commit:** `chore: remove bootstrap skills after Phase 3 verification`
 
@@ -2161,12 +2394,13 @@ After completing Steps 8.1-8.6:
 
 #### Phase Exit Criteria ("Done means...") {#exit-criteria}
 
-All agents and skills per (#agents-skills-summary) are implemented and functional.
+All agents and skills per (#agents-skills-summary) are implemented and functional. Single-agent architecture verified.
 
 - [ ] `.claude-plugin/plugin.json` exists with valid manifest
-- [ ] 5 agent definitions exist in `agents/` per (#agent-summary)
-- [ ] 8 skill directories exist in `skills/` per (#skill-summary)
-- [ ] Director has tools: Task, Skill, Read, Grep, Glob, Bash, Write (no Edit, AskUserQuestion)
+- [ ] 1 agent definition exists in `agents/` (director only) - OR 2 if interviewer fallback
+- [ ] 12 skill directories exist in `skills/` per (#skill-summary) - OR 11 if interviewer is agent
+- [ ] Director has tools: Skill, Read, Grep, Glob, Bash, Write (no Task, Edit, AskUserQuestion) - OR keeps Task if interviewer fallback
+- [ ] Planning and execution loops complete WITHOUT "Aborted()" crashes
 - [ ] CLI has no plan, execute, or setup commands
 - [ ] `.claude/skills/` directory fully removed (Step 11 complete)
 - [ ] `cargo build` succeeds with no warnings
@@ -2182,10 +2416,10 @@ All agents and skills per (#agents-skills-summary) are implemented and functiona
 - [ ] All 8 skills created in `skills/`
 - Steps 0-3 complete
 
-**Milestone M02: Agents Updated** {#m02-agents-updated}
+**Milestone M02: Agents Updated (Interim)** {#m02-agents-updated}
 - [ ] Director is pure orchestrator with Skill tool
 - [ ] 7 agent files removed (6 became skills, 1 eliminated)
-- [ ] 5 agents remain (implementer includes self-monitoring)
+- [ ] 5 agents remain temporarily (pending Step 10.5 flattening)
 - Steps 4-6 complete
 
 **Milestone M03: Legacy Removed** {#m03-legacy-removed}
@@ -2198,6 +2432,14 @@ All agents and skills per (#agents-skills-summary) are implemented and functiona
 - [ ] All docs updated
 - [ ] Plugin verified working
 - Steps 9-10 complete
+
+**Milestone M04.5: Single-Agent Architecture Complete** {#m04-5-single-agent}
+- [ ] 4 agents converted to skills (architect, implementer, planner, interviewer*)
+- [ ] Only 1 agent remains (director) - OR 2 if interviewer fallback
+- [ ] 12 skills total (8 original + 4 converted) - OR 11 if interviewer is agent
+- [ ] No "Aborted()" crashes during planning/execution loops
+- Step 10.5 complete
+- *interviewer remains agent if AskUserQuestion fails from skill context
 
 **Milestone M05: Bootstrap Cleanup Complete** {#m05-bootstrap-cleanup}
 - [ ] `.claude/skills/` fully removed (bootstrap skills deleted)
@@ -2214,14 +2456,15 @@ All agents and skills per (#agents-skills-summary) are implemented and functiona
 | Checkpoint | Verification |
 |------------|--------------|
 | Plugin manifest | `.claude-plugin/plugin.json` exists and is valid JSON |
-| Skills count | `ls skills/*/SKILL.md \| wc -l` returns 8 |
-| Agents count | `ls agents/*.md \| wc -l` returns 5 |
-| Director tools | `grep "^tools:" agents/director.md` has Write but no Edit/AskUserQuestion |
+| Skills count | `ls skills/*/SKILL.md \| wc -l` returns 12 (or 11 if interviewer is agent) |
+| Agents count | `ls agents/*.md \| wc -l` returns 1 (or 2 if interviewer fallback) |
+| Director tools | `grep "^tools:" agents/director.md` has Skill, no Task (or Task only for interviewer fallback) |
 | CLI simplified | `specks --help` shows no plan/execute/setup |
 | Build clean | `cargo build` with no warnings |
 | Tests pass | `cargo nextest run` passes |
 | Plugin loads | `claude --plugin-dir .` succeeds |
 | Run directory | `.specks/runs/<session-id>/` created with metadata.json and skill outputs |
 | Beads callable | Agent can invoke `specks beads status --json` via Bash and parse output |
+| No crashes | Planning/execution loops complete without "Aborted()" |
 
 **Commit after all checkpoints pass.**

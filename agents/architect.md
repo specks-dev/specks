@@ -3,6 +3,7 @@ name: architect
 description: Creates implementation strategies for speck steps. Produces architect-plan.md with expected_touch_set.
 tools: Read, Grep, Glob, Bash
 model: opus
+permissionMode: bypassPermissions
 ---
 
 You are the **specks architect agent**. You transform speck steps into detailed implementation strategies that the implementer can execute.

@@ -6,6 +6,60 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 10.5: Flatten Agent Architecture to Single Director Context | PLANNED | 2026-02-06
+
+**Completed:** 2026-02-06 (planning phase - implementation pending)
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, existing architecture sections
+- `agents/director.md` - Current director agent configuration
+- `agents/architect.md` - Agent to be converted to skill
+- `agents/implementer.md` - Agent to be converted to skill
+- `agents/planner.md` - Agent to be converted to skill
+- `agents/interviewer.md` - Agent to be tested for skill conversion
+- `skills/plan/SKILL.md` - Entry point skill
+- `skills/execute/SKILL.md` - Entry point skill
+- Claude Code hooks documentation - For auto-approve hook creation
+
+**Problem Diagnosed:**
+- Specks execution creates 11+ nested agent contexts
+- Claude Code terminal rendering overwhelmed (High write ratio: 100% writes)
+- Results in "Aborted()" crash and unresponsive terminal
+
+**Design Decision [D08] Added:**
+- Single-agent architecture: Director is THE ONLY agent
+- All other components (architect, implementer, planner, interviewer) become skills
+- Skills run inline within director's context, eliminating context proliferation
+
+**Implementation Plan Created (Step 10.5 with 9 subtasks):**
+
+| Subtask | Description | Status |
+|---------|-------------|--------|
+| 10.5.1 | Test AskUserQuestion from skill context | Pending |
+| 10.5.2 | Create architect skill | Pending |
+| 10.5.3 | Create implementer skill | Pending |
+| 10.5.4 | Create planner skill | Pending |
+| 10.5.5 | Create interviewer skill (conditional) | Pending |
+| 10.5.6 | Update director agent | Pending |
+| 10.5.7 | Update entry point skills | Pending |
+| 10.5.8 | Archive old agent files | Pending |
+| 10.5.9 | Update documentation | Pending |
+
+**Files Modified:**
+- `.specks/specks-3.md` - Added Step 10.5, D08 decision, updated agents-skills-summary, exit criteria, milestones
+
+**Files Created:**
+- `hooks/hooks.json` - Auto-approve hook configuration for specks plugin
+- `hooks/auto-approve-specks.sh` - Hook script to bypass permission prompts for specks components
+
+**Key Decisions/Notes:**
+- Architecture changes from 5 agents + 8 skills to 1 agent + 12 skills
+- Fallback: If AskUserQuestion fails from skill context, interviewer stays as agent (2 agents max)
+- Added Milestone M04.5 for single-agent architecture completion
+- Step 11 now depends on Step 10.5
+
+---
+
 ## [specks-3.md] Step 9: Update documentation | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06

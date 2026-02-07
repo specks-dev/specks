@@ -1,8 +1,7 @@
 ---
 name: plan
 description: Create or revise a speck through agent collaboration
-disable-model-invocation: true
-allowed-tools: Task
+allowed-tools: Task, Bash, Write, Read
 argument-hint: "\"idea\" or path/to/speck.md"
 ---
 
@@ -12,7 +11,7 @@ Create or revise a speck through iterative agent collaboration. Invoke with `/sp
 
 ## Your Role
 
-You orchestrate the specks planning workflow by invoking the director agent with `mode=plan`. The director coordinates the interviewer, planner, and critic in an iterative loop until the user approves the speck.
+You orchestrate the specks planning workflow. You handle initial setup (creating the run directory) then invoke the director agent with `mode=plan`. The director coordinates the interviewer, planner, and critic in an iterative loop until the user approves the speck.
 
 ## Invocation Modes
 
@@ -43,14 +42,45 @@ When given a path to an existing `.md` file, you enter **revision mode**:
 4. Director spawns interviewer to present results and ask: "ready or revise?"
 5. Loop continues until user approves
 
-## How to Execute
+## Pre-Flight Setup (CRITICAL)
 
-Spawn the director agent with `mode=plan`:
+**Before spawning the director, YOU must create the run directory structure.** This avoids permission race conditions in nested subagents.
+
+### Step 1: Generate Session ID
+
+```bash
+SESSION_ID="$(date +%Y%m%d-%H%M%S)-plan-$(head -c 3 /dev/urandom | xxd -p)"
+```
+
+### Step 2: Create Run Directory
+
+```bash
+mkdir -p .specks/runs/${SESSION_ID}/planning
+```
+
+### Step 3: Write Initial Metadata
+
+Use the Write tool to create `.specks/runs/${SESSION_ID}/metadata.json`:
+
+```json
+{
+  "session_id": "<SESSION_ID>",
+  "mode": "plan",
+  "speck_path": "<SPECK_PATH or null for new>",
+  "idea": "<IDEA string if new, null if revision>",
+  "started_at": "<ISO8601 timestamp>",
+  "status": "running"
+}
+```
+
+### Step 4: Spawn Director
+
+Pass the session ID to the director so it doesn't need to create directories:
 
 ```
 Task(
   subagent_type: "specks:director",
-  prompt: "mode=plan speck=\"$ARGUMENTS\"",
+  prompt: "mode=plan speck=\"$ARGUMENTS\" session-id=$SESSION_ID",
   description: "Plan speck"
 )
 ```
