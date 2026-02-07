@@ -6,6 +6,70 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 10.5.0: Plan document reconciliation and final review | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Full plan document, Step 10.5 and all substeps
+- `skills/planner/SKILL.md` - Existing planner skill (to verify architecture)
+- `agents/` directory - Current agent inventory
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update `(#agents-skills-summary)` - 2 agents, 12 skills, no escalation | Done |
+| Update `(#flow-planning)` - Agent orchestrates, not skill | Done |
+| Update `(#flow-implementation)` - Agent orchestrates, serial not parallel | Done |
+| Update `(#exit-criteria)` - 2 agents, entry skills spawn agents | Done |
+| Update `(#m04-5-dual-orchestrator)` - 2 agents with -agent suffix | Done |
+| Update checkpoint table - Agent count returns 2 | Done |
+| Mark `(#escalation-guidelines)` as SUPERSEDED | Done |
+| Update `(#skill-permissions)` - planner/implementer get Task only | Done |
+| Add manual commit rejection handling (abort step) | Done |
+| Add corrupted state handling (report error, suggest fresh start) | Done |
+| Fix S08 committer warnings field (remove contradictory bead example) | Done |
+| Add ESCALATE definition to S05 reviewer spec | Done |
+
+**Files Modified:**
+- `.specks/specks-3.md` - Step 10.5.0 all checkboxes marked complete, multiple sections updated for two-agent architecture consistency
+
+**Verification Results:**
+
+| Checkpoint | Status |
+|------------|--------|
+| All agent counts in document say "2" | PASS |
+| No references to "3 agents" remain | PASS |
+| No "skill-first, agent-escalation" references (except superseded section) | PASS |
+| Flow diagrams show agents orchestrating, not skills | PASS |
+| Exit criteria match Step 10.5 expected outcome | PASS |
+| Bead-close failure causes HALT, not warning | PASS |
+| Manual commit rejection aborts step | PASS |
+| Corrupted state = report error, suggest fresh start | PASS |
+
+**Key Decisions/Notes:**
+
+**Two-Agent Orchestrator Architecture Finalized:**
+- Only 2 agents: `planner-agent`, `implementer-agent`
+- 12 skills: 2 entry wrappers + 10 sub-task skills
+- No nesting, no escalation - orchestrator agents invoke skills only
+- Maximum 1 agent context at any time (prevents Aborted() crashes)
+
+**Bead Integration Hardened:**
+- Bead close failures now cause immediate HALT (`aborted: true`)
+- Step is complete only if `committed: true` AND `bead_closed: true`
+- Manual commit flow: `committer-prepared.json` → confirm → `committer.json`
+
+**Strict Resume Policy:**
+- Out-of-order or gapped artifacts halt (no guessing/repair)
+- Corrupted JSON files = report error, suggest fresh start
+
+**Code-Architect Review:**
+Final review confirmed plan is GREEN - ready for implementation after minor documentation fixes (completed).
+
+---
+
 ## [specks-3.md] Step 10.5.5: Create coder skill+agent (most complex, drift detection) | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07
