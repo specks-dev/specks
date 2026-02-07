@@ -1569,19 +1569,19 @@ When `halted_for_drift: true`, the director spawns the interviewer to present dr
 - `skills/auditor/SKILL.md`
 
 **Tasks:**
-- [ ] Create `skills/clarifier/SKILL.md` per S03 spec
+- [x] Create `skills/clarifier/SKILL.md` per S03 spec
   - `allowed-tools: Read, Grep, Glob`
-- [ ] Create `skills/critic/SKILL.md` per S04 spec
+- [x] Create `skills/critic/SKILL.md` per S04 spec
   - `allowed-tools: Read, Grep, Glob`
-- [ ] Create `skills/reviewer/SKILL.md` per S05 spec
+- [x] Create `skills/reviewer/SKILL.md` per S05 spec
   - `allowed-tools: Read, Grep, Glob`
-- [ ] Create `skills/auditor/SKILL.md` per S06 spec
+- [x] Create `skills/auditor/SKILL.md` per S06 spec
   - `allowed-tools: Read, Grep, Glob`
 
 **Checkpoint:**
-- [ ] All 4 skill files exist with valid YAML frontmatter
-- [ ] Each skill has correct `allowed-tools` per spec
-- [ ] Each skill specifies JSON-only output format
+- [x] All 4 skill files exist with valid YAML frontmatter
+- [x] Each skill has correct `allowed-tools` per spec
+- [x] Each skill specifies JSON-only output format
 
 **Rollback:**
 - Delete the created skill directories

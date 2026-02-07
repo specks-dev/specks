@@ -6,6 +6,50 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 2: Create analysis skills | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#skill-specs), (#s03-clarifier), (#s04-critic), (#s05-reviewer), (#s06-auditor)
+- [D03] Focused-task agents become skills (#d03-agents-to-skills)
+- (#skill-permissions) - All analysis skills get Read, Grep, Glob
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `skills/clarifier/SKILL.md` per S03 spec | Done |
+| Create `skills/critic/SKILL.md` per S04 spec | Done |
+| Create `skills/reviewer/SKILL.md` per S05 spec | Done |
+| Create `skills/auditor/SKILL.md` per S06 spec | Done |
+
+**Files Created:**
+- `skills/clarifier/SKILL.md` - Analyzes ideas and generates clarifying questions (input: idea, speck_path, critic_feedback; output: analysis, questions, assumptions)
+- `skills/critic/SKILL.md` - Reviews speck quality and implementability (input: speck_path, skeleton_path; output: skeleton_compliant, areas, issues, recommendation)
+- `skills/reviewer/SKILL.md` - Verifies step completion matches plan (input: speck_path, step_anchor, implementer_output; output: tasks_complete, tests_match_plan, artifacts_produced, issues, drift_notes, recommendation)
+- `skills/auditor/SKILL.md` - Checks code quality, performance, and security (input: speck_path, step_anchor, files_to_audit, drift_assessment; output: categories, issues, drift_notes, recommendation)
+
+**Files Modified:**
+- `.specks/specks-3.md` - Checked off Step 2 tasks and checkpoints
+
+**Test Results:**
+- Frontmatter validation: PASS (all 4 skills have valid YAML)
+- allowed-tools verification: PASS (all have Read, Grep, Glob)
+
+**Checkpoints Verified:**
+- All 4 skill files exist with valid YAML frontmatter: PASS
+- Each skill has correct `allowed-tools` per spec: PASS
+- Each skill specifies JSON-only output format: PASS
+
+**Key Decisions/Notes:**
+- All analysis skills are read-only (no Write, Edit, or Bash tools)
+- Each skill documents input/output JSON schemas per the plan specs
+- Reviewer and auditor include drift_notes field to flag minor drift for visibility
+- Ready for Step 3: Create utility skills (logger, committer)
+
+---
+
 ## [specks-3.md] Step 1: Create skills directory and entry point skills | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
