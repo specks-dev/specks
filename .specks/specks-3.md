@@ -3444,7 +3444,7 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 - Updated `CLAUDE.md` Agent and Skill Architecture section
 
 **Tasks:**
-- [ ] Update `CLAUDE.md` Agent and Skill Architecture section:
+- [x] Update `CLAUDE.md` Agent and Skill Architecture section:
   - Change agent count to 2: planner-agent, implementer-agent
   - Change skill count to 12: 2 entry wrappers + 10 sub-tasks
   - Update `/specks:plan` to `/specks:planner`
@@ -3453,13 +3453,13 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
   - Remove all references to director agent
 
 **Tests:**
-- [ ] Drift prevention: CLAUDE.md reflects new architecture
+- [x] Drift prevention: CLAUDE.md reflects new architecture
 
 **Checkpoint:**
-- [ ] `grep "2 agents" CLAUDE.md` or equivalent shows correct count
-- [ ] `grep -c "escalation" CLAUDE.md` returns 0
-- [ ] `grep "/specks:planner" CLAUDE.md` succeeds
-- [ ] `grep "/specks:implementer" CLAUDE.md` succeeds
+- [x] `grep "2 agents" CLAUDE.md` or equivalent shows correct count
+- [x] `grep -c "escalation" CLAUDE.md` returns 0
+- [x] `grep "/specks:planner" CLAUDE.md` succeeds
+- [x] `grep "/specks:implementer" CLAUDE.md` succeeds
 
 **Rollback:**
 - Restore `CLAUDE.md` from git

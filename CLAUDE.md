@@ -69,9 +69,9 @@ Steps declare dependencies with:
 Agent definitions live in `agents/` directory as markdown with YAML frontmatter:
 ```markdown
 ---
-name: director
-description: Central orchestrator for specks workflow
-tools: Task, Skill, Read, Grep, Glob, Bash, Write
+name: planner-agent
+description: Orchestrator agent for planning loop
+tools: Skill, Read, Grep, Glob, Write, Bash
 model: opus
 ---
 ```
@@ -117,9 +117,9 @@ specks beads close bd-xxx      # Close a bead
 ### Claude Code Skills (Planning and Execution)
 
 ```
-/specks:plan "add user authentication"    # Create a new speck
-/specks:plan .specks/specks-auth.md       # Revise existing speck
-/specks:execute .specks/specks-auth.md    # Execute a speck
+/specks:planner "add user authentication"    # Create a new speck
+/specks:planner .specks/specks-auth.md       # Revise existing speck
+/specks:implementer .specks/specks-auth.md   # Execute a speck
 ```
 
 ## Error Codes
@@ -146,35 +146,43 @@ Specks is a Claude Code plugin. Planning and execution are invoked via skills, n
 
 | Skill | Purpose |
 |-------|---------|
-| `/specks:plan` | Create or revise a speck through agent collaboration |
-| `/specks:execute` | Execute a speck through agent orchestration |
+| `/specks:planner` | Create or revise a speck through agent collaboration |
+| `/specks:implementer` | Execute a speck through agent orchestration |
 
-### Agents (5)
+### Agents (2)
 
-Agents handle complex, multi-step workflows with isolated context:
+Two orchestrator agents run the loops. Maximum ONE agent context active at any time.
 
 | Agent | Role |
 |-------|------|
-| **director** | Pure orchestrator. Coordinates workflow via Task and Skill tools. |
-| **planner** | Creates and revises speck documents. |
-| **interviewer** | Single point of user interaction. Presents questions via AskUserQuestion. |
-| **architect** | Creates implementation strategies with expected touch sets. |
-| **implementer** | Executes architect strategies with self-monitoring for drift. |
+| **planner-agent** | Orchestrator for planning loop. Invokes sub-task skills sequentially. |
+| **implementer-agent** | Orchestrator for implementation loop. Invokes sub-task skills sequentially. |
 
-### Skills (8)
+### Skills (12)
 
-Skills run inline for focused, single-purpose tasks:
+Skills run inline for focused, single-purpose tasks.
+
+**Entry wrappers (2):**
 
 | Skill | Role |
 |-------|------|
-| **plan** | Entry point. Spawns director with mode=plan. |
-| **execute** | Entry point. Spawns director with mode=execute. |
-| **clarifier** | Analyzes ideas, returns clarifying questions. |
-| **critic** | Reviews speck for quality and implementability. |
-| **reviewer** | Verifies completed step matches plan. |
+| **planner** | Entry point. Spawns planner-agent via Task. |
+| **implementer** | Entry point. Spawns implementer-agent via Task. |
+
+**Sub-tasks (10):**
+
+| Skill | Role |
+|-------|------|
+| **architect** | Creates implementation strategies for steps. |
 | **auditor** | Checks code quality, security, error handling. |
-| **logger** | Updates implementation log with completed work. |
+| **author** | Creates and revises speck documents. |
+| **clarifier** | Analyzes ideas, returns clarifying questions. |
+| **coder** | Executes architect strategies with drift detection. |
 | **committer** | Stages files, commits changes, closes beads. |
+| **critic** | Reviews speck for quality and implementability. |
+| **interviewer** | Single point of user interaction via AskUserQuestion. |
+| **logger** | Updates implementation log with completed work. |
+| **reviewer** | Verifies completed step matches plan. |
 
 ### Development Workflow
 

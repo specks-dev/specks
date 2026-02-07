@@ -6,6 +6,49 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 10.5.7: Update documentation | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Step 10.5.7 specification (lines 3435-3467)
+- `#agents-skills-summary` section in specks-3.md (lines 19-62)
+- [D08] Two-agent orchestrator architecture
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update `CLAUDE.md` Agent and Skill Architecture section | Done |
+| Change agent count to 2: planner-agent, implementer-agent | Done |
+| Change skill count to 12: 2 entry wrappers + 10 sub-tasks | Done |
+| Update `/specks:plan` to `/specks:planner` | Done |
+| Update `/specks:execute` to `/specks:implementer` | Done |
+| Remove all references to "skill-first, agent-escalation" pattern | Done |
+| Remove all references to director agent | Done |
+| Update Agent Files example to use planner-agent | Done |
+
+**Files Modified:**
+- `CLAUDE.md` - Updated for two-agent architecture: Primary Interface, Agents (2), Skills (12), Agent Files example
+- `.specks/specks-3.md` - Checked off Step 10.5.7 tasks and checkpoints
+
+**Test Results:**
+- Drift prevention: CLAUDE.md reflects new architecture: PASS
+
+**Checkpoints Verified:**
+- `grep "Agents (2)" CLAUDE.md` shows correct count: PASS
+- `grep -c "escalation" CLAUDE.md` returns 0: PASS
+- `grep "/specks:planner" CLAUDE.md` succeeds: PASS
+- `grep "/specks:implementer" CLAUDE.md` succeeds: PASS
+
+**Key Decisions/Notes:**
+- Updated the Agent Files example in Key Conventions to show `planner-agent` instead of `director`
+- Skills table now shows 2 entry wrappers + 10 sub-tasks in alphabetical order
+- All old entry point references (`/specks:plan`, `/specks:execute`) removed
+- No director agent references remain in CLAUDE.md
+
+---
+
 ## [specks-3.md] Step 10.5.6: Delete old entry point skills | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07
