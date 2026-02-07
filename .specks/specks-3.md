@@ -2961,9 +2961,9 @@ Return JSON-only (no prose, no fences):
 **Priority:** SECOND - Simplest skill+agent pair, read-only operations only.
 
 **Tasks:**
-- [ ] Rename `agents/architect.md` → `agents/architect-agent.md`
-- [ ] Update agent frontmatter: `name: architect-agent`
-- [ ] Create `skills/architect/SKILL.md`
+- [x] Rename `agents/architect.md` → `agents/architect-agent.md`
+- [x] Update agent frontmatter: `name: architect-agent`
+- [x] Create `skills/architect/SKILL.md`
 
 **Full SKILL.md content:**
 
@@ -3034,18 +3034,18 @@ model: inherit
 ```
 
 **Verification:**
-- [ ] Invoke `/specks:architect` directly with test step
-- [ ] Verify JSON output contains expected_touch_set
-- [ ] Invoke architect-agent via Task tool
+- [x] Invoke `/specks:architect` directly with test step
+- [x] Verify JSON output contains expected_touch_set
+- [x] Invoke architect-agent via Task tool
 
 ---
 
 ##### 10.5.4: Create author skill+agent {#step-10-5-4}
 
 **Tasks:**
-- [ ] Rename `agents/planner.md` → `agents/author-agent.md`
-- [ ] Update agent frontmatter: `name: author-agent`
-- [ ] Create `skills/author/SKILL.md`
+- [x] Rename `agents/planner.md` → `agents/author-agent.md`
+- [x] Update agent frontmatter: `name: author-agent`
+- [x] Create `skills/author/SKILL.md`
 
 **Full SKILL.md content:**
 
@@ -3113,9 +3113,9 @@ model: inherit
 ```
 
 **Verification:**
-- [ ] Invoke `/specks:author` with simple revision task
-- [ ] Verify speck is written correctly
-- [ ] Invoke author-agent via Task tool for complex creation
+- [x] Invoke `/specks:author` with simple revision task
+- [x] Verify speck is written correctly
+- [x] Invoke author-agent via Task tool for complex creation
 
 ---
 

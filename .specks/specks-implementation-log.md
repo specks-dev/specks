@@ -6,6 +6,83 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Steps 10.5.3-10.5.4: Create architect and author skill+agent pairs | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Step 10.5.3 and 10.5.4 specifications
+- `.specks/specks-skeleton.md` - Skeleton format requirements (P0 compliance)
+- `agents/architect.md` - Original architect agent (renamed)
+- `agents/planner.md` - Original planner agent (renamed)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Rename `agents/architect.md` → `agents/architect-agent.md` | Done |
+| Update architect-agent frontmatter | Done |
+| Create `skills/architect/SKILL.md` | Done |
+| Verify architect skill invocation | Done |
+| Verify architect-agent via Task tool | Done |
+| Rename `agents/planner.md` → `agents/author-agent.md` | Done |
+| Update author-agent frontmatter | Done |
+| Create `skills/author/SKILL.md` | Done |
+| Verify author skill invocation | Done |
+| Verify author-agent via Task tool | Done |
+| **P0 FIX:** Add skeleton compliance to author skill | Done |
+| **P0 FIX:** Make skeleton compliance HARD GATE in critic skill | Done |
+| Update author-agent references (director → planner orchestration skill) | Done |
+
+**Files Created:**
+- `skills/architect/SKILL.md` - Architect skill for implementation strategies
+- `skills/author/SKILL.md` - Author skill with MANDATORY skeleton compliance
+
+**Files Modified:**
+- `agents/architect-agent.md` - Renamed from architect.md, updated frontmatter
+- `agents/author-agent.md` - Renamed from planner.md, updated frontmatter and references
+- `skills/critic/SKILL.md` - **P0 FIX:** Made skeleton compliance a HARD GATE (REJECT if non-compliant)
+
+**Verification Results:**
+
+| Checkpoint | Status |
+|------------|--------|
+| Invoke `/specks:architect` with test step | PASS |
+| Verify JSON output contains expected_touch_set | PASS |
+| Invoke architect-agent via Task tool | PASS |
+| Invoke `/specks:author` with revision task | PASS |
+| Verify speck written correctly | PASS |
+| Invoke author-agent via Task tool | PASS |
+
+**Key Decisions/Notes:**
+
+**P0 CRITICAL FIX - Skeleton Compliance Enforcement:**
+
+User identified that skeleton compliance was not being properly enforced. This is essential for the planning loop to work correctly.
+
+Changes made:
+1. **Author skill** - Complete rewrite to include:
+   - CRITICAL: Skeleton Compliance (P0) section
+   - MANDATORY: Read skeleton first before ANY writing
+   - Mandatory structure checklist
+   - Anchor requirements with exact patterns
+   - Execution step structure requirements
+   - Reference format rules (no line numbers!)
+
+2. **Critic skill** - Complete rewrite to make skeleton compliance a HARD GATE:
+   - Non-compliance = REJECT (no exceptions)
+   - Detailed 5-category compliance checklist
+   - P0 priority level for skeleton violations
+   - `skeleton_check` object in output with violations list
+
+3. **Author-agent** - Updated references from "director agent" to "planner orchestration skill"
+
+**Current counts:**
+- Skills: 11 (added architect, author)
+- Agents: 5 → will be 3 after step 10.5.5 (architect-agent, author-agent, coder-agent)
+
+---
+
 ## [specks-3.md] Step 10.5.2: Create interviewer skill | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07
