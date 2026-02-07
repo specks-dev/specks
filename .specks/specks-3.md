@@ -1603,18 +1603,18 @@ When `halted_for_drift: true`, the director spawns the interviewer to present dr
 - `skills/committer/SKILL.md`
 
 **Tasks:**
-- [ ] Create `skills/logger/SKILL.md` based on existing update-plan-implementation-log
+- [x] Create `skills/logger/SKILL.md` based on existing update-plan-implementation-log
   - Add `allowed-tools: Read, Grep, Glob, Edit` in frontmatter
-- [ ] Create `skills/committer/SKILL.md` based on existing prepare-git-commit-message
+- [x] Create `skills/committer/SKILL.md` based on existing prepare-git-commit-message
   - Add `allowed-tools: Read, Grep, Glob, Bash` in frontmatter
   - Add git add/commit execution
 
 **Note:** Implementer is an agent, not a skill. See Step 4.1 for implementer agent update.
 
 **Checkpoint:**
-- [ ] Both skill files exist with valid YAML frontmatter
-- [ ] Logger skill has `allowed-tools: Read, Grep, Glob, Edit`
-- [ ] Committer skill has `allowed-tools: Read, Grep, Glob, Bash`
+- [x] Both skill files exist with valid YAML frontmatter
+- [x] Logger skill has `allowed-tools: Read, Grep, Glob, Edit`
+- [x] Committer skill has `allowed-tools: Read, Grep, Glob, Bash`
 
 **Rollback:**
 - Delete the created skill directories

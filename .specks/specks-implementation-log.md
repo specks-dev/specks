@@ -6,6 +6,48 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 3: Create utility skills | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#s07-logger), (#s08-committer)
+- [D03] Focused-task agents become skills (#d03-agents-to-skills)
+- `.claude/skills/update-plan-implementation-log/SKILL.md` - Existing logger pattern
+- `.claude/skills/prepare-git-commit-message/SKILL.md` - Existing committer pattern
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `skills/logger/SKILL.md` based on existing update-plan-implementation-log | Done |
+| Create `skills/committer/SKILL.md` based on existing prepare-git-commit-message | Done |
+
+**Files Created:**
+- `skills/logger/SKILL.md` - Updates implementation log with completed work (allowed-tools: Read, Grep, Glob, Edit; input/output JSON per S07 spec)
+- `skills/committer/SKILL.md` - Commits changes and closes beads (allowed-tools: Read, Grep, Glob, Bash; handles git add/commit and bead closure per S08 spec)
+
+**Files Modified:**
+- `.specks/specks-3.md` - Checked off Step 3 tasks and checkpoints
+
+**Test Results:**
+- Frontmatter validation: PASS (both skills have valid YAML)
+- allowed-tools verification: PASS
+
+**Checkpoints Verified:**
+- Both skill files exist with valid YAML frontmatter: PASS
+- Logger skill has `allowed-tools: Read, Grep, Glob, Edit`: PASS
+- Committer skill has `allowed-tools: Read, Grep, Glob, Bash`: PASS
+
+**Key Decisions/Notes:**
+- Logger uses Edit tool (not Write) since `specks init` creates the log file
+- Committer handles both git operations and bead closure in a single skill
+- Both skills document input/output JSON schemas per plan specs
+- Completes Milestone M01: Plugin Structure Created (Steps 0-3 done, all 8 skills exist)
+- Ready for Step 4: Update director agent
+
+---
+
 ## [specks-3.md] Step 2: Create analysis skills | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
