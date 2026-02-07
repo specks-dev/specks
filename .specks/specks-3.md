@@ -1953,12 +1953,12 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 **Depends on:** #step-8-2
 
 **Tasks:**
-- [ ] Delete `crates/specks/src/streaming.rs`
-- [ ] Delete `crates/specks/src/share.rs`
-- [ ] Remove module declarations
+- [x] Delete `crates/specks/src/streaming.rs`
+- [x] Delete `crates/specks/src/share.rs`
+- [x] Remove module declarations
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
+- [x] `cargo build` succeeds
 
 ---
 
@@ -1967,17 +1967,17 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 **Depends on:** #step-8-3
 
 **Tasks:**
-- [ ] Delete `crates/specks/src/commands/plan.rs`
-- [ ] Delete `crates/specks/src/commands/execute.rs`
-- [ ] Delete `crates/specks/src/commands/setup.rs`
-- [ ] Remove `mod plan;`, `mod execute;`, `mod setup;` from commands/mod.rs
-- [ ] Remove Plan, Execute, Setup variants from Commands enum in cli.rs
-- [ ] Remove match arms in main.rs
-- [ ] Remove tests referencing these commands
+- [x] Delete `crates/specks/src/commands/plan.rs`
+- [x] Delete `crates/specks/src/commands/execute.rs`
+- [x] Delete `crates/specks/src/commands/setup.rs`
+- [x] Remove `mod plan;`, `mod execute;`, `mod setup;` from commands/mod.rs
+- [x] Remove Plan, Execute, Setup variants from Commands enum in cli.rs
+- [x] Remove match arms in main.rs
+- [x] Remove tests referencing these commands
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds with no warnings
-- [ ] `cargo nextest run` passes
+- [x] `cargo build` succeeds with no warnings
+- [x] `cargo nextest run` passes
 
 ---
 
@@ -1986,13 +1986,13 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 **Depends on:** #step-8-4
 
 **Tasks:**
-- [ ] Remove unused dependencies from Cargo.toml (inquire, indicatif, owo-colors, ctrlc, etc.)
-- [ ] Remove agent.rs if no longer needed
-- [ ] Run `cargo build` to verify no missing dependencies
+- [x] Remove unused dependencies from Cargo.toml (inquire, indicatif, owo-colors, ctrlc, etc.)
+- [x] Remove agent.rs if no longer needed
+- [x] Run `cargo build` to verify no missing dependencies
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds with no warnings
-- [ ] No unused import warnings
+- [x] `cargo build` succeeds with no warnings
+- [x] No unused import warnings
 
 ---
 

@@ -1,17 +1,13 @@
 //! specks CLI - From ideas to implementation via multi-agent orchestration
 
-mod agent;
 mod cli;
-mod colors;
 mod commands;
 mod output;
-mod share;
 mod splash;
-mod streaming;
 
 use std::process::ExitCode;
 
-use cli::{Commands, SetupCommands};
+use cli::Commands;
 use commands::BeadsCommands;
 
 fn main() -> ExitCode {
@@ -59,49 +55,6 @@ fn main() -> ExitCode {
             }
         },
         Some(Commands::Version { verbose }) => commands::run_version(verbose, cli.json, cli.quiet),
-        Some(Commands::Plan {
-            input,
-            name,
-            context_files,
-            timeout,
-            verbose_agents,
-        }) => commands::run_plan(
-            input,
-            name,
-            context_files,
-            timeout,
-            cli.json,
-            cli.quiet,
-            verbose_agents,
-        ),
-        Some(Commands::Setup(setup_cmd)) => match setup_cmd {
-            SetupCommands::Claude {
-                global,
-                check,
-                force,
-            } => commands::run_setup_claude(global, check, force, cli.json, cli.quiet),
-        },
-        Some(Commands::Execute {
-            speck,
-            start_step,
-            end_step,
-            commit_policy,
-            checkpoint_mode,
-            dry_run,
-            timeout,
-            verbose_agents,
-        }) => commands::run_execute(commands::execute::ExecuteOptions {
-            speck,
-            start_step,
-            end_step,
-            commit_policy,
-            checkpoint_mode,
-            dry_run,
-            timeout,
-            json_output: cli.json,
-            quiet: cli.quiet,
-            verbose_agents,
-        }),
         None => {
             // No subcommand - show splash screen
             if !cli.quiet {

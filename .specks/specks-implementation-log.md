@@ -6,6 +6,68 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Steps 8.3-8.5: Remove streaming/share modules, CLI commands, and unused dependencies | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#step-8-3), (#step-8-4), (#step-8-5)
+- `crates/specks/src/main.rs` - Module declarations and command routing
+- `crates/specks/src/cli.rs` - CLI Commands enum
+- `crates/specks/src/commands/mod.rs` - Command module exports
+- `Cargo.toml` - Workspace dependencies
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Delete `crates/specks/src/streaming.rs` | Done (previously) |
+| Delete `crates/specks/src/share.rs` | Done (previously) |
+| Remove module declarations for streaming/share | Done (previously) |
+| Delete `crates/specks/src/commands/plan.rs` | Done (previously) |
+| Delete `crates/specks/src/commands/execute.rs` | Done (previously) |
+| Delete `crates/specks/src/commands/setup.rs` | Done (previously) |
+| Remove `mod plan;`, `mod execute;`, `mod setup;` from commands/mod.rs | Done (previously) |
+| Remove Plan, Execute, Setup variants from Commands enum | Done (previously) |
+| Remove match arms in main.rs | Done (previously) |
+| Remove tests referencing removed commands | Done (previously) |
+| Remove unused dependencies from Cargo.toml | Done |
+| Remove agent.rs if no longer needed | Done (previously) |
+| Run `cargo build` to verify no missing dependencies | Done |
+
+**Files Deleted:**
+- `crates/specks/src/streaming.rs` - Streaming output module (previously deleted)
+- `crates/specks/src/share.rs` - Share module (previously deleted)
+- `crates/specks/src/agent.rs` - Agent module (previously deleted)
+- `crates/specks/src/colors.rs` - Colors module (previously deleted)
+- `crates/specks/src/commands/plan.rs` - Plan command (previously deleted)
+- `crates/specks/src/commands/execute.rs` - Execute command (previously deleted)
+- `crates/specks/src/commands/setup.rs` - Setup command (previously deleted)
+
+**Files Modified:**
+- `Cargo.toml` - Removed unused workspace dependencies: uuid, chrono, dialoguer, console, indicatif, owo-colors, ctrlc, crossterm
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 130 tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+- `cargo build` succeeds with no warnings: PASS
+- `cargo nextest run` passes: PASS (130 tests)
+- No unused import warnings: PASS
+- `specks plan` returns error (unknown command): PASS
+- `specks execute` returns error (unknown command): PASS
+- `specks setup` returns error (unknown command): PASS
+- `specks --help` shows only init, validate, list, status, beads, version: PASS
+
+**Key Decisions/Notes:**
+- Most of the file deletions were completed in a previous session; this session verified the state and cleaned up unused dependencies
+- Removed 8 unused workspace dependencies that were previously used for interactive terminal UI (dialoguer, console, indicatif, owo-colors, ctrlc, crossterm) and date/UUID handling (uuid, chrono)
+- Step 8.6 (Add `specks beads close` subcommand) remains to be implemented
+
+---
+
 ## [specks-3.md] Step 8.2: Remove interaction module | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06

@@ -4,9 +4,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
-use crate::agent::{EXECUTE_REQUIRED_AGENTS, PLAN_REQUIRED_AGENTS, resolve_agent_path_with_source};
 use crate::output::{InitData, JsonIssue, JsonResponse};
-use crate::share::{SkillInstallStatus, find_share_dir, install_all_skills};
 
 /// Embedded skeleton content
 const SKELETON_CONTENT: &str = include_str!("../../../../.specks/specks-skeleton.md");
@@ -161,47 +159,12 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
             .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
     }
 
-    let mut files_created = vec![
+    let files_created = vec![
         "specks-skeleton.md".to_string(),
         "config.toml".to_string(),
         "specks-implementation-log.md".to_string(),
         "runs/".to_string(),
     ];
-
-    // Try to install Claude Code skills (optional - warn but continue if not available)
-    let project_dir =
-        std::env::current_dir().map_err(|e| format!("failed to get current directory: {}", e))?;
-    let skills_installed = if let Some(share_dir) = find_share_dir() {
-        let results = install_all_skills(&share_dir, &project_dir, false);
-        let mut installed_skills: Vec<String> = vec![];
-        let mut skill_warnings: Vec<String> = vec![];
-
-        for (skill_name, result) in results {
-            match result {
-                Ok(SkillInstallStatus::Installed) | Ok(SkillInstallStatus::Updated) => {
-                    let path = format!(".claude/skills/{}/SKILL.md", skill_name);
-                    files_created.push(path.clone());
-                    installed_skills.push(skill_name);
-                }
-                Ok(SkillInstallStatus::Unchanged) => {
-                    // Skill already exists and is up to date - still count it
-                    let path = format!(".claude/skills/{}/SKILL.md", skill_name);
-                    files_created.push(path);
-                    installed_skills.push(skill_name);
-                }
-                Ok(SkillInstallStatus::SourceMissing) => {
-                    skill_warnings
-                        .push(format!("Skill {} not found in share directory", skill_name));
-                }
-                Err(e) => {
-                    skill_warnings.push(format!("Failed to install skill {}: {}", skill_name, e));
-                }
-            }
-        }
-        Some((installed_skills, skill_warnings))
-    } else {
-        None
-    };
 
     if json_output {
         let response = JsonResponse::ok(
@@ -222,83 +185,12 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
             println!("  Updated: .gitignore (added .specks/runs/)");
         }
 
-        // Report skill installation status
-        match skills_installed {
-            Some((installed, warnings)) => {
-                if !installed.is_empty() {
-                    println!();
-                    println!("Claude Code skills installed:");
-                    for skill in &installed {
-                        println!("  Created: .claude/skills/{}/SKILL.md", skill);
-                    }
-                }
-                for warning in warnings {
-                    eprintln!("  Warning: {}", warning);
-                }
-            }
-            None => {
-                println!();
-                println!("Note: Claude Code skills not installed (share directory not found).");
-                println!(
-                    "      Run `specks setup claude` after ensuring specks is properly installed."
-                );
-            }
-        }
-
-        // Report agent resolution summary
+        // Note about plugin-based workflow
         println!();
-        println!("Agent resolution:");
-        report_agent_summary(&project_dir);
+        println!("To use specks with Claude Code:");
+        println!("  claude --plugin-dir /path/to/specks");
+        println!("  Then use /specks:plan and /specks:execute");
     }
 
     Ok(0)
-}
-
-/// Report agent resolution summary for init output
-fn report_agent_summary(project_root: &Path) {
-    // Collect unique agents from both command sets
-    let mut all_agents: Vec<&str> = PLAN_REQUIRED_AGENTS.to_vec();
-    for agent in EXECUTE_REQUIRED_AGENTS {
-        if !all_agents.contains(agent) {
-            all_agents.push(agent);
-        }
-    }
-    all_agents.sort();
-
-    let mut found_count = 0;
-    let mut missing_agents = Vec::new();
-    let mut sources: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-
-    for agent_name in all_agents {
-        if let Some((path, source)) = resolve_agent_path_with_source(agent_name, project_root) {
-            found_count += 1;
-            sources.entry(source.to_string()).or_default().push(format!(
-                "{} ({})",
-                agent_name,
-                path.display()
-            ));
-        } else {
-            missing_agents.push(agent_name.to_string());
-        }
-    }
-
-    // Print summary by source
-    for (source, agents) in &sources {
-        println!("  From {}: {} agent(s)", source, agents.len());
-    }
-
-    if !missing_agents.is_empty() {
-        println!();
-        eprintln!(
-            "  Warning: {} agent(s) not found: {}",
-            missing_agents.len(),
-            missing_agents.join(", ")
-        );
-        eprintln!(
-            "           Agent commands (plan, execute) will fail until agents are available."
-        );
-    } else {
-        println!("  All {} agents available", found_count);
-    }
 }

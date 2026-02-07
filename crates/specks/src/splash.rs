@@ -2,10 +2,7 @@
 //!
 //! Shows a compact startup banner with ASCII spectacles logo and version info.
 
-use owo_colors::OwoColorize;
 use std::io::{IsTerminal, Write};
-
-use crate::colors::COLORS;
 
 /// ASCII art spectacles logo
 const SPECTACLES: &[&str] = &["  ○━━○ ○━━○", "    ╲───╱  "];
@@ -21,20 +18,18 @@ pub fn show_splash() {
     let mut stdout = std::io::stdout();
     let version = env!("CARGO_PKG_VERSION");
 
-    // Print spectacles with info on the right (using semantic ACTIVE color)
+    // Print spectacles with info on the right
     writeln!(
         stdout,
-        "{}   {} v{}",
-        COLORS.active.style(SPECTACLES[0]),
-        COLORS.active.style("specks").bold(),
-        version.dimmed()
+        "{}   specks v{}",
+        SPECTACLES[0],
+        version
     )
     .ok();
     writeln!(
         stdout,
-        "{}   {}",
-        COLORS.active.style(SPECTACLES[1]),
-        "Multi-agent orchestration".dimmed()
+        "{}   Multi-agent orchestration",
+        SPECTACLES[1]
     )
     .ok();
     writeln!(stdout).ok();
