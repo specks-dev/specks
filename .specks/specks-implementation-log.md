@@ -6,6 +6,54 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 4.2: Implement director Planning Phase Flow | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#step-4-2), (#flow-planning), (#flow-tools)
+- [D02] Director is pure orchestrator (#d02-pure-orchestrator)
+- [D04] Interviewer handles all user interaction (#d04-interviewer-role)
+- `agents/specks-director.md` - Current director agent definition
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Implement Planning Phase Flow per (#flow-planning) | Done |
+| Step 1: Receive idea/context from plan skill | Done |
+| Step 2: Invoke clarifier skill → spawn interviewer if questions | Done |
+| Step 3: Spawn planner agent with idea + user_answers + assumptions | Done |
+| Step 4: Invoke critic skill on draft speck | Done |
+| Step 5: If critic has issues, spawn interviewer → loop back | Done |
+| Step 6: On critic approval, return approved speck path | Done |
+| Use exact invocation syntax from (#flow-tools) | Done |
+| ALL user interaction delegated to interviewer agent | Done |
+
+**Files Modified:**
+- `agents/specks-director.md` - Rewrote Planning Mode Workflow section with 7-step flow matching (#flow-planning), updated agent/skill lists, added invocation patterns with namespaced syntax
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 313 tests passed
+
+**Checkpoints Verified:**
+- Planning flow in director body matches (#flow-planning) diagram: PASS
+- Clarifier invoked via Skill tool (`Skill(skill: "specks:clarifier"...)`): PASS
+- Interviewer spawned via Task tool (`Task(subagent_type: "specks:interviewer"...)`): PASS
+- Planner spawned via Task tool (`Task(subagent_type: "specks:planner"...)`): PASS
+- Critic invoked via Skill tool (`Skill(skill: "specks:critic"...)`): PASS
+- Loop structure present for critic issues: PASS
+
+**Key Decisions/Notes:**
+- Reorganized "Agents you orchestrate" into two sections: agents (Task) and skills (Skill)
+- Added Planning Flow Summary diagram showing the complete flow visually
+- Added Key Invariants section emphasizing director never calls AskUserQuestion
+- Fixed test_director_uses_critic_in_planning_mode by including "Invoke CRITIC to Review" phrasing
+- Ready for Step 4.3: Implement director Execution Phase Flow
+
+---
+
 ## [specks-3.md] Step 4.1: Update director tools and remove legacy CLI | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06

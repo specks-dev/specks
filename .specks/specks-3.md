@@ -1670,28 +1670,28 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 - Updated `agents/director.md` (planning flow implementation)
 
 **Tasks:**
-- [ ] Implement Planning Phase Flow per (#flow-planning):
-  - [ ] **Step 1**: Receive idea/context from plan skill
-  - [ ] **Step 2**: Invoke clarifier skill → if questions exist, spawn interviewer agent
-  - [ ] **Step 3**: Spawn planner agent with idea + user_answers + assumptions
-  - [ ] **Step 4**: Invoke critic skill on draft speck
-  - [ ] **Step 5**: If critic has issues, spawn interviewer → loop back to step 3
-  - [ ] **Step 6**: On critic approval, spawn interviewer for final user approval
-  - [ ] **Step 7**: Return approved speck path
-- [ ] Use exact invocation syntax from (#flow-tools):
-  - [ ] `Skill(skill: "specks:clarifier")` for clarifier
-  - [ ] `Task(subagent_type: "specks:interviewer")` for interviewer
-  - [ ] `Task(subagent_type: "specks:planner")` for planner
-  - [ ] `Skill(skill: "specks:critic")` for critic
-- [ ] ALL user interaction delegated to interviewer agent (never AskUserQuestion directly)
+- [x] Implement Planning Phase Flow per (#flow-planning):
+  - [x] **Step 1**: Receive idea/context from plan skill
+  - [x] **Step 2**: Invoke clarifier skill → if questions exist, spawn interviewer agent
+  - [x] **Step 3**: Spawn planner agent with idea + user_answers + assumptions
+  - [x] **Step 4**: Invoke critic skill on draft speck
+  - [x] **Step 5**: If critic has issues, spawn interviewer → loop back to step 3
+  - [x] **Step 6**: On critic approval, spawn interviewer for final user approval
+  - [x] **Step 7**: Return approved speck path
+- [x] Use exact invocation syntax from (#flow-tools):
+  - [x] `Skill(skill: "specks:clarifier")` for clarifier
+  - [x] `Task(subagent_type: "specks:interviewer")` for interviewer
+  - [x] `Task(subagent_type: "specks:planner")` for planner
+  - [x] `Skill(skill: "specks:critic")` for critic
+- [x] ALL user interaction delegated to interviewer agent (never AskUserQuestion directly)
 
 **Checkpoint:**
-- [ ] Planning flow in director body matches (#flow-planning) diagram
-- [ ] Clarifier invoked via Skill tool
-- [ ] Interviewer spawned via Task tool for all user interaction
-- [ ] Planner spawned via Task tool
-- [ ] Critic invoked via Skill tool
-- [ ] Loop structure present for critic issues
+- [x] Planning flow in director body matches (#flow-planning) diagram
+- [x] Clarifier invoked via Skill tool
+- [x] Interviewer spawned via Task tool for all user interaction
+- [x] Planner spawned via Task tool
+- [x] Critic invoked via Skill tool
+- [x] Loop structure present for critic issues
 
 **Rollback:**
 - Revert from git
