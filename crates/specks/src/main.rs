@@ -53,6 +53,9 @@ fn main() -> ExitCode {
             BeadsCommands::Pull { file, no_overwrite } => {
                 commands::run_pull(file, no_overwrite, cli.json, cli.quiet)
             }
+            BeadsCommands::Close { bead_id, reason } => {
+                commands::run_close(bead_id, reason, cli.json, cli.quiet)
+            }
         },
         Some(Commands::Version { verbose }) => commands::run_version(verbose, cli.json, cli.quiet),
         None => {

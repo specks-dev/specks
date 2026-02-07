@@ -2001,17 +2001,17 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 **Depends on:** #step-8-5
 
 **Tasks:**
-- [ ] Create `crates/specks/src/commands/beads/close.rs`
-- [ ] Add `Close` variant to `BeadsCommands` enum in `mod.rs`
-- [ ] Implement `run_close(bead_id, reason, json_output)` function
-- [ ] Use `BeadsCli.close()` with proper error handling
-- [ ] Return JSON output matching beads contract schema
+- [x] Create `crates/specks/src/commands/beads/close.rs`
+- [x] Add `Close` variant to `BeadsCommands` enum in `mod.rs`
+- [x] Implement `run_close(bead_id, reason, json_output)` function
+- [x] Use `BeadsCli.close()` with proper error handling
+- [x] Return JSON output matching beads contract schema
 
 **Checkpoint:**
-- [ ] `specks beads close --help` shows the command with `--reason` and `--json` flags
-- [ ] `specks beads close bd-test-123 --json` returns valid JSON
-- [ ] `specks beads close bd-test-123 --reason "Step completed" --json` works
-- [ ] `cargo build` succeeds with no warnings
+- [x] `specks beads close --help` shows the command with `--reason` and `--json` flags
+- [x] `specks beads close bd-test-123 --json` returns valid JSON
+- [x] `specks beads close bd-test-123 --reason "Step completed" --json` works
+- [x] `cargo build` succeeds with no warnings
 
 **Rollback:**
 - Revert git changes
@@ -2029,11 +2029,11 @@ After completing Steps 8.1-8.6:
 - New `specks beads close` subcommand added for committer skill
 
 **Final Step 8 Checkpoint:**
-- [ ] `specks plan` returns error (unknown command)
-- [ ] `specks execute` returns error (unknown command)
-- [ ] `specks setup` returns error (unknown command)
-- [ ] `specks --help` shows only init, validate, list, status, beads, version
-- [ ] `specks beads close --help` shows the close subcommand
+- [x] `specks plan` returns error (unknown command)
+- [x] `specks execute` returns error (unknown command)
+- [x] `specks setup` returns error (unknown command)
+- [x] `specks --help` shows only init, validate, list, status, beads, version
+- [x] `specks beads close --help` shows the close subcommand
 
 ---
 

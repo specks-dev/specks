@@ -1,10 +1,12 @@
 //! Beads integration commands
 //!
 //! Provides subcommands for syncing specks to beads, linking steps to beads,
-//! showing beads execution status, and pulling bead completion back to checkboxes.
+//! showing beads execution status, pulling bead completion back to checkboxes,
+//! and closing beads to mark work complete.
 //!
 //! Requires: beads CLI (`bd`) installed, `.beads/` initialized, network connectivity.
 
+pub mod close;
 pub mod link;
 pub mod pull;
 pub mod status;
@@ -12,6 +14,7 @@ pub mod sync;
 
 use clap::Subcommand;
 
+pub use close::run_close;
 pub use link::run_link;
 pub use pull::run_pull;
 pub use status::run_beads_status;
@@ -97,5 +100,20 @@ pub enum BeadsCommands {
         /// Don't overwrite manually checked items
         #[arg(long)]
         no_overwrite: bool,
+    },
+
+    /// Close a bead to mark work complete
+    ///
+    /// Closes the specified bead, optionally with a reason.
+    #[command(
+        long_about = "Close a bead to mark work complete.\n\nThis is typically called by the committer skill after a successful commit\nto finalize step completion.\n\nThe bead ID must exist and be open. Once closed, the bead status\nwill be reflected in `specks beads status` as complete."
+    )]
+    Close {
+        /// Bead ID to close
+        bead_id: String,
+
+        /// Reason for closing (e.g., "Step completed per speck")
+        #[arg(long)]
+        reason: Option<String>,
     },
 }

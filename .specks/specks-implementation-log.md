@@ -6,6 +6,61 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 8.6: Add specks beads close subcommand | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, section (#step-8-6), (#beads-contract)
+- `crates/specks/src/commands/beads/mod.rs` - BeadsCommands enum structure
+- `crates/specks/src/commands/beads/status.rs` - Pattern for beads command implementation
+- `crates/specks-core/src/beads.rs` - BeadsCli interface and close() method
+- `crates/specks/src/output.rs` - JSON response patterns
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `crates/specks/src/commands/beads/close.rs` | Done |
+| Add `Close` variant to `BeadsCommands` enum in `mod.rs` | Done |
+| Implement `run_close(bead_id, reason, json_output)` function | Done |
+| Use `BeadsCli.close()` with proper error handling | Done |
+| Return JSON output matching beads contract schema | Done |
+
+**Files Created:**
+- `crates/specks/src/commands/beads/close.rs` - Implementation of `specks beads close` command
+
+**Files Modified:**
+- `crates/specks/src/commands/beads/mod.rs` - Added `close` module, `run_close` export, and `Close` enum variant
+- `crates/specks/src/commands/mod.rs` - Added `run_close` to beads exports
+- `crates/specks/src/main.rs` - Added match arm for `BeadsCommands::Close`
+- `.specks/specks-3.md` - Checked off Step 8.6 tasks and Final Step 8 Checkpoint items
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 130 tests passed
+
+**Checkpoints Verified:**
+- `specks beads close --help` shows the command with `--reason` and `--json` flags: PASS
+- `specks beads close bd-test-123 --json` returns valid JSON: PASS
+- `specks beads close bd-test-123 --reason "Step completed" --json` works: PASS
+- `cargo build` succeeds with no warnings: PASS
+
+**Final Step 8 Checkpoints (also verified):**
+- `specks plan` returns error (unknown command): PASS
+- `specks execute` returns error (unknown command): PASS
+- `specks setup` returns error (unknown command): PASS
+- `specks --help` shows only init, validate, list, status, beads, version: PASS
+- `specks beads close --help` shows the close subcommand: PASS
+
+**Key Decisions/Notes:**
+- Step 8 is now fully complete (all substeps 8.1-8.6 implemented)
+- The close command follows the same patterns as other beads commands
+- JSON output matches the beads contract schema from the plan
+- Error handling uses E016 (BeadsCommand) for bd close failures
+
+---
+
 ## [specks-3.md] Steps 8.3-8.5: Remove streaming/share modules, CLI commands, and unused dependencies | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
