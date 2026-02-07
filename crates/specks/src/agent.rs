@@ -20,24 +20,12 @@ use crate::share::find_share_dir;
 pub const AGENTS_DIR_NAME: &str = "agents";
 
 /// Required agents for the `specks plan` command
-pub const PLAN_REQUIRED_AGENTS: &[&str] = &[
-    "specks-clarifier",
-    "specks-interviewer",
-    "specks-planner",
-    "specks-critic",
-];
+/// Note: As of Phase 3.0, clarifier and critic became skills. Only planner and interviewer remain as agents.
+pub const PLAN_REQUIRED_AGENTS: &[&str] = &["planner", "interviewer"];
 
 /// Required agents for the `specks execute` command
-pub const EXECUTE_REQUIRED_AGENTS: &[&str] = &[
-    "specks-director",
-    "specks-architect",
-    "specks-implementer",
-    "specks-monitor",
-    "specks-reviewer",
-    "specks-auditor",
-    "specks-committer",
-    "specks-logger",
-];
+/// Note: As of Phase 3.0, monitor/reviewer/auditor/logger/committer became skills. Only director, architect, and implementer remain as agents.
+pub const EXECUTE_REQUIRED_AGENTS: &[&str] = &["director", "architect", "implementer"];
 
 /// Default timeout for agent invocations in seconds
 pub const DEFAULT_TIMEOUT_SECS: u64 = 300;
@@ -54,7 +42,7 @@ pub struct AgentResult {
 /// Configuration for agent invocation
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
-    /// Agent name (e.g., "specks-interviewer", "specks-planner")
+    /// Agent name (e.g., "interviewer", "planner")
     pub agent_name: String,
     /// Path to the agent definition file
     pub agent_path: PathBuf,
@@ -576,8 +564,8 @@ pub fn is_specks_workspace(path: &Path) -> bool {
         return false;
     }
 
-    // Check if at least one expected agent exists
-    let test_agent = agents_dir.join("specks-director.md");
+    // Check if at least one expected agent exists (Phase 3.0: agents no longer have specks- prefix)
+    let test_agent = agents_dir.join("director.md");
     test_agent.exists()
 }
 
@@ -779,8 +767,8 @@ pub fn get_agent_path(project_root: &Path, agent_name: &str) -> PathBuf {
 /// Create an AgentConfig for the interviewer agent
 pub fn interviewer_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
-        "specks-interviewer",
-        get_agent_path(project_root, "specks-interviewer"),
+        "interviewer",
+        get_agent_path(project_root, "interviewer"),
         vec![
             "Read".to_string(),
             "Grep".to_string(),
@@ -794,8 +782,8 @@ pub fn interviewer_config(project_root: &Path) -> AgentConfig {
 /// Create an AgentConfig for the planner agent
 pub fn planner_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
-        "specks-planner",
-        get_agent_path(project_root, "specks-planner"),
+        "planner",
+        get_agent_path(project_root, "planner"),
         vec![
             "Read".to_string(),
             "Grep".to_string(),
@@ -811,8 +799,8 @@ pub fn planner_config(project_root: &Path) -> AgentConfig {
 /// Create an AgentConfig for the critic agent
 pub fn critic_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
-        "specks-critic",
-        get_agent_path(project_root, "specks-critic"),
+        "critic",
+        get_agent_path(project_root, "critic"),
         vec![
             "Read".to_string(),
             "Grep".to_string(),
@@ -825,8 +813,8 @@ pub fn critic_config(project_root: &Path) -> AgentConfig {
 /// Create an AgentConfig for the director agent
 pub fn director_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
-        "specks-director",
-        get_agent_path(project_root, "specks-director"),
+        "director",
+        get_agent_path(project_root, "director"),
         vec![
             "Task".to_string(),
             "Read".to_string(),
@@ -842,8 +830,8 @@ pub fn director_config(project_root: &Path) -> AgentConfig {
 /// Create an AgentConfig for the clarifier agent
 pub fn clarifier_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
-        "specks-clarifier",
-        get_agent_path(project_root, "specks-clarifier"),
+        "clarifier",
+        get_agent_path(project_root, "clarifier"),
         vec![
             "Read".to_string(),
             "Grep".to_string(),
@@ -979,24 +967,24 @@ mod tests {
     fn test_construct_agent_path() {
         // Pure path construction - no I/O, deterministic
         let project_root = PathBuf::from("/project");
-        let path = construct_agent_path(&project_root, "specks-interviewer");
-        assert_eq!(path, PathBuf::from("/project/agents/specks-interviewer.md"));
+        let path = construct_agent_path(&project_root, "interviewer");
+        assert_eq!(path, PathBuf::from("/project/agents/interviewer.md"));
     }
 
     #[test]
     fn test_get_agent_path_resolves_in_dev() {
         // When running in dev workspace, get_agent_path resolves to real agents
         let fake_project = PathBuf::from("/nonexistent-project");
-        let path = get_agent_path(&fake_project, "specks-interviewer");
+        let path = get_agent_path(&fake_project, "interviewer");
 
         // Should resolve to development workspace since /nonexistent has no agents
         if let Some(workspace) = find_binary_workspace_root() {
-            assert_eq!(path, workspace.join("agents/specks-interviewer.md"));
+            assert_eq!(path, workspace.join("agents/interviewer.md"));
         } else {
             // If no dev workspace detected, falls back to constructed path
             assert_eq!(
                 path,
-                PathBuf::from("/nonexistent-project/agents/specks-interviewer.md")
+                PathBuf::from("/nonexistent-project/agents/interviewer.md")
             );
         }
     }
@@ -1006,7 +994,7 @@ mod tests {
         let project_root = PathBuf::from("/project");
         let config = interviewer_config(&project_root);
 
-        assert_eq!(config.agent_name, "specks-interviewer");
+        assert_eq!(config.agent_name, "interviewer");
         assert!(
             config
                 .allowed_tools
@@ -1020,7 +1008,7 @@ mod tests {
         let project_root = PathBuf::from("/project");
         let config = planner_config(&project_root);
 
-        assert_eq!(config.agent_name, "specks-planner");
+        assert_eq!(config.agent_name, "planner");
         assert!(config.allowed_tools.contains(&"Write".to_string()));
         assert!(config.allowed_tools.contains(&"Edit".to_string()));
     }
@@ -1030,7 +1018,7 @@ mod tests {
         let project_root = PathBuf::from("/project");
         let config = critic_config(&project_root);
 
-        assert_eq!(config.agent_name, "specks-critic");
+        assert_eq!(config.agent_name, "critic");
         assert!(!config.allowed_tools.contains(&"Write".to_string()));
         assert!(!config.allowed_tools.contains(&"Edit".to_string()));
     }
@@ -1040,7 +1028,7 @@ mod tests {
         let project_root = PathBuf::from("/project");
         let config = director_config(&project_root);
 
-        assert_eq!(config.agent_name, "specks-director");
+        assert_eq!(config.agent_name, "director");
         assert!(config.allowed_tools.contains(&"Task".to_string()));
     }
 
@@ -1049,7 +1037,7 @@ mod tests {
         let project_root = PathBuf::from("/project");
         let config = clarifier_config(&project_root);
 
-        assert_eq!(config.agent_name, "specks-clarifier");
+        assert_eq!(config.agent_name, "clarifier");
         // Clarifier has read-only tools - no Write, Edit, or AskUserQuestion
         assert!(config.allowed_tools.contains(&"Read".to_string()));
         assert!(config.allowed_tools.contains(&"Grep".to_string()));
@@ -1231,10 +1219,10 @@ mod tests {
         let agents_dir = temp_dir.join("agents");
         let _ = std::fs::create_dir_all(&agents_dir);
 
-        let agent_path = agents_dir.join("specks-interviewer.md");
+        let agent_path = agents_dir.join("interviewer.md");
         std::fs::write(&agent_path, "# Test Agent").expect("write agent");
 
-        let resolved = resolve_agent_path("specks-interviewer", &temp_dir);
+        let resolved = resolve_agent_path("interviewer", &temp_dir);
         assert!(resolved.is_some());
         assert_eq!(resolved.unwrap(), agent_path);
 
@@ -1263,10 +1251,10 @@ mod tests {
         let agents_dir = temp_dir.join("agents");
         let _ = std::fs::create_dir_all(&agents_dir);
 
-        let agent_path = agents_dir.join("specks-planner.md");
+        let agent_path = agents_dir.join("planner.md");
         std::fs::write(&agent_path, "# Test Planner").expect("write agent");
 
-        let resolved = resolve_agent_path_with_source("specks-planner", &temp_dir);
+        let resolved = resolve_agent_path_with_source("planner", &temp_dir);
         assert!(resolved.is_some());
 
         let (path, source) = resolved.unwrap();
@@ -1380,11 +1368,11 @@ mod tests {
         let _ = std::fs::create_dir_all(&agents_dir);
 
         // Create one custom agent locally
-        let custom_agent = agents_dir.join("specks-interviewer.md");
+        let custom_agent = agents_dir.join("interviewer.md");
         std::fs::write(&custom_agent, "# Custom Interviewer").expect("write agent");
 
         // Resolve should find the local one
-        let resolved = resolve_agent_path_with_source("specks-interviewer", &temp_dir);
+        let resolved = resolve_agent_path_with_source("interviewer", &temp_dir);
         assert!(resolved.is_some());
 
         let (path, source) = resolved.unwrap();
@@ -1403,24 +1391,21 @@ mod tests {
 
     #[test]
     fn test_plan_required_agents_contains_expected() {
-        assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-clarifier"));
-        assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-interviewer"));
-        assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-planner"));
-        assert!(PLAN_REQUIRED_AGENTS.contains(&"specks-critic"));
-        assert_eq!(PLAN_REQUIRED_AGENTS.len(), 4);
+        // Phase 3.0: Only planner and interviewer remain as agents for planning.
+        // Clarifier and critic became skills.
+        assert!(PLAN_REQUIRED_AGENTS.contains(&"planner"));
+        assert!(PLAN_REQUIRED_AGENTS.contains(&"interviewer"));
+        assert_eq!(PLAN_REQUIRED_AGENTS.len(), 2);
     }
 
     #[test]
     fn test_execute_required_agents_contains_expected() {
-        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-director"));
-        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-architect"));
-        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-implementer"));
-        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-monitor"));
-        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-reviewer"));
-        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-auditor"));
-        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-committer"));
-        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"specks-logger"));
-        assert_eq!(EXECUTE_REQUIRED_AGENTS.len(), 8);
+        // Phase 3.0: Only director, architect, and implementer remain as agents for execution.
+        // Monitor/reviewer/auditor/logger/committer became skills or were eliminated.
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"director"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"architect"));
+        assert!(EXECUTE_REQUIRED_AGENTS.contains(&"implementer"));
+        assert_eq!(EXECUTE_REQUIRED_AGENTS.len(), 3);
     }
 
     #[test]

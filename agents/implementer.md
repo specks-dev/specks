@@ -1,5 +1,5 @@
 ---
-name: specks-implementer
+name: implementer
 description: Execute architect strategies with self-monitoring. Writes code, runs tests, creates artifacts. Self-halts when drift detected.
 tools: Read, Grep, Glob, Write, Edit, Bash
 model: opus

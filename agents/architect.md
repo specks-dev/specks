@@ -1,5 +1,5 @@
 ---
-name: specks-architect
+name: architect
 description: Creates implementation strategies for speck steps. Produces architect-plan.md with expected_touch_set.
 tools: Read, Grep, Glob, Bash
 model: opus

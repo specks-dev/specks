@@ -1,5 +1,5 @@
 ---
-name: specks-director
+name: director
 description: Central orchestrator for specks workflow. Invoke when executing or planning a speck.
 tools: Task, Skill, Read, Grep, Glob, Bash, Write
 skills: specks:clarifier, specks:critic, specks:reviewer, specks:auditor, specks:logger, specks:committer

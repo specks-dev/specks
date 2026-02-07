@@ -5,6 +5,10 @@
 //! - Agent definitions exist and have correct frontmatter
 //! - Agent contracts (inputs/outputs) are documented
 //! - Inter-agent protocols are consistent
+//!
+//! Note: As of Phase 3.0, many agents became skills (clarifier, critic, reviewer,
+//! auditor, logger, committer). Monitor was eliminated. Only 5 agents remain:
+//! director, planner, interviewer, architect, implementer.
 
 use std::fs;
 use std::path::PathBuf;
@@ -60,31 +64,18 @@ fn parse_agent_frontmatter(content: &str) -> Option<(String, String, String, Str
     }
 }
 
-/// List of all expected execution agents
-const EXECUTION_AGENTS: &[&str] = &[
-    "specks-implementer",
-    "specks-monitor",
-    "specks-reviewer",
-    "specks-auditor",
-    "specks-logger",
-    "specks-committer",
+/// List of all agents (Phase 3.0: 5 agents, others became skills)
+/// Per specks-3.md #agent-summary, these are the remaining agents.
+const ALL_AGENTS: &[&str] = &[
+    "director",
+    "planner",
+    "interviewer",
+    "architect",
+    "implementer",
 ];
 
-/// List of all agents (planning + execution + orchestration)
-const ALL_AGENTS: &[&str] = &[
-    "specks-director",
-    "specks-clarifier",
-    "specks-planner",
-    "specks-critic",
-    "specks-architect",
-    "specks-implementer",
-    "specks-monitor",
-    "specks-reviewer",
-    "specks-auditor",
-    "specks-logger",
-    "specks-committer",
-    "specks-interviewer",
-];
+/// Execution agents that write code (architect plans, implementer executes)
+const EXECUTION_AGENTS: &[&str] = &["architect", "implementer"];
 
 // =============================================================================
 // Agent Definition Tests
@@ -157,68 +148,31 @@ fn test_execution_agents_have_required_sections() {
     }
 }
 
-// =============================================================================
-// Critic Agent Tests
-// =============================================================================
-
 #[test]
-fn test_critic_reviews_plan_quality() {
-    let path = agents_dir().join("specks-critic.md");
-    let content = fs::read_to_string(&path).expect("Failed to read critic agent");
+fn test_only_expected_agents_exist() {
+    let dir = agents_dir();
+    let entries: Vec<_> = fs::read_dir(&dir)
+        .expect("Failed to read agents directory")
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "md"))
+        .collect();
 
-    // Critic must check completeness
-    assert!(
-        content.contains("completeness") || content.contains("Completeness"),
-        "Critic agent must check plan completeness"
+    assert_eq!(
+        entries.len(),
+        5,
+        "Expected exactly 5 agent files, found {}",
+        entries.len()
     );
 
-    // Critic must check implementability
-    assert!(
-        content.contains("implementab") || content.contains("Implementab"),
-        "Critic agent must check implementability"
-    );
-
-    // Critic must check sequencing
-    assert!(
-        content.contains("sequenc") || content.contains("Sequenc"),
-        "Critic agent must check sequencing"
-    );
-
-    // Critic must write report
-    assert!(
-        content.contains("critic-report.md"),
-        "Critic agent must write critic-report.md"
-    );
-}
-
-#[test]
-fn test_critic_provides_actionable_recommendations() {
-    let path = agents_dir().join("specks-critic.md");
-    let content = fs::read_to_string(&path).expect("Failed to read critic agent");
-
-    // Critic must document APPROVE/REVISE/REJECT
-    assert!(
-        content.contains("APPROVE") && content.contains("REVISE") && content.contains("REJECT"),
-        "Critic agent must document all recommendation types"
-    );
-}
-
-#[test]
-fn test_critic_complements_reviewer_and_auditor() {
-    let path = agents_dir().join("specks-critic.md");
-    let content = fs::read_to_string(&path).expect("Failed to read critic agent");
-
-    // Critic should explain how it differs from reviewer and auditor
-    assert!(
-        content.contains("Reviewer") && content.contains("Auditor"),
-        "Critic agent must explain relationship to reviewer and auditor"
-    );
-
-    // Critic focuses on plans, not code
-    assert!(
-        content.contains("before implementation") || content.contains("planning phase"),
-        "Critic agent must clarify it runs before implementation"
-    );
+    // Verify no specks-*.md files exist (should have been renamed)
+    for entry in &entries {
+        let filename = entry.file_name().to_string_lossy().to_string();
+        assert!(
+            !filename.starts_with("specks-"),
+            "Found old-style agent file: {} (should be renamed to remove specks- prefix)",
+            filename
+        );
+    }
 }
 
 // =============================================================================
@@ -227,7 +181,7 @@ fn test_critic_complements_reviewer_and_auditor() {
 
 #[test]
 fn test_implementer_documents_drift_detection() {
-    let path = agents_dir().join("specks-implementer.md");
+    let path = agents_dir().join("implementer.md");
     let content = fs::read_to_string(&path).expect("Failed to read implementer agent");
 
     // Implementer must self-monitor for drift (per specks-3.md #implementer-agent-contract)
@@ -238,14 +192,16 @@ fn test_implementer_documents_drift_detection() {
 
     // Implementer should document self-halt behavior
     assert!(
-        content.contains("self-halt") || content.contains("Self-halt") || content.contains("halted_for_drift"),
+        content.contains("self-halt")
+            || content.contains("Self-halt")
+            || content.contains("halted_for_drift"),
         "Implementer agent must document self-halt behavior"
     );
 }
 
 #[test]
 fn test_implementer_documents_output_contract() {
-    let path = agents_dir().join("specks-implementer.md");
+    let path = agents_dir().join("implementer.md");
     let content = fs::read_to_string(&path).expect("Failed to read implementer agent");
 
     // Implementer must document its output contract (per specks-3.md #implementer-agent-contract)
@@ -255,155 +211,15 @@ fn test_implementer_documents_output_contract() {
     );
 }
 
-// =============================================================================
-// Monitor Agent Tests
-// =============================================================================
-
 #[test]
-fn test_monitor_documents_drift_detection() {
-    let path = agents_dir().join("specks-monitor.md");
-    let content = fs::read_to_string(&path).expect("Failed to read monitor agent");
+fn test_implementer_has_required_tools() {
+    let path = agents_dir().join("implementer.md");
+    let content = fs::read_to_string(&path).expect("Failed to read implementer agent");
 
-    // Monitor must document drift detection
+    // Implementer must have Write, Edit, and Bash tools for code modification
     assert!(
-        content.contains("drift") || content.contains("Drift"),
-        "Monitor agent must document drift detection"
-    );
-
-    // Monitor must document expected_touch_set
-    assert!(
-        content.contains("expected_touch_set"),
-        "Monitor agent must document expected_touch_set usage"
-    );
-
-    // Monitor must document halt signal writing
-    assert!(
-        content.contains(".halt") || content.contains("halt signal"),
-        "Monitor agent must document halt signal writing"
-    );
-}
-
-#[test]
-fn test_monitor_documents_return_format() {
-    let path = agents_dir().join("specks-monitor.md");
-    let content = fs::read_to_string(&path).expect("Failed to read monitor agent");
-
-    // Monitor must document CONTINUE/PAUSE/HALT
-    assert!(
-        content.contains("CONTINUE") && content.contains("PAUSE") && content.contains("HALT"),
-        "Monitor agent must document all status values"
-    );
-}
-
-// =============================================================================
-// Reviewer Agent Tests
-// =============================================================================
-
-#[test]
-fn test_reviewer_checks_plan_adherence() {
-    let path = agents_dir().join("specks-reviewer.md");
-    let content = fs::read_to_string(&path).expect("Failed to read reviewer agent");
-
-    // Reviewer must check tasks
-    assert!(
-        content.contains("tasks") || content.contains("Tasks"),
-        "Reviewer agent must check task completion"
-    );
-
-    // Reviewer must check tests
-    assert!(
-        content.contains("tests") || content.contains("Tests"),
-        "Reviewer agent must verify tests"
-    );
-
-    // Reviewer must write report
-    assert!(
-        content.contains("reviewer-report.md"),
-        "Reviewer agent must write reviewer-report.md"
-    );
-}
-
-// =============================================================================
-// Auditor Agent Tests
-// =============================================================================
-
-#[test]
-fn test_auditor_checks_code_quality() {
-    let path = agents_dir().join("specks-auditor.md");
-    let content = fs::read_to_string(&path).expect("Failed to read auditor agent");
-
-    // Auditor must check structure
-    assert!(
-        content.contains("structure") || content.contains("Structure"),
-        "Auditor agent must check code structure"
-    );
-
-    // Auditor must check security
-    assert!(
-        content.contains("security") || content.contains("Security"),
-        "Auditor agent must check security"
-    );
-
-    // Auditor must write report
-    assert!(
-        content.contains("auditor-report.md"),
-        "Auditor agent must write auditor-report.md"
-    );
-}
-
-#[test]
-fn test_auditor_runs_at_different_granularities() {
-    let path = agents_dir().join("specks-auditor.md");
-    let content = fs::read_to_string(&path).expect("Failed to read auditor agent");
-
-    // Auditor must document when it runs
-    assert!(
-        content.contains("step") && content.contains("milestone") && content.contains("completion"),
-        "Auditor agent must document step/milestone/completion triggers"
-    );
-}
-
-// =============================================================================
-// Logger Agent Tests
-// =============================================================================
-
-#[test]
-fn test_logger_invokes_update_log_skill() {
-    let path = agents_dir().join("specks-logger.md");
-    let content = fs::read_to_string(&path).expect("Failed to read logger agent");
-
-    assert!(
-        content.contains("update-specks-implementation-log")
-            || content.contains("update-plan-implementation-log"),
-        "Logger agent must invoke implementation log skill"
-    );
-}
-
-// =============================================================================
-// Committer Agent Tests
-// =============================================================================
-
-#[test]
-fn test_committer_respects_commit_policy() {
-    let path = agents_dir().join("specks-committer.md");
-    let content = fs::read_to_string(&path).expect("Failed to read committer agent");
-
-    // Committer must document both policies
-    assert!(
-        content.contains("manual") && content.contains("auto"),
-        "Committer agent must document manual and auto policies"
-    );
-
-    // Committer must invoke prepare-git-commit-message skill
-    assert!(
-        content.contains("prepare-git-commit-message"),
-        "Committer agent must invoke prepare-git-commit-message skill"
-    );
-
-    // Committer must write committer-prep.md
-    assert!(
-        content.contains("committer-prep.md"),
-        "Committer agent must write committer-prep.md"
+        content.contains("Write") && content.contains("Edit") && content.contains("Bash"),
+        "Implementer agent must have Write, Edit, and Bash tools"
     );
 }
 
@@ -413,111 +229,203 @@ fn test_committer_respects_commit_policy() {
 
 #[test]
 fn test_director_documents_full_execution_loop() {
-    let path = agents_dir().join("specks-director.md");
+    let path = agents_dir().join("director.md");
     let content = fs::read_to_string(&path).expect("Failed to read director agent");
 
     // Director must document the execution loop
     assert!(
-        content.contains("Execution Mode Workflow") || content.contains("execution loop"),
+        content.contains("Execution Mode Workflow")
+            || content.contains("Execution Phase")
+            || content.contains("execution loop"),
         "Director agent must document execution workflow"
     );
 
-    // Director must invoke all execution agents
-    for agent in &[
-        "architect",
-        "implementer",
-        "monitor",
-        "reviewer",
-        "auditor",
-        "logger",
-        "committer",
-    ] {
-        assert!(
-            content.to_lowercase().contains(agent),
-            "Director agent must mention {}",
-            agent
-        );
-    }
+    // Director must invoke implementer agent
+    assert!(
+        content.to_lowercase().contains("implementer"),
+        "Director agent must mention implementer"
+    );
+
+    // Director must invoke architect agent
+    assert!(
+        content.to_lowercase().contains("architect"),
+        "Director agent must mention architect"
+    );
 }
 
 #[test]
-fn test_director_uses_critic_in_planning_mode() {
-    let path = agents_dir().join("specks-director.md");
+fn test_director_uses_skill_tool() {
+    let path = agents_dir().join("director.md");
     let content = fs::read_to_string(&path).expect("Failed to read director agent");
 
-    // Director must document planning mode workflow
+    // Director must use Skill tool (per D07)
     assert!(
-        content.contains("Planning Mode Workflow"),
-        "Director agent must document planning mode"
+        content.contains("Skill") && content.contains("tools:"),
+        "Director agent must have Skill in tools"
     );
 
-    // Director must use critic (not auditor) for plan review
+    // Director should invoke skills for analysis tasks
     assert!(
-        content.contains("Invoke CRITIC") || content.contains("CRITIC to review plan"),
-        "Director must use CRITIC for plan review in planning mode"
-    );
-
-    // Director should mention critic in agent list
-    assert!(
-        content.contains("critic"),
-        "Director must list critic in orchestrated agents"
+        content.contains("specks:clarifier")
+            || content.contains("specks:critic")
+            || content.contains("specks:reviewer"),
+        "Director must invoke skills via Skill tool"
     );
 }
 
 #[test]
 fn test_director_documents_halt_handling() {
-    let path = agents_dir().join("specks-director.md");
+    let path = agents_dir().join("director.md");
     let content = fs::read_to_string(&path).expect("Failed to read director agent");
 
-    // Director must document halt handling
+    // Director must document halt handling (drift escalation)
     assert!(
-        content.contains("Halt") || content.contains("HALT"),
-        "Director agent must document halt handling"
-    );
-
-    // Director must document halt signal file
-    assert!(
-        content.contains(".halt"),
-        "Director agent must reference .halt signal file"
+        content.contains("Halt")
+            || content.contains("HALT")
+            || content.contains("halted_for_drift")
+            || content.contains("drift"),
+        "Director agent must document halt/drift handling"
     );
 }
 
 #[test]
 fn test_director_documents_escalation() {
-    let path = agents_dir().join("specks-director.md");
+    let path = agents_dir().join("director.md");
     let content = fs::read_to_string(&path).expect("Failed to read director agent");
 
-    // Director must document escalation
+    // Director must document escalation (via interviewer for user decisions)
     assert!(
-        content.contains("Escalation") || content.contains("escalation"),
+        content.contains("Escalation")
+            || content.contains("escalation")
+            || content.contains("interviewer"),
         "Director agent must document escalation paths"
     );
 }
 
+#[test]
+fn test_director_is_pure_orchestrator() {
+    let path = agents_dir().join("director.md");
+    let content = fs::read_to_string(&path).expect("Failed to read director agent");
+
+    let frontmatter = parse_agent_frontmatter(&content).expect("Failed to parse frontmatter");
+    let tools = frontmatter.2;
+
+    // Director should NOT have AskUserQuestion (interviewer handles user interaction)
+    assert!(
+        !tools.contains("AskUserQuestion"),
+        "Director should not have AskUserQuestion (D02: pure orchestrator)"
+    );
+
+    // Director should NOT have Edit (only Write for audit trail)
+    assert!(
+        !tools.contains("Edit"),
+        "Director should not have Edit tool (D02: pure orchestrator)"
+    );
+
+    // Director SHOULD have Write for audit trail
+    assert!(
+        tools.contains("Write"),
+        "Director should have Write tool for audit trail"
+    );
+}
+
 // =============================================================================
-// Halt Signal Protocol Tests
+// Interviewer Agent Tests
 // =============================================================================
 
 #[test]
-fn test_halt_signal_file_format_documented() {
-    let dir = agents_dir();
+fn test_interviewer_handles_user_interaction() {
+    let path = agents_dir().join("interviewer.md");
+    let content = fs::read_to_string(&path).expect("Failed to read interviewer agent");
 
-    // Monitor should document halt file format
-    let monitor_content =
-        fs::read_to_string(dir.join("specks-monitor.md")).expect("Failed to read monitor agent");
+    let frontmatter = parse_agent_frontmatter(&content).expect("Failed to parse frontmatter");
+    let tools = frontmatter.2;
 
+    // Interviewer must have AskUserQuestion
     assert!(
-        monitor_content.contains("reason") && monitor_content.contains("drift_type"),
-        "Monitor must document halt file format"
+        tools.contains("AskUserQuestion"),
+        "Interviewer must have AskUserQuestion tool"
     );
 
-    // Director should document halt file format
-    let director_content =
-        fs::read_to_string(dir.join("specks-director.md")).expect("Failed to read director agent");
-
+    // Interviewer should document user interaction
     assert!(
-        director_content.contains("reason") && director_content.contains("drift_type"),
-        "Director must document halt file format"
+        content.contains("user interaction") || content.contains("single point"),
+        "Interviewer must document its role as user interaction point"
+    );
+}
+
+#[test]
+fn test_interviewer_documents_contexts() {
+    let path = agents_dir().join("interviewer.md");
+    let content = fs::read_to_string(&path).expect("Failed to read interviewer agent");
+
+    // Interviewer handles 4 contexts per specks-3.md #interviewer-contract
+    let contexts = ["clarifier", "critic", "drift", "review"];
+    for context in contexts {
+        assert!(
+            content.contains(context),
+            "Interviewer must document {} context",
+            context
+        );
+    }
+}
+
+// =============================================================================
+// Planner Agent Tests
+// =============================================================================
+
+#[test]
+fn test_planner_no_user_interaction() {
+    let path = agents_dir().join("planner.md");
+    let content = fs::read_to_string(&path).expect("Failed to read planner agent");
+
+    let frontmatter = parse_agent_frontmatter(&content).expect("Failed to parse frontmatter");
+    let tools = frontmatter.2;
+
+    // Planner should NOT have AskUserQuestion (interviewer handles this)
+    assert!(
+        !tools.contains("AskUserQuestion"),
+        "Planner should not have AskUserQuestion (D04: interviewer handles user interaction)"
+    );
+}
+
+#[test]
+fn test_planner_documents_input_contract() {
+    let path = agents_dir().join("planner.md");
+    let content = fs::read_to_string(&path).expect("Failed to read planner agent");
+
+    // Planner must document input contract
+    assert!(
+        content.contains("## Input Contract") || content.contains("Inputs You Receive"),
+        "Planner must document input contract"
+    );
+
+    // Planner receives clarifier assumptions from director
+    assert!(
+        content.contains("clarifier") || content.contains("assumptions"),
+        "Planner must receive clarifier data from director"
+    );
+}
+
+// =============================================================================
+// Architect Agent Tests
+// =============================================================================
+
+#[test]
+fn test_architect_documents_output_format() {
+    let path = agents_dir().join("architect.md");
+    let content = fs::read_to_string(&path).expect("Failed to read architect agent");
+
+    // Architect must document expected_touch_set
+    assert!(
+        content.contains("expected_touch_set"),
+        "Architect must document expected_touch_set in output"
+    );
+
+    // Architect must document implementation strategy
+    assert!(
+        content.contains("strategy") || content.contains("Strategy"),
+        "Architect must document implementation strategy output"
     );
 }
 
@@ -527,7 +435,7 @@ fn test_halt_signal_file_format_documented() {
 
 #[test]
 fn test_run_directory_structure_documented() {
-    let path = agents_dir().join("specks-director.md");
+    let path = agents_dir().join("director.md");
     let content = fs::read_to_string(&path).expect("Failed to read director agent");
 
     // Director must document run directory structure
@@ -568,96 +476,44 @@ fn test_create_run_directory_structure() {
     let runs = runs_dir(&temp);
     fs::create_dir_all(&runs).expect("failed to create runs dir");
 
-    // Create a UUID-based run directory
-    let run_uuid = "test-run-12345";
-    let run_dir = runs.join(run_uuid);
+    // Create a session-id based run directory (new format per specks-3.md)
+    let session_id = "20260206-143022-plan-a1b2c3";
+    let run_dir = runs.join(session_id);
     fs::create_dir(&run_dir).expect("failed to create run dir");
 
-    // Create invocation.json
-    let invocation = serde_json::json!({
-        "uuid": run_uuid,
-        "timestamp": "2026-02-04T12:00:00Z",
-        "speck": ".specks/specks-test.md",
-        "mode": "execute",
-        "commit_policy": "manual",
-        "checkpoint_mode": "step",
-        "start_step": null,
-        "end_step": null
+    // Create metadata.json (new format per specks-3.md #run-metadata)
+    let metadata = serde_json::json!({
+        "session_id": session_id,
+        "mode": "plan",
+        "started_at": "2026-02-06T14:30:22Z",
+        "speck_path": ".specks/specks-test.md",
+        "status": "in_progress",
+        "completed_at": null
     });
     fs::write(
-        run_dir.join("invocation.json"),
-        serde_json::to_string_pretty(&invocation).unwrap(),
+        run_dir.join("metadata.json"),
+        serde_json::to_string_pretty(&metadata).unwrap(),
     )
-    .expect("failed to write invocation.json");
+    .expect("failed to write metadata.json");
 
     // Verify structure
-    assert!(run_dir.join("invocation.json").exists());
+    assert!(run_dir.join("metadata.json").exists());
 
-    // Create halt signal file
-    let halt = serde_json::json!({
-        "reason": "drift_detected",
-        "drift_type": "wrong_files",
-        "drift_severity": "high",
-        "timestamp": "2026-02-04T12:34:56Z",
-        "description": "Test halt",
-        "files_of_concern": ["test.rs"],
-        "recommendation": "return_to_architect"
+    // Create planning subdirectory
+    let planning_dir = run_dir.join("planning");
+    fs::create_dir(&planning_dir).expect("failed to create planning dir");
+
+    // Create skill outputs with sequential numbering
+    let clarifier_output = serde_json::json!({
+        "analysis": {"understood_intent": "test"},
+        "questions": [],
+        "assumptions": ["test assumption"]
     });
     fs::write(
-        run_dir.join(".halt"),
-        serde_json::to_string_pretty(&halt).unwrap(),
+        planning_dir.join("001-clarifier.json"),
+        serde_json::to_string_pretty(&clarifier_output).unwrap(),
     )
-    .expect("failed to write .halt");
+    .expect("failed to write clarifier output");
 
-    assert!(run_dir.join(".halt").exists());
-
-    // Create status.json
-    let status = serde_json::json!({
-        "uuid": run_uuid,
-        "outcome": "halted",
-        "steps_completed": [],
-        "steps_remaining": ["#step-0"],
-        "current_step": "#step-0",
-        "halt_reason": "drift_detected",
-        "errors": [],
-        "timestamp_start": "2026-02-04T12:00:00Z",
-        "timestamp_end": "2026-02-04T12:34:56Z"
-    });
-    fs::write(
-        run_dir.join("status.json"),
-        serde_json::to_string_pretty(&status).unwrap(),
-    )
-    .expect("failed to write status.json");
-
-    assert!(run_dir.join("status.json").exists());
-}
-
-#[test]
-fn test_reviewer_and_auditor_produce_complementary_reports() {
-    // This test verifies the conceptual separation documented in D13
-    let dir = agents_dir();
-
-    let reviewer_content =
-        fs::read_to_string(dir.join("specks-reviewer.md")).expect("Failed to read reviewer agent");
-    let auditor_content =
-        fs::read_to_string(dir.join("specks-auditor.md")).expect("Failed to read auditor agent");
-
-    // Reviewer focuses on plan adherence
-    assert!(
-        reviewer_content.contains("plan adherence")
-            || reviewer_content.contains("Did the implementation match"),
-        "Reviewer should focus on plan adherence"
-    );
-
-    // Auditor focuses on code quality
-    assert!(
-        auditor_content.contains("code quality") || auditor_content.contains("quality"),
-        "Auditor should focus on code quality"
-    );
-
-    // They should complement each other, not overlap
-    assert!(
-        !reviewer_content.contains("security issues") && auditor_content.contains("security"),
-        "Security should be auditor's concern, not reviewer's"
-    );
+    assert!(planning_dir.join("001-clarifier.json").exists());
 }

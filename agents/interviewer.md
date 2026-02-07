@@ -1,5 +1,5 @@
 ---
-name: specks-interviewer
+name: interviewer
 description: Single point of user interaction for specks workflow. Presents questions and collects decisions.
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: opus

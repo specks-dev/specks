@@ -1,5 +1,5 @@
 ---
-name: specks-planner
+name: planner
 description: Transforms ideas into structured implementation plans (specks) following the skeleton format.
 tools: Read, Grep, Glob, Bash, Write, Edit
 model: opus

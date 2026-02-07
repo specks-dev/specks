@@ -1845,25 +1845,25 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 - Deleted agent files per Table T03
 
 **Tasks:**
-- [ ] Delete `agents/specks-clarifier.md`
-- [ ] Delete `agents/specks-critic.md`
-- [ ] Delete `agents/specks-monitor.md` (eliminated, no skill replacement)
-- [ ] Delete `agents/specks-reviewer.md`
-- [ ] Delete `agents/specks-auditor.md`
-- [ ] Delete `agents/specks-logger.md`
-- [ ] Delete `agents/specks-committer.md`
-- [ ] **Rename remaining agents** to remove `specks-` prefix (per #naming-conventions):
-  - [ ] `mv agents/specks-director.md agents/director.md`
-  - [ ] `mv agents/specks-planner.md agents/planner.md`
-  - [ ] `mv agents/specks-interviewer.md agents/interviewer.md`
-  - [ ] `mv agents/specks-architect.md agents/architect.md`
-  - [ ] `mv agents/specks-implementer.md agents/implementer.md`
-- [ ] Update frontmatter `name:` field in each renamed agent (e.g., `name: director` not `name: specks-director`)
+- [x] Delete `agents/specks-clarifier.md`
+- [x] Delete `agents/specks-critic.md`
+- [x] Delete `agents/specks-monitor.md` (eliminated, no skill replacement)
+- [x] Delete `agents/specks-reviewer.md`
+- [x] Delete `agents/specks-auditor.md`
+- [x] Delete `agents/specks-logger.md`
+- [x] Delete `agents/specks-committer.md`
+- [x] **Rename remaining agents** to remove `specks-` prefix (per #naming-conventions):
+  - [x] `mv agents/specks-director.md agents/director.md`
+  - [x] `mv agents/specks-planner.md agents/planner.md`
+  - [x] `mv agents/specks-interviewer.md agents/interviewer.md`
+  - [x] `mv agents/specks-architect.md agents/architect.md`
+  - [x] `mv agents/specks-implementer.md agents/implementer.md`
+- [x] Update frontmatter `name:` field in each renamed agent (e.g., `name: director` not `name: specks-director`)
 
 **Checkpoint:**
-- [ ] Only 5 agent files remain: director, planner, interviewer, architect, implementer
-- [ ] `ls agents/*.md | wc -l` returns 5
-- [ ] No `agents/specks-*.md` files exist
+- [x] Only 5 agent files remain: director, planner, interviewer, architect, implementer
+- [x] `ls agents/*.md | wc -l` returns 5
+- [x] No `agents/specks-*.md` files exist
 
 **Rollback:**
 - Restore from git

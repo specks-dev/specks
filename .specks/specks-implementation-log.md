@@ -6,6 +6,72 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 6: Remove agent files that became skills | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#step-6), (#files-to-remove)
+- [D03] Focused-task agents become skills (#d03-agents-to-skills)
+- [D06] Clean breaks only (#d06-clean-breaks)
+- Table T03: Agent Files to Remove (#t03-agent-removal)
+- (#naming-conventions) - Plugin naming conventions (agents without specks- prefix)
+- (#agent-summary) - 5 agents remain: director, planner, interviewer, architect, implementer
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Delete `agents/specks-clarifier.md` | Done |
+| Delete `agents/specks-critic.md` | Done |
+| Delete `agents/specks-monitor.md` (eliminated) | Done |
+| Delete `agents/specks-reviewer.md` | Done |
+| Delete `agents/specks-auditor.md` | Done |
+| Delete `agents/specks-logger.md` | Done |
+| Delete `agents/specks-committer.md` | Done |
+| Rename `specks-director.md` → `director.md` | Done |
+| Rename `specks-planner.md` → `planner.md` | Done |
+| Rename `specks-interviewer.md` → `interviewer.md` | Done |
+| Rename `specks-architect.md` → `architect.md` | Done |
+| Rename `specks-implementer.md` → `implementer.md` | Done |
+| Update frontmatter `name:` field in each renamed agent | Done |
+
+**Files Deleted:**
+- `agents/specks-clarifier.md` - Became `skills/clarifier/SKILL.md`
+- `agents/specks-critic.md` - Became `skills/critic/SKILL.md`
+- `agents/specks-monitor.md` - Eliminated (implementer now self-monitors)
+- `agents/specks-reviewer.md` - Became `skills/reviewer/SKILL.md`
+- `agents/specks-auditor.md` - Became `skills/auditor/SKILL.md`
+- `agents/specks-logger.md` - Became `skills/logger/SKILL.md`
+- `agents/specks-committer.md` - Became `skills/committer/SKILL.md`
+
+**Files Renamed:**
+- `agents/specks-director.md` → `agents/director.md` (frontmatter name: director)
+- `agents/specks-planner.md` → `agents/planner.md` (frontmatter name: planner)
+- `agents/specks-interviewer.md` → `agents/interviewer.md` (frontmatter name: interviewer)
+- `agents/specks-architect.md` → `agents/architect.md` (frontmatter name: architect)
+- `agents/specks-implementer.md` → `agents/implementer.md` (frontmatter name: implementer)
+
+**Files Modified:**
+- `crates/specks/tests/agent_integration_tests.rs` - Complete rewrite for Phase 3.0 (tests 5 agents with new file names, removes tests for agents-that-became-skills)
+- `crates/specks/src/agent.rs` - Updated all agent name references (removed specks- prefix throughout), updated PLAN_REQUIRED_AGENTS to 2 agents, updated EXECUTE_REQUIRED_AGENTS to 3 agents
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 309 tests passed (4 tests removed with deprecated agents)
+
+**Checkpoints Verified:**
+- Only 5 agent files remain: director, planner, interviewer, architect, implementer: PASS
+- `ls agents/*.md | wc -l` returns 5: PASS
+- No `agents/specks-*.md` files exist: PASS
+
+**Key Decisions/Notes:**
+- The agent file renaming required updating `agent.rs` to change all references from `specks-*` to just the agent name. This affects the `PLAN_REQUIRED_AGENTS` and `EXECUTE_REQUIRED_AGENTS` constants, as well as helper functions like `interviewer_config()`, `director_config()`, etc.
+- The test file `agent_integration_tests.rs` was completely rewritten to reflect the new 5-agent architecture. Tests for agents that became skills were removed. New tests were added for Phase 3.0 concepts (e.g., `test_only_expected_agents_exist`, `test_director_is_pure_orchestrator`).
+- The constants `PLAN_REQUIRED_AGENTS` and `EXECUTE_REQUIRED_AGENTS` now reflect skills replacing agents: plan requires 2 agents (planner, interviewer), execute requires 3 agents (director, architect, implementer).
+
+---
+
 ## [specks-3.md] Step 5: Update other agents | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
