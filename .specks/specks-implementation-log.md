@@ -6,6 +6,91 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 10.5.6: Delete old entry point skills | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Step 10.5.6 specification (lines 3403-3431)
+- [D08] Two-agent orchestrator architecture
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Delete `skills/plan/` directory entirely | Done |
+| Delete `skills/execute/` directory entirely | Done |
+
+**Files Deleted:**
+- `skills/plan/` directory - old entry point skill (replaced by `skills/planner/`)
+- `skills/execute/` directory - old entry point skill (replaced by `skills/implementer/`)
+
+**Test Results:**
+- Drift prevention: Old entry points removed: PASS
+
+**Checkpoints Verified:**
+- `test ! -d skills/plan` succeeds: PASS
+- `test ! -d skills/execute` succeeds: PASS
+- `ls skills/*/SKILL.md | wc -l` returns 12: PASS
+
+**Key Decisions/Notes:**
+- The old `skills/plan/` and `skills/execute/` directories were fully deleted
+- These are replaced by the thin wrapper skills `skills/planner/` and `skills/implementer/`
+- 12 skill directories now remain: 2 entry wrappers (planner, implementer) + 10 sub-task skills
+
+---
+
+## [specks-3.md] Step 10.5.5: Delete old agent files | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Step 10.5.5 specification (lines 3359-3399)
+- [D08] Two-agent orchestrator architecture
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/archived/` directory | Done |
+| Move `agents/director.md` to `agents/archived/director.md` | Done |
+| Move `agents/interviewer.md` to `agents/archived/interviewer.md` | Done |
+| Delete `agents/architect-agent.md` | Done |
+| Delete `agents/author-agent.md` | Done |
+| Delete `agents/coder-agent.md` | Done |
+
+**Files Created:**
+- `agents/archived/` directory - archive for deprecated agents
+
+**Files Moved:**
+- `agents/director.md` → `agents/archived/director.md` - preserved for reference
+- `agents/interviewer.md` → `agents/archived/interviewer.md` - preserved for reference
+
+**Files Deleted:**
+- `agents/architect-agent.md` - obsolete per two-agent architecture
+- `agents/author-agent.md` - obsolete per two-agent architecture
+- `agents/coder-agent.md` - obsolete per two-agent architecture
+
+**Test Results:**
+- Drift prevention: Only 2 agent files remain in `agents/`: PASS
+- Drift prevention: Archived agents preserved for reference: PASS
+
+**Checkpoints Verified:**
+- `ls agents/*.md | wc -l` returns 2: PASS
+- `ls agents/*.md` shows exactly `planner-agent.md` and `implementer-agent.md`: PASS
+- `ls agents/archived/` shows `director.md` and `interviewer.md`: PASS
+- `test ! -f agents/architect-agent.md` succeeds: PASS
+- `test ! -f agents/author-agent.md` succeeds: PASS
+- `test ! -f agents/coder-agent.md` succeeds: PASS
+
+**Key Decisions/Notes:**
+- Director and interviewer agents were archived (not deleted) to preserve for reference
+- The three obsolete sub-task agents (architect-agent, author-agent, coder-agent) were deleted
+- Only 2 agent files remain in `agents/`: planner-agent.md and implementer-agent.md
+- This completes the transition to the two-agent orchestrator architecture per [D08]
+
+---
+
 ## [specks-3.md] Step 10.5.4: Update sub-task skills (remove escalation patterns) | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

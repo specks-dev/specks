@@ -3373,24 +3373,24 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 - Deleted: `agents/coder-agent.md`
 
 **Tasks:**
-- [ ] Create `agents/archived/` directory
-- [ ] Move `agents/director.md` to `agents/archived/director.md`
-- [ ] Move `agents/interviewer.md` to `agents/archived/interviewer.md`
-- [ ] Delete `agents/architect-agent.md`
-- [ ] Delete `agents/author-agent.md`
-- [ ] Delete `agents/coder-agent.md`
+- [x] Create `agents/archived/` directory
+- [x] Move `agents/director.md` to `agents/archived/director.md`
+- [x] Move `agents/interviewer.md` to `agents/archived/interviewer.md`
+- [x] Delete `agents/architect-agent.md`
+- [x] Delete `agents/author-agent.md`
+- [x] Delete `agents/coder-agent.md`
 
 **Tests:**
-- [ ] Drift prevention: Only 2 agent files remain in `agents/`
-- [ ] Drift prevention: Archived agents preserved for reference
+- [x] Drift prevention: Only 2 agent files remain in `agents/`
+- [x] Drift prevention: Archived agents preserved for reference
 
 **Checkpoint:**
-- [ ] `ls agents/*.md | wc -l` returns 2
-- [ ] `ls agents/*.md` shows exactly `planner-agent.md` and `implementer-agent.md`
-- [ ] `ls agents/archived/` shows `director.md` and `interviewer.md`
-- [ ] `test ! -f agents/architect-agent.md` succeeds
-- [ ] `test ! -f agents/author-agent.md` succeeds
-- [ ] `test ! -f agents/coder-agent.md` succeeds
+- [x] `ls agents/*.md | wc -l` returns 2
+- [x] `ls agents/*.md` shows exactly `planner-agent.md` and `implementer-agent.md`
+- [x] `ls agents/archived/` shows `director.md` and `interviewer.md`
+- [x] `test ! -f agents/architect-agent.md` succeeds
+- [x] `test ! -f agents/author-agent.md` succeeds
+- [x] `test ! -f agents/coder-agent.md` succeeds
 
 **Rollback:**
 - Restore archived agents from `agents/archived/` to `agents/`
@@ -3413,16 +3413,16 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 - Deleted: `skills/execute/` directory
 
 **Tasks:**
-- [ ] Delete `skills/plan/` directory entirely
-- [ ] Delete `skills/execute/` directory entirely
+- [x] Delete `skills/plan/` directory entirely
+- [x] Delete `skills/execute/` directory entirely
 
 **Tests:**
-- [ ] Drift prevention: Old entry points removed
+- [x] Drift prevention: Old entry points removed
 
 **Checkpoint:**
-- [ ] `test ! -d skills/plan` succeeds
-- [ ] `test ! -d skills/execute` succeeds
-- [ ] `ls skills/*/SKILL.md | wc -l` returns 12
+- [x] `test ! -d skills/plan` succeeds
+- [x] `test ! -d skills/execute` succeeds
+- [x] `ls skills/*/SKILL.md | wc -l` returns 12
 
 **Rollback:**
 - Restore `skills/plan/` from git
