@@ -2889,8 +2889,8 @@ All three capability tests passed:
 **AskUserQuestion WORKS from skill context** (verified in 10.5.1)
 
 **Tasks:**
-- [ ] Create `skills/interviewer/SKILL.md`
-- [ ] Verify skill can be invoked by orchestrators
+- [x] Create `skills/interviewer/SKILL.md`
+- [x] Verify skill can be invoked by orchestrators (AskUserQuestion verified in 10.5.1)
 
 **Full SKILL.md content:**
 
@@ -2950,9 +2950,9 @@ Return JSON-only (no prose, no fences):
 ```
 
 **Verification:**
-- [ ] Invoke `/specks:interviewer` directly with test JSON
-- [ ] Verify AskUserQuestion presents options correctly
-- [ ] Verify JSON output is returned
+- [x] Invoke `/specks:interviewer` directly with test JSON
+- [x] Verify AskUserQuestion presents options correctly
+- [x] Verify JSON output is returned
 
 ---
 
