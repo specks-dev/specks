@@ -1710,26 +1710,26 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 - Updated `agents/director.md` (execution flow implementation)
 
 **Tasks:**
-- [ ] Implement Execution Phase Flow per (#flow-execution):
-  - [ ] **For each step** in speck (iterate in order, respecting dependencies):
-    - [ ] **Architect**: Spawn architect agent -> receive strategy JSON
-    - [ ] **Implementer**: Spawn implementer agent -> wait for completion
-    - [ ] **Drift handling**: If implementer returns halted_for_drift, spawn interviewer for escalation
-    - [ ] **Review**: Invoke reviewer + auditor skills in parallel
-    - [ ] **Finalize**: Invoke logger skill, invoke committer skill (with bead_id if present)
-  - [ ] Handle step completion and move to next step
-- [ ] Use exact invocation syntax from (#flow-tools):
-  - [ ] `Task(subagent_type: "specks:architect")` for architect
-  - [ ] `Task(subagent_type: "specks:implementer")` for implementer
-  - [ ] `Skill(skill: "specks:reviewer")` and `Skill(skill: "specks:auditor")` in parallel
-  - [ ] `Skill(skill: "specks:logger")` then `Skill(skill: "specks:committer")`
+- [x] Implement Execution Phase Flow per (#flow-execution):
+  - [x] **For each step** in speck (iterate in order, respecting dependencies):
+    - [x] **Architect**: Spawn architect agent -> receive strategy JSON
+    - [x] **Implementer**: Spawn implementer agent -> wait for completion
+    - [x] **Drift handling**: If implementer returns halted_for_drift, spawn interviewer for escalation
+    - [x] **Review**: Invoke reviewer + auditor skills in parallel
+    - [x] **Finalize**: Invoke logger skill, invoke committer skill (with bead_id if present)
+  - [x] Handle step completion and move to next step
+- [x] Use exact invocation syntax from (#flow-tools):
+  - [x] `Task(subagent_type: "specks:architect")` for architect
+  - [x] `Task(subagent_type: "specks:implementer")` for implementer
+  - [x] `Skill(skill: "specks:reviewer")` and `Skill(skill: "specks:auditor")` in parallel
+  - [x] `Skill(skill: "specks:logger")` then `Skill(skill: "specks:committer")`
 
 **Checkpoint:**
-- [ ] Execution flow in director body matches (#flow-execution) diagram
-- [ ] Implementer spawned via Task tool, runs to completion or self-halts
-- [ ] Drift escalation path to interviewer exists (when implementer.halted_for_drift)
-- [ ] Reviewer and auditor invoked in parallel
-- [ ] Logger and committer invoked sequentially at step end
+- [x] Execution flow in director body matches (#flow-execution) diagram
+- [x] Implementer spawned via Task tool, runs to completion or self-halts
+- [x] Drift escalation path to interviewer exists (when implementer.halted_for_drift)
+- [x] Reviewer and auditor invoked in parallel
+- [x] Logger and committer invoked sequentially at step end
 
 **Rollback:**
 - Revert from git

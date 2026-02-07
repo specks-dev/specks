@@ -242,136 +242,195 @@ Skill(specks:critic) → recommendation
 - Skills return JSON; agents return structured output
 - All outputs persisted to run directory for audit
 
-## Execution Mode Workflow (S10 Protocol)
+## Execution Mode Workflow
 
-When `mode=execute`:
+When `mode=execute`, iterate through each step in the speck in dependency order. **ALL user interaction goes through the interviewer agent**—you never call AskUserQuestion directly.
 
-### Preconditions Check
+### Preconditions
 
-```
-1. Validate speck exists: specks validate <speck-path>
-   → Must pass without errors
-2. Verify speck status = "active" in Plan Metadata
-3. Verify Beads Root exists (run `specks beads sync` if not)
-   → **Beads Root:** line must be present in Plan Metadata
-4. All agent definitions available in agents/specks-*.md
-```
+1. Validate speck: `specks validate <speck-path>` must pass
+2. Parse execution steps from speck
+3. Determine step order respecting `**Depends on:**` lines
 
-### Build Execution Context
+### For Each Step
 
-```
-5. Build bead→step map from speck's **Bead:** lines
-   - Parse each step for **Bead:** bd-xxx.N
-   - Create mapping: bead_id → step_anchor
-6. Query ready steps: bd ready --parent <root-bead-id> --json
-7. Sort ready beads by dependency graph (topological order)
-   - Use speck's **Depends on:** lines for ordering
-```
+#### Phase 1: Get Implementation Strategy
 
-### Per-Step Execution Loop
+Spawn architect agent to create implementation strategy:
 
 ```
-FOR each ready step (in topological order):
-
-  ┌─────────────────────────────────────────────────────────────┐
-  │ PHASE 1: ARCHITECTURE                                        │
-  ├─────────────────────────────────────────────────────────────┤
-  │ a. Invoke ARCHITECT (specks-architect) with:                 │
-  │    - Full speck content                                      │
-  │    - Step anchor and specification                           │
-  │    - Run directory path                                      │
-  │    - Previous step context                                   │
-  │                                                              │
-  │    → Receives implementation strategy with expected_touch_set│
-  │    → Architect writes architect-plan.md to run directory     │
-  └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ PHASE 2: IMPLEMENTATION + MONITORING                         │
-  ├─────────────────────────────────────────────────────────────┤
-  │ b. Spawn IMPLEMENTER + MONITOR in parallel:                  │
-  │                                                              │
-  │    IMPLEMENTER (specks-implementer):                         │
-  │    - Run in background (run_in_background: true)             │
-  │    - Invokes /implement-plan skill                           │
-  │    - Writes code, runs tests, checks task boxes              │
-  │    - Checks for halt signal between operations               │
-  │                                                              │
-  │    MONITOR (specks-monitor):                                 │
-  │    - Runs parallel, receives implementer task ID             │
-  │    - Polls for uncommitted changes                           │
-  │    - Compares against expected_touch_set                     │
-  │    - Can return EARLY with HALT/PAUSE signal                 │
-  │                                                              │
-  │    IF MONITOR returns HALT:                                  │
-  │    → Read .specks/runs/{uuid}/.halt for details              │
-  │    → Stop implementer (cooperative halt)                     │
-  │    → Escalate per decision tree                              │
-  └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ PHASE 3: REVIEW                                              │
-  ├─────────────────────────────────────────────────────────────┤
-  │ c. Invoke REVIEWER + AUDITOR (can run in parallel):          │
-  │                                                              │
-  │    REVIEWER (specks-reviewer):                               │
-  │    - Checks plan adherence                                   │
-  │    - Verifies tasks completed, tests match plan              │
-  │    - Writes reviewer-report.md to run directory              │
-  │                                                              │
-  │    AUDITOR (specks-auditor):                                 │
-  │    - Checks code quality                                     │
-  │    - Evaluates structure, performance, security              │
-  │    - Writes auditor-report.md to run directory               │
-  │                                                              │
-  │ d. SYNTHESIZE reports and DECIDE:                            │
-  │    - Both APPROVE → proceed to logger/committer              │
-  │    - Minor quality issues → back to IMPLEMENTER              │
-  │    - Design issues → back to ARCHITECT                       │
-  │    - Conceptual issues → back to PLANNER                     │
-  └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ PHASE 4: DOCUMENTATION + COMMIT                              │
-  ├─────────────────────────────────────────────────────────────┤
-  │ e. Invoke LOGGER (specks-logger):                            │
-  │    - Invokes /update-specks-implementation-log skill         │
-  │    - Documents what was implemented                          │
-  │                                                              │
-  │ f. Invoke COMMITTER (specks-committer):                      │
-  │    - Invokes /prepare-git-commit-message skill               │
-  │    - Writes committer-prep.md to run directory               │
-  │                                                              │
-  │    IF commit-policy=manual:                                  │
-  │    → Prepares message, writes to git-commit-message.txt      │
-  │    → PAUSE: prompt user "Step N complete. Commit and type    │
-  │             'done' (or 'skip' / 'abort'):"                   │
-  │    → Wait for user confirmation                              │
-  │                                                              │
-  │    IF commit-policy=auto:                                    │
-  │    → Prepares message AND commits                            │
-  │    → Proceed immediately                                     │
-  └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ PHASE 5: BEAD CLOSURE                                        │
-  ├─────────────────────────────────────────────────────────────┤
-  │ g. Close bead: bd close <step-bead-id> --reason "Completed"  │
-  │                                                              │
-  │ h. Sync state: bd sync                                       │
-  │                                                              │
-  │ → Step complete. Loop to next ready step.                    │
-  └─────────────────────────────────────────────────────────────┘
-
-REPEAT until `bd ready --parent <root-bead-id>` returns empty
-
-Update speck metadata Status = "done" when all steps complete
-Write status.json with final outcome
+Task(
+  subagent_type: "specks:architect",
+  prompt: <JSON with speck_path, step_anchor, session_id>,
+  description: "Create implementation strategy for step N"
+)
 ```
+
+Architect returns JSON:
+```json
+{
+  "step_anchor": "#step-N",
+  "approach": "...",
+  "expected_touch_set": ["file1.rs", "file2.rs"],
+  "implementation_steps": [...],
+  "test_plan": "...",
+  "risks": [...]
+}
+```
+
+Persist architect output to run directory: `execution/step-N/architect.json`
+
+#### Phase 2: Implementation (with Self-Monitoring)
+
+Spawn implementer agent with architect strategy:
+
+```
+Task(
+  subagent_type: "specks:implementer",
+  prompt: <JSON with speck_path, step_anchor, architect_strategy, session_id>,
+  description: "Implement step N"
+)
+```
+
+Implementer:
+- Reads architect strategy
+- Writes code, runs tests
+- **Self-monitors** against expected_touch_set (see drift detection below)
+- Returns success/failure + drift_assessment
+
+Implementer returns JSON:
+```json
+{
+  "success": true,
+  "halted_for_drift": false,
+  "files_created": [...],
+  "files_modified": [...],
+  "tests_run": true,
+  "tests_passed": true,
+  "drift_assessment": {
+    "drift_severity": "none|minor|moderate|major",
+    "unexpected_changes": [...]
+  }
+}
+```
+
+**Drift Handling:**
+
+IF `implementer.halted_for_drift == true`:
+
+```
+Task(
+  subagent_type: "specks:interviewer",
+  prompt: <JSON with context=drift, drift_assessment, files_touched>,
+  description: "Present drift details and get user decision"
+)
+```
+
+User decides via interviewer:
+- "continue" → Resume with current changes
+- "back to architect" → Re-spawn architect with drift feedback
+- "abort" → Stop execution, report failure
+
+IF `implementer.success == false` (non-drift failure):
+→ May retry or escalate based on error type
+
+#### Phase 3: Review + Audit
+
+Invoke reviewer and auditor skills **in parallel**:
+
+```
+Skill(skill: "specks:reviewer", args: <JSON with speck_path, step_anchor, implementer_output>)
+Skill(skill: "specks:auditor", args: <JSON with speck_path, step_anchor, files_to_audit, drift_assessment>)
+```
+
+Reviewer returns: `{tasks_complete, tests_match_plan, artifacts_produced, issues[], recommendation}`
+Auditor returns: `{categories{}, issues[], drift_notes, recommendation}`
+
+Persist both outputs to run directory.
+
+**Evaluate Reports:**
+
+IF both recommend APPROVE:
+→ Proceed to Phase 4
+
+IF issues found:
+- Minor quality issues → Re-spawn implementer with fix instructions
+- Design issues → Back to architect for new strategy
+- Conceptual issues → Spawn interviewer, may need re-planning
+
+#### Phase 4: Finalize Step
+
+Invoke logger and committer skills **sequentially**:
+
+```
+Skill(skill: "specks:logger", args: <JSON with speck_path, step_anchor, summary, files_changed>)
+```
+
+Logger updates `.specks/specks-implementation-log.md`.
+
+```
+Skill(skill: "specks:committer", args: <JSON with speck_path, step_anchor, proposed_message, files_to_stage, auto_commit, bead_id>)
+```
+
+Committer:
+- Stages files
+- Commits changes (if auto_commit=true)
+- Closes bead (if bead_id provided)
+
+IF commit-policy=manual:
+→ Spawn interviewer to prompt user for commit confirmation
+
+### Step Complete → Next Step
+
+Mark step complete and proceed to next step in dependency order.
+
+### All Steps Complete
+
+When all steps complete:
+1. Invoke logger skill with phase completion summary
+2. Update speck metadata Status = "done"
+3. Write final `status.json` to run directory
+4. Report success to user
+
+### Execution Flow Summary
+
+```
+FOR EACH step in dependency order:
+    │
+    ▼
+Task(specks:architect) → strategy JSON
+    │
+    ▼
+Task(specks:implementer) → success/failure + drift_assessment
+    │
+    ├─ halted_for_drift? → Task(specks:interviewer) → user decision
+    │                           │
+    │                           ├─ "continue" → proceed
+    │                           ├─ "back to architect" → loop
+    │                           └─ "abort" → fail
+    │
+    ▼
+Skill(specks:reviewer) ─┬─ PARALLEL
+Skill(specks:auditor)  ─┘
+    │
+    ├─ issues? → back to implementer/architect/interviewer
+    │
+    ▼ (both APPROVE)
+Skill(specks:logger) → update implementation log
+    │
+    ▼
+Skill(skill: specks:committer) → commit + close bead
+    │
+    ▼
+NEXT STEP
+```
+
+**Key Invariants:**
+- Director NEVER calls AskUserQuestion directly
+- ALL user interaction delegated to interviewer agent
+- Implementer self-monitors for drift (no separate monitor agent)
+- Reviewer and auditor run in parallel (both are skills)
+- Logger then committer run sequentially at step end
 
 ### Agent and Skill Invocation Patterns
 

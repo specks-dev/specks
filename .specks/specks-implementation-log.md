@@ -6,6 +6,52 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 4.3: Implement director Execution Phase Flow | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#step-4-3), (#flow-execution), (#flow-tools)
+- [D02] Director is pure orchestrator (#d02-pure-orchestrator)
+- (#implementer-agent-contract) for implementer output format
+- `agents/specks-director.md` - Current director agent definition
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Implement Execution Phase Flow per (#flow-execution) | Done |
+| Phase 1: Spawn architect agent -> receive strategy JSON | Done |
+| Phase 2: Spawn implementer agent -> wait for completion | Done |
+| Drift handling: If halted_for_drift, spawn interviewer | Done |
+| Phase 3: Invoke reviewer + auditor skills in parallel | Done |
+| Phase 4: Invoke logger skill, then committer skill | Done |
+| Handle step completion and move to next step | Done |
+| Use exact invocation syntax from (#flow-tools) | Done |
+
+**Files Modified:**
+- `agents/specks-director.md` - Rewrote Execution Mode Workflow section with 4-phase flow matching (#flow-execution), removed separate monitor agent, added drift handling with interviewer escalation, added execution flow summary diagram
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 313 tests passed
+
+**Checkpoints Verified:**
+- Execution flow in director body matches (#flow-execution) diagram: PASS
+- Implementer spawned via Task tool, runs to completion or self-halts: PASS
+- Drift escalation path to interviewer exists (when implementer.halted_for_drift): PASS
+- Reviewer and auditor invoked in parallel: PASS
+- Logger and committer invoked sequentially at step end: PASS
+
+**Key Decisions/Notes:**
+- Removed separate MONITOR agent - implementer now self-monitors per new architecture
+- Added clear drift handling flow: halted_for_drift → interviewer → user decision
+- Simplified preconditions section (removed beads-specific details for now)
+- Added Key Invariants emphasizing parallel reviewer/auditor and sequential logger/committer
+- Ready for Step 4.4: Add director run directory audit trail
+
+---
+
 ## [specks-3.md] Step 4.2: Implement director Planning Phase Flow | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
