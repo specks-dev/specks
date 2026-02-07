@@ -6,7 +6,6 @@ mod colors;
 mod commands;
 mod interaction;
 mod output;
-mod planning_loop;
 mod share;
 mod splash;
 mod streaming;

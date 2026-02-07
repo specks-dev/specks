@@ -1927,11 +1927,11 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 ##### Step 8.1: Remove planning_loop module {#step-8-1}
 
 **Tasks:**
-- [ ] Delete `crates/specks/src/planning_loop/` directory entirely
-- [ ] Remove `mod planning_loop;` declaration
+- [x] Delete `crates/specks/src/planning_loop/` directory entirely
+- [x] Remove `mod planning_loop;` declaration
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
+- [x] `cargo build` succeeds
 
 ---
 

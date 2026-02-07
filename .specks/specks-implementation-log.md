@@ -6,6 +6,52 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 8.1: Remove planning_loop module | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, section (#step-8-1)
+- `crates/specks/src/main.rs` - Module declarations
+- `crates/specks/src/planning_loop/mod.rs` - Module structure
+- `crates/specks/src/commands/plan.rs` - Dependent code
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Delete `crates/specks/src/planning_loop/` directory entirely | Done |
+| Remove `mod planning_loop;` declaration | Done |
+
+**Files Deleted:**
+- `crates/specks/src/planning_loop/mod.rs` - Planning loop state machine
+- `crates/specks/src/planning_loop/types.rs` - Loop types (LoopContext, LoopState, etc.)
+- `crates/specks/src/planning_loop/clarifier.rs` - Clarifier agent invocation
+- `crates/specks/src/planning_loop/cli_gather.rs` - CLI requirements gathering
+- `crates/specks/src/planning_loop/cli_present.rs` - CLI results presentation
+
+**Files Modified:**
+- `crates/specks/src/main.rs` - Removed `mod planning_loop;` declaration
+- `crates/specks/src/commands/plan.rs` - Stubbed to return error (will be fully removed in Step 8.4)
+- `crates/specks/src/agent.rs` - Added `#[allow(dead_code)]` to temporarily unused functions
+- `crates/specks/src/interaction/mod.rs` - Added `#[allow(unused_imports)]` for temporarily unused imports
+- `crates/specks/src/interaction/cli_adapter.rs` - Added `#[allow(dead_code)]` to `reset_cancellation()`
+- `crates/specks/src/output.rs` - Added `#[allow(dead_code)]` to `PlanData` and `PlanValidation`
+- `crates/specks/src/streaming.rs` - Added `#[allow(dead_code)]` to `StreamingDisplay`
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 228 tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+
+**Key Decisions/Notes:**
+- Since `plan.rs` depends on `planning_loop`, it was stubbed to maintain build compatibility. The stub returns an error message directing users to `/specks:plan` in Claude Code. This file will be fully removed in Step 8.4.
+- Several functions in `agent.rs`, `streaming.rs`, and `output.rs` became unused after removing `planning_loop`. These were annotated with `#[allow(dead_code)]` temporarily; they will be removed in subsequent steps (8.2-8.5).
+
+---
+
 ## [specks-3.md] Step 7: Remove legacy skill directories (partial) | PARTIAL | 2026-02-06
 
 **Completed:** 2026-02-06

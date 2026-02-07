@@ -15,6 +15,9 @@ use crate::colors::COLORS;
 const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /// Simple inline spinner display.
+// Note: Temporarily unused after planning_loop removal in Step 8.1
+// Will be removed in Step 8.3
+#[allow(dead_code)]
 pub struct StreamingDisplay {
     /// Message shown in the spinner
     message: String,
@@ -42,6 +45,7 @@ pub struct StreamingDisplay {
 
 impl StreamingDisplay {
     /// Create a new streaming display
+    #[allow(dead_code)]
     pub fn new(message: &str) -> Self {
         let is_tty = std::io::stdout().is_terminal();
 

@@ -31,7 +31,10 @@ pub const EXECUTE_REQUIRED_AGENTS: &[&str] = &["director", "architect", "impleme
 pub const DEFAULT_TIMEOUT_SECS: u64 = 300;
 
 /// Result from an agent invocation
+// Note: output field temporarily unused after planning_loop removal in Step 8.1
+// Will be removed in Step 8.5 when agent.rs is deleted
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AgentResult {
     /// The agent's text output
     pub output: String,
@@ -278,6 +281,8 @@ impl AgentRunner {
 
     /// Like `invoke_agent_streaming` but only shows the spinner, not streaming text.
     /// Use this for tool-heavy agents (planner, critic) where streaming text is noise.
+    // Note: Temporarily unused after planning_loop removal in Step 8.1
+    #[allow(dead_code)]
     pub fn invoke_agent_spinner_only(
         &self,
         config: &AgentConfig,
@@ -765,6 +770,8 @@ pub fn get_agent_path(project_root: &Path, agent_name: &str) -> PathBuf {
 }
 
 /// Create an AgentConfig for the interviewer agent
+// Note: Temporarily unused after planning_loop removal in Step 8.1
+#[allow(dead_code)]
 pub fn interviewer_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
         "interviewer",
@@ -780,6 +787,8 @@ pub fn interviewer_config(project_root: &Path) -> AgentConfig {
 }
 
 /// Create an AgentConfig for the planner agent
+// Note: Temporarily unused after planning_loop removal in Step 8.1
+#[allow(dead_code)]
 pub fn planner_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
         "planner",
@@ -797,6 +806,8 @@ pub fn planner_config(project_root: &Path) -> AgentConfig {
 }
 
 /// Create an AgentConfig for the critic agent
+// Note: Temporarily unused after planning_loop removal in Step 8.1
+#[allow(dead_code)]
 pub fn critic_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
         "critic",
@@ -828,6 +839,8 @@ pub fn director_config(project_root: &Path) -> AgentConfig {
 }
 
 /// Create an AgentConfig for the clarifier agent
+// Note: Temporarily unused after planning_loop removal in Step 8.1
+#[allow(dead_code)]
 pub fn clarifier_config(project_root: &Path) -> AgentConfig {
     AgentConfig::new(
         "clarifier",

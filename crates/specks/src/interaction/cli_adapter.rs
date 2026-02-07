@@ -46,6 +46,8 @@ pub fn setup_ctrl_c_handler() {
 }
 
 /// Reset the cancellation flag
+// Note: Temporarily unused after planning_loop removal in Step 8.1
+#[allow(dead_code)]
 pub fn reset_cancellation() {
     CANCELLED.store(false, Ordering::SeqCst);
 }

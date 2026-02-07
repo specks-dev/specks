@@ -202,7 +202,9 @@ pub struct SubstepStatus {
 }
 
 /// Data payload for plan command
+// Note: Temporarily unused after planning_loop removal in Step 8.1
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct PlanData {
     /// Path to the created/revised speck file
     pub speck_path: String,
@@ -221,7 +223,9 @@ pub struct PlanData {
 }
 
 /// Validation summary for plan command
+// Note: Temporarily unused after planning_loop removal in Step 8.1
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct PlanValidation {
     /// Number of validation errors
     pub errors: usize,
