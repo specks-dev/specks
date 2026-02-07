@@ -6,6 +6,54 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 1: Create skills directory and entry point skills | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#plugin-structure), (#s01-plan), (#s02-execute)
+- [D01] Specks is a Claude Code plugin (#d01-plugin-architecture)
+- `.claude/skills/specks-plan/SKILL.md` - Existing plan skill (source for adaptation)
+- `.claude/skills/specks-execute/SKILL.md` - Existing execute skill (source for adaptation)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `skills/` directory at repo root | Done |
+| Create `skills/plan/` directory | Done |
+| Move/adapt content from `.claude/skills/specks-plan/SKILL.md` to `skills/plan/SKILL.md` | Done |
+| Create `skills/execute/` directory | Done |
+| Move/adapt content from `.claude/skills/specks-execute/SKILL.md` to `skills/execute/SKILL.md` | Done |
+| Update both to spawn director via Task tool | Done |
+
+**Files Created:**
+- `skills/plan/SKILL.md` - Entry point skill for planning (adapted with plugin conventions: name=plan, disable-model-invocation=true, allowed-tools=Task)
+- `skills/execute/SKILL.md` - Entry point skill for execution (adapted with plugin conventions and updated workflow for skills-based review/audit/log/commit)
+
+**Files Modified:**
+- `.specks/specks-3.md` - Checked off Step 1 tasks and checkpoints
+
+**Test Results:**
+- Directory structure verification: PASS
+- Frontmatter validation: PASS
+
+**Checkpoints Verified:**
+- `skills/plan/SKILL.md` exists with valid frontmatter: PASS
+- `skills/execute/SKILL.md` exists with valid frontmatter: PASS
+- `claude --plugin-dir .` recognizes plugin structure: PASS
+
+**Key Decisions/Notes:**
+- Changed skill names from `specks-plan`/`specks-execute` to `plan`/`execute` (plugin provides namespace)
+- Added `disable-model-invocation: true` so user must invoke explicitly
+- Added `allowed-tools: Task` for spawning director agent
+- Updated agent references to use namespaced format `specks:director`
+- Removed CLI integration sections (CLI commands being removed)
+- Updated execute workflow to reflect skills-based reviewer/auditor/logger/committer
+- Ready for Step 2: Create analysis skills
+
+---
+
 ## [specks-3.md] Step 0: Create plugin manifest | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06

@@ -1535,17 +1535,17 @@ When `halted_for_drift: true`, the director spawns the interviewer to present dr
 - `skills/execute/SKILL.md`
 
 **Tasks:**
-- [ ] Create `skills/` directory at repo root
-- [ ] Create `skills/plan/` directory
-- [ ] Move/adapt content from `.claude/skills/specks-plan/SKILL.md` to `skills/plan/SKILL.md`
-- [ ] Create `skills/execute/` directory
-- [ ] Move/adapt content from `.claude/skills/specks-execute/SKILL.md` to `skills/execute/SKILL.md`
-- [ ] Update both to spawn director via Task tool
+- [x] Create `skills/` directory at repo root
+- [x] Create `skills/plan/` directory
+- [x] Move/adapt content from `.claude/skills/specks-plan/SKILL.md` to `skills/plan/SKILL.md`
+- [x] Create `skills/execute/` directory
+- [x] Move/adapt content from `.claude/skills/specks-execute/SKILL.md` to `skills/execute/SKILL.md`
+- [x] Update both to spawn director via Task tool
 
 **Checkpoint:**
-- [ ] `skills/plan/SKILL.md` exists with valid frontmatter
-- [ ] `skills/execute/SKILL.md` exists with valid frontmatter
-- [ ] `claude --plugin-dir . --help` shows specks plugin loaded
+- [x] `skills/plan/SKILL.md` exists with valid frontmatter
+- [x] `skills/execute/SKILL.md` exists with valid frontmatter
+- [x] `claude --plugin-dir . --help` shows specks plugin loaded
 
 **Rollback:**
 - Delete `skills/` directory

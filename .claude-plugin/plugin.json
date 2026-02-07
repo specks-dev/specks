@@ -1,6 +1,6 @@
 {
   "name": "specks",
-  "description": "Transform ideas into working software through orchestrated LLM agents",
+  "description": "Specks turns ideas into working code",
   "version": "0.3.0",
   "author": {
     "name": "specks-team"
