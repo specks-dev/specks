@@ -2767,7 +2767,7 @@ SUB-TASK SKILLS (10, called by agents, never spawn agents):
 **Tasks:**
 - [x] Complete substep 10.5.0: Update plan document
 - [x] Complete substep 10.5.1: Create planner-agent
-- [ ] Complete substep 10.5.2: Create implementer-agent
+- [x] Complete substep 10.5.2: Create implementer-agent
 - [ ] Complete substep 10.5.3: Create thin entry skill wrappers
 - [ ] Complete substep 10.5.4: Update sub-task skills
 - [ ] Complete substep 10.5.5: Delete old agent files
@@ -3065,7 +3065,7 @@ Persist output to `planning/<next-counter>-critic.json`
 - `agents/implementer-agent.md` - NEW orchestrator agent
 
 **Tasks:**
-- [ ] Create `agents/implementer-agent.md` with the following content:
+- [x] Create `agents/implementer-agent.md` with the following content:
 
 ```markdown
 ---
@@ -3204,16 +3204,15 @@ If `commit_policy: manual`, invoke interviewer to confirm the prepared commit:
 - **Never spawn agents** (no Task tool)
 - **Never stop mid-loop** (run until done)
 - **Never interact with user directly** (use interviewer skill)
-```
 
 **Tests:**
-- [ ] Unit test: Agent file parses with valid YAML frontmatter
-- [ ] Drift prevention: Frontmatter does NOT include Task tool
+- [x] Unit test: Agent file parses with valid YAML frontmatter
+- [x] Drift prevention: Frontmatter does NOT include Task tool
 
 **Checkpoint:**
-- [ ] `test -f agents/implementer-agent.md && echo "exists"` returns "exists"
-- [ ] `grep "tools:" agents/implementer-agent.md | grep -v Task` succeeds
-- [ ] `grep "tools:.*Task" agents/implementer-agent.md` fails (Task not in tools)
+- [x] `test -f agents/implementer-agent.md && echo "exists"` returns "exists"
+- [x] `grep "tools:" agents/implementer-agent.md | grep -v Task` succeeds
+- [x] `grep "tools:.*Task" agents/implementer-agent.md` fails (Task not in tools)
 
 **Rollback:**
 - Delete `agents/implementer-agent.md`

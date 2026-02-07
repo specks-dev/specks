@@ -6,6 +6,66 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 10.5.2: Create implementer-agent orchestrator | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Step 10.5.2 specification (lines 3056-3222)
+- `agents/planner-agent.md` - Sibling orchestrator agent for format consistency
+- [D08] Two-agent orchestrator architecture
+- (#flow-implementation) - Implementation phase flowchart
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/implementer-agent.md` with specified content | Done |
+| Frontmatter: name, description, tools, model | Done |
+| Tools exclude Task (prevents agent nesting) | Done |
+| Implementation loop logic (architect → coder → reviewer → auditor → logger → committer) | Done |
+| Session setup with session ID generation | Done |
+| Beads required hard gate | Done |
+| Resume catch-up logic with strictness rules | Done |
+| Outer drift gate after coder | Done |
+| Manual commit policy handling | Done |
+| "What You Must NOT Do" section | Done |
+
+**Files Created:**
+- `agents/implementer-agent.md` - New orchestrator agent for implementation loop
+
+**Files Modified:**
+- `.specks/specks-3.md` - Checked off Step 10.5.2 tasks, tests, and checkpoints
+
+**Test Results:**
+- `cargo build`: Compiles with no warnings
+
+**Checkpoints Verified:**
+- `test -f agents/implementer-agent.md && echo "exists"` returns "exists": PASS
+- `grep "tools:" agents/implementer-agent.md` shows correct tools: PASS
+- `grep "tools:.*Task" agents/implementer-agent.md` fails (Task NOT in tools): PASS
+- YAML frontmatter valid: PASS
+
+**Key Decisions/Notes:**
+
+**Critical Design Choices:**
+- Tools list is `Skill, Read, Grep, Glob, Write, Bash` - deliberately excludes Task tool
+- This prevents agent nesting which causes "Aborted()" crashes in Claude Code
+- The implementer-agent invokes skills only via Skill tool, never spawns other agents
+- Sequential execution: one skill at a time, in order (reviewer then auditor, not parallel)
+
+**Implementation Phases:**
+1. Architecture - invoke architect skill, persist strategy
+2. Implementation - invoke coder skill with strategy, perform outer drift gate
+3. Review - invoke reviewer then auditor (sequentially)
+4. Finalize - invoke logger then committer with commit policy handling
+
+**Beads Integration:**
+- Hard gate before any execution: must verify beads readiness
+- If beads not ready, invoke interviewer with onboarding steps and halt
+
+---
+
 ## [specks-3.md] Step 10.5.1: Create planner-agent orchestrator | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07
