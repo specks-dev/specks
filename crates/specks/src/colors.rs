@@ -13,6 +13,8 @@ use std::sync::LazyLock;
 use owo_colors::Style;
 
 /// Semantic color definitions for terminal output
+// Note: Some fields temporarily unused after interaction module removal
+#[allow(dead_code)]
 pub struct SemanticColors {
     /// Blue - spinners, headers, active elements
     pub active: Style,

@@ -1940,11 +1940,11 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 **Depends on:** #step-8-1
 
 **Tasks:**
-- [ ] Delete `crates/specks/src/interaction/` directory entirely
-- [ ] Remove `mod interaction;` declaration
+- [x] Delete `crates/specks/src/interaction/` directory entirely
+- [x] Remove `mod interaction;` declaration
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
+- [x] `cargo build` succeeds
 
 ---
 

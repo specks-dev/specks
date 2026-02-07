@@ -6,6 +6,42 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 8.2: Remove interaction module | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, section (#step-8-2)
+- `crates/specks/src/main.rs` - Module declarations
+- `crates/specks/src/interaction/` - Module files
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Delete `crates/specks/src/interaction/` directory entirely | Done |
+| Remove `mod interaction;` declaration | Done |
+
+**Files Deleted:**
+- `crates/specks/src/interaction/mod.rs` - Interaction module exports
+- `crates/specks/src/interaction/cli_adapter.rs` - CLI adapter for terminal interaction
+
+**Files Modified:**
+- `crates/specks/src/main.rs` - Removed `mod interaction;` declaration
+- `crates/specks/src/colors.rs` - Added `#[allow(dead_code)]` to `SemanticColors` (warning field became unused)
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 217 tests passed
+
+**Checkpoints Verified:**
+- `cargo build` succeeds: PASS
+
+**Key Decisions/Notes:**
+- The `SemanticColors` struct in `colors.rs` had its `warning` field become unused after removing the interaction module. Added `#[allow(dead_code)]` to the struct to suppress the warning, as the colors module may still be needed by remaining functionality.
+
+---
+
 ## [specks-3.md] Step 8.1: Remove planning_loop module | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
