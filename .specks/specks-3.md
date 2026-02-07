@@ -18,34 +18,54 @@
 
 ### Agents and Skills Summary {#agents-skills-summary}
 
-This phase defines **1 agent and 12 skills** (single-agent architecture). The director is the ONLY agent context; all other components run as inline skills.
+This phase defines **3 agents and 12 skills** (dual-orchestrator architecture). Two top-level skills (`planner` and `implementer`) run the planning and implementation loops synchronously. No director agent. Sub-tasks run as skills for simple work; agent variants exist for complex tasks.
 
-**Architecture principle:** One Agent to Rule Them All. This eliminates the 11+ nested agent contexts that caused Claude Code crashes.
+**Architecture principle:** Skill-first, agent-escalation. Orchestrators try lightweight skills first, escalate to agent variants when tasks need more power. Maximum ONE agent context active at any time.
+
+**Terminology:** A `task` refers to either a skill or an agent. Sub-tasks are the workers that orchestrators invoke.
 
 #### Agents {#agent-summary}
 
+Agents have `-agent` suffix to distinguish from skill counterparts.
+
 | Agent | Remit |
 |-------|-------|
-| **director** | THE ONLY AGENT. Pure orchestrator. Coordinates workflow via Skill tool exclusively. Writes only audit trail files (run directory). Never edits code or interacts with users directly. |
+| **architect-agent** | Full agentic power for complex implementation strategy creation. Used when skill variant is insufficient. |
+| **author-agent** | Full agentic power for complex speck creation/revision. Used when skill variant is insufficient. |
+| **coder-agent** | Full agentic power for complex implementation with drift detection. Used when skill variant is insufficient. |
 
-*Note: If AskUserQuestion fails from skill context (tested in Step 10.5.1), interviewer remains as a second agent (fallback: 2 agents max).*
+**Agent count:** 3 agent files total (architect-agent, author-agent, coder-agent).
 
 #### Skills {#skill-summary}
 
+**Orchestrators (entry points):**
+
 | Skill | Spec | Remit |
 |-------|------|-------|
-| **plan** | S01 | Entry point. User invokes `/specks:plan`. Spawns director with mode=plan. |
-| **execute** | S02 | Entry point. User invokes `/specks:execute`. Spawns director with mode=execute. |
+| **planner** | S01 | ORCHESTRATOR. Entry point `/specks:planner`. Runs planning loop synchronously. Invokes sub-tasks one at a time. |
+| **implementer** | S02 | ORCHESTRATOR. Entry point `/specks:implementer`. Runs implementation loop synchronously. Invokes sub-tasks one at a time. |
+
+**Sub-tasks (skill-only):**
+
+| Skill | Spec | Remit |
+|-------|------|-------|
 | **clarifier** | S03 | Analyzes idea or critic feedback. Returns clarifying questions with options. JSON output. |
 | **critic** | S04 | Reviews speck for skeleton compliance, completeness, implementability. Returns APPROVE/REVISE/REJECT. JSON output. |
 | **reviewer** | S05 | Verifies completed step matches plan. Checks tasks, tests, artifacts. Returns APPROVE/REVISE/ESCALATE. JSON output. |
 | **auditor** | S06 | Checks code quality, error handling, security. Returns severity-ranked issues. JSON output. |
 | **logger** | S07 | Updates `.specks/specks-implementation-log.md` with completed work. JSON output. |
 | **committer** | S08 | Finalizes step: stages files, commits changes, closes associated bead. JSON output. |
-| **architect** | S09 | Creates implementation strategies for steps. Returns JSON with expected touch set. Read-only. |
-| **implementer** | S10 | Executes architect strategies with self-monitoring for drift. Writes code, runs tests. Self-halts on drift. |
-| **planner** | S11 | Creates and revises speck documents. Writes structured markdown plans to `.specks/`. |
-| **interviewer** | S12 | Single point of user interaction. Presents questions/feedback via AskUserQuestion. Returns structured decisions. |
+| **interviewer** | S09 | Single point of user interaction. Presents questions/feedback via AskUserQuestion. Returns structured decisions. |
+
+**Sub-tasks (skill+agent pairs):**
+
+| Skill | Spec | Agent Variant | Remit |
+|-------|------|---------------|-------|
+| **architect** | S10 | architect-agent | Creates implementation strategies for steps. Returns JSON with expected touch set. Read-only. |
+| **author** | S11 | author-agent | Creates and revises speck documents. Writes structured markdown to `.specks/`. |
+| **coder** | S12 | coder-agent | Executes architect strategies with drift detection. Writes code, runs tests. |
+
+*Note: `plan` and `execute` entry points are REPLACED by `planner` and `implementer` (not renamed—completely new orchestration skills).*
 
 ---
 
@@ -70,7 +90,7 @@ A plugin provides:
 - `skills/` directory at repo root - automatically discovered
 - `agents/` directory at repo root - automatically discovered
 - `.claude-plugin/plugin.json` - metadata and versioning
-- Namespacing: `/specks:plan`, `specks:director`, etc.
+- Namespacing: `/specks:planner`, `specks:coder-agent`, etc.
 - Distribution via marketplaces or `--plugin-dir`
 
 This is a brand new library with ZERO external users. No deprecation, no migration, clean breaks only.
@@ -115,11 +135,12 @@ claude plugin install specks
 See (#agents-skills-summary) for the complete list of agents and skills.
 
 - `.claude-plugin/plugin.json` exists with valid manifest
-- `skills/` directory at repo root contains 8 skills per (#skill-summary)
-- `agents/` directory at repo root contains 5 agents per (#agent-summary)
+- `skills/` directory at repo root contains 12 skills per (#skill-summary)
+- `agents/` directory at repo root contains 3 agents per (#agent-summary)
 - `claude --plugin-dir .` loads specks as a plugin with all skills/agents available
-- `/specks:plan` and `/specks:execute` skills work
-- `specks:director` agent can be invoked via Task tool
+- `/specks:planner` and `/specks:implementer` orchestration skills work
+- Skill-first, agent-escalation pattern demonstrated
+- Maximum 1 agent context active at any time
 - `specks plan` and `specks execute` CLI commands removed
 - `specks setup claude` command removed
 - `.claude/skills/` directory removed (replaced by `skills/`)
@@ -129,9 +150,12 @@ See (#agents-skills-summary) for the complete list of agents and skills.
 #### Scope {#scope}
 
 1. Create `.claude-plugin/plugin.json` manifest
-2. Create `skills/` directory with 6 new skills (clarifier, critic, reviewer, auditor, logger, committer)
-3. Move entry point skills from `.claude/skills/` to `skills/` (plan, execute)
-4. Update agent definitions at `agents/` (keep 5, remove 7)
+2. Create `skills/` directory with 12 skills:
+   - 2 orchestrators: `planner`, `implementer`
+   - 7 skill-only sub-tasks: auditor, clarifier, committer, critic, interviewer, logger, reviewer
+   - 3 skill+agent pairs (skill side): architect, author, coder
+3. Create/rename agent definitions at `agents/` (3 agents with `-agent` suffix: architect-agent, author-agent, coder-agent)
+4. Delete director agent, archive old agent files
 5. Remove Rust orchestration code (plan.rs, execute.rs, planning_loop/, streaming.rs, interaction/)
 6. Remove `specks setup claude` command and share.rs
 7. Remove `.claude/skills/` directory (legacy skills)
@@ -143,7 +167,7 @@ See (#agents-skills-summary) for the complete list of agents and skills.
 - Adding new features beyond architecture simplification
 - Changing the speck file format
 - Modifying beads integration beyond validation, error handling, and onboarding docs
-- Testing the full planning/execution loop (Phase 4)
+- Testing the full planning/implementation loop (Phase 4)
 
 ---
 
@@ -368,7 +392,7 @@ Closes a bead to mark work complete.
 
 **Question:** What should the plugin name be?
 
-**Resolution:** DECIDED - use `specks`. Skills become `/specks:plan`, `/specks:execute`, etc. Agents become `specks:director`, etc.
+**Resolution:** DECIDED - use `specks`. Skills become `/specks:planner`, `/specks:implementer`, etc. Agents become `specks:coder-agent`, etc.
 
 ---
 
@@ -405,16 +429,18 @@ Closes a bead to mark work complete.
 
 ---
 
-#### [D02] Director is pure orchestrator (DECIDED) {#d02-pure-orchestrator}
+#### [D02] Director is pure orchestrator (SUPERSEDED by D08) {#d02-pure-orchestrator}
 
-**Decision:** The director agent only coordinates via Task tool and Skill tool. It writes only audit trail files (run directory), never edits files, and never interacts with users directly.
+**⚠️ SUPERSEDED:** This decision described the director agent as a pure orchestrator. D08 (Dual-orchestrator architecture) eliminates the director entirely. Orchestration is now handled by two top-level skills: `planner` and `implementer`. See D08 for the current architecture.
 
-**Rationale:**
+**Original decision (historical):** The director agent only coordinates via Task tool and Skill tool. It writes only audit trail files (run directory), never edits files, and never interacts with users directly.
+
+**Rationale (historical):**
 - Keeps orchestration logic separate from work execution
 - All file operations delegated to specialists (planner, implementer)
 - All user interaction delegated to interviewer
 
-**Implications:**
+**Implications (historical, now superseded):**
 - Director's tools: Task, Skill, Read, Grep, Glob, Bash, Write (Write for audit trail only)
 - Remove Edit, AskUserQuestion from director (Write kept for audit trail)
 - Director can invoke skills via Skill tool
@@ -432,27 +458,28 @@ Closes a bead to mark work complete.
 - Skills produce structured JSON, ideal for director consumption
 - Verified: Claude Code docs confirm skills are NOT read-only; they can write files
 
-**Implications:**
-- 6 agents become skills per (#skill-summary): clarifier, critic, reviewer, auditor, logger, committer
-- 5 agents remain: director, planner, interviewer, architect, implementer
-- Implementer agent includes self-monitoring for drift detection (see #smart-drift)
+**Implications (updated for D08 architecture):**
+- 6 agents become skills per original (#skill-summary): clarifier, critic, reviewer, auditor, logger, committer
+- After D08: 3 agents remain with `-agent` suffix: architect-agent, author-agent, coder-agent
+- Coder-agent includes self-monitoring for drift detection (see #smart-drift)
 - Skills specify `allowed-tools` as needed (all get baseline Read, Grep, Glob plus additional tools)
 - Skills return JSON-only output
 
 ---
 
-#### [D04] Interviewer handles all user interaction (DECIDED) {#d04-interviewer-role}
+#### [D04] Interviewer handles all user interaction (DECIDED, updated for D08) {#d04-interviewer-role}
 
-**Decision:** The interviewer agent is the single point of user interaction. Director passes data to interviewer, interviewer presents via AskUserQuestion, returns user decisions.
+**Decision:** The interviewer is the single point of user interaction. Orchestrators pass data to interviewer, interviewer presents via AskUserQuestion, returns user decisions.
 
 **Rationale:**
-- Director stays pure orchestrator (no AskUserQuestion)
+- Orchestrators stay focused on coordination (not user interaction)
 - User interaction logic consolidated in one place
 
-**Implications:**
+**Implications (updated for D08):**
+- Interviewer is a **skill** (AskUserQuestion works from skill context - verified)
 - Interviewer receives questions from clarifier skill, results from critic skill
-- Interviewer returns structured decisions to director
-- Director never calls AskUserQuestion directly
+- Interviewer returns structured decisions to orchestrator (planner or implementer)
+- Orchestrators invoke via `Skill(skill: "specks:interviewer")`
 
 ---
 
@@ -461,23 +488,23 @@ Closes a bead to mark work complete.
 **Decision:** Remove `plan` and `execute` CLI commands. Remove `setup claude` command. Keep: init, validate, list, status, beads, version.
 
 **Rationale:**
-- Planning and execution happen inside Claude Code via `/specks:plan` and `/specks:execute`
+- Planning and execution happen inside Claude Code via `/specks:planner` and `/specks:implementer`
 - Plugin system handles skill/agent distribution (no need for setup command)
 - Eliminates process spawning overhead
 - **Beads integration stays in CLI** - it's operational tooling (like git), not orchestration
-- Agents can call beads CLI commands via Bash when needed
+- Orchestrators can call beads CLI commands via Bash when needed
 
 **What stays (unchanged):**
 - `specks init` - Initialize project
 - `specks validate` - Validate specks
 - `specks list` - List specks
 - `specks status` - Show progress
-- `specks beads sync|link|status|pull` - Beads integration
+- `specks beads sync|link|status|pull|close` - Beads integration
 - `specks version` - Show version
 
 **What goes:**
-- `specks plan` → replaced by `/specks:plan` skill
-- `specks execute` → replaced by `/specks:execute` skill
+- `specks plan` → replaced by `/specks:planner` orchestration skill
+- `specks execute` → replaced by `/specks:implementer` orchestration skill
 - `specks setup` → plugin system handles distribution
 
 **Implications:**
@@ -505,7 +532,7 @@ Closes a bead to mark work complete.
 
 #### [D07] Skill invocation via Skill tool (DECIDED) {#d07-skill-invocation}
 
-**Decision:** Director invokes skills using Claude Code's native Skill tool.
+**⚠️ HISTORICAL (superseded by D08):** This decision described Skill tool usage from the interim director-based architecture. Under D08, the **planner** and **implementer** orchestration skills invoke sub-task skills via the Skill tool.
 
 **Rationale (verified from docs):**
 - "The Skill tool" exists and can be controlled via permissions: `Skill(name)` or `Skill(name *)`
@@ -513,34 +540,63 @@ Closes a bead to mark work complete.
 - Subagents can preload skills via `skills` frontmatter field
 
 **Implications:**
-- Director uses Skill tool to invoke analysis skills (clarifier, critic, etc.)
+- HISTORICAL: Director used Skill tool to invoke analysis skills (clarifier, critic, etc.)
 - Skill outputs are JSON-only for easy parsing
-- Director spawns agents via Task tool for write operations
+- HISTORICAL: Director spawned agents via Task tool for write operations
 
 **Reference:** https://code.claude.com/docs/en/skills
 
 ---
 
-#### [D08] Single-agent architecture (DECIDED) {#d08-single-agent}
+#### [D08] Dual-orchestrator architecture (DECIDED) {#d08-dual-orchestrator}
 
-**Decision:** Flatten the agent architecture to a single agent context. The director is the ONLY agent; all other components (architect, implementer, planner, interviewer) become skills.
+**Decision:** Replace director agent with two top-level orchestration skills: `planner` (planning loop) and `implementer` (implementation loop). No director. No nested agents. Skills run inline. Agent variants exist for complex sub-tasks.
 
 **Rationale:**
 - The original multi-agent design created 11+ nested agent contexts during execution
 - Claude Code terminal rendering cannot handle this many concurrent contexts
 - Crashes with "Aborted()" message due to rendering overload ("High write ratio: 100% writes")
-- Skills run inline within the director's context, eliminating context proliferation
+- Director was just a router—orchestration logic collapses into the two entry points
+- Both planning and implementation loops are straightforward; no need for agentic complexity
 
-**Implications:**
-- Convert architect, implementer, planner, interviewer from agents to skills
-- Director uses Skill tool exclusively (no Task tool except possibly for interviewer fallback)
-- All skills return JSON-only output for director parsing
-- implementer skill retains full tool access: Read, Grep, Glob, Write, Edit, Bash
-- If AskUserQuestion fails from skill context, interviewer remains as the ONE exception (2 agents max)
+**Architecture:**
+```
+Entry Points (orchestration skills, run inline):
+  /specks:planner     → runs planning loop synchronously
+  /specks:implementer → runs implementation loop synchronously
+
+Sub-tasks:
+  Skill-only:                   Skill + Agent pairs:
+  ───────────────               ─────────────────────
+  auditor                       architect / architect-agent
+  clarifier                     author / author-agent
+  committer                     coder / coder-agent
+  critic
+  interviewer (TBD)
+  logger
+  reviewer
+```
+
+**Naming:**
+- Current `planner` agent → renamed to `author` (skill + agent)
+- Current `implementer` agent → renamed to `coder` (skill + agent)
+- All agents have `-agent` suffix to distinguish from skill counterparts
+- `planner` and `implementer` become the new orchestration skill names
+
+**Skill-first, agent-escalation:**
+- Orchestrators invoke skill variants by default for simple tasks
+- Escalate to agent variants when tasks are complex or skill variant struggles
+- Orchestrators monitor progress and can retry with more "agent muscle" if needed
+- One-task-at-a-time constraint: orchestrators invoke sub-tasks sequentially
+
+**Benefits:**
+- Greatly simplified design (no director, no nesting)
+- Completely avoids "Aborted()" crash (max 1 agent context at any time)
+- Any sub-task can be invoked directly via slash command for dev flexibility
 
 **Testing:**
-- Step 10.5.1 tests AskUserQuestion availability from skill context
-- If test fails, interviewer remains an agent (acceptable fallback)
+- Step 10.5.1 verified AskUserQuestion works from skill context
+- Interviewer is a skill (no agent fallback needed)
 
 **Reference:** Step 10.5 in this speck
 
@@ -555,19 +611,22 @@ Closes a bead to mark work complete.
 | Resource | File/Folder Name | Frontmatter Name | User Invocation | Tool Invocation |
 |----------|-----------------|------------------|-----------------|-----------------|
 | Skill | `skills/clarifier/SKILL.md` | `name: clarifier` | `/specks:clarifier` | `Skill(skill: "specks:clarifier")` |
-| Agent | `agents/director.md` | `name: director` | N/A | `Task(subagent_type: "specks:director")` |
+| Agent | `agents/coder-agent.md` | `name: coder-agent` | N/A | `Task(subagent_type: "specks:coder-agent")` |
+
+**Agent naming rule:** All agents have `-agent` suffix to distinguish from skill counterparts.
+- `architect-agent`, `author-agent`, `coder-agent` (required)
 
 **Namespacing rule (applies to BOTH skills AND agents):**
 - Plugin name `specks` provides the namespace prefix automatically
-- Skill folder `skills/plan/` becomes `/specks:plan`
-- Agent file `agents/director.md` becomes `specks:director`
+- Skill folder `skills/planner/` becomes `/specks:planner`
+- Agent file `agents/coder-agent.md` becomes `specks:coder-agent`
 - Both Skill and Task tools use the colon-namespaced format
 
 **Consistency rule:** Always use fully-qualified namespaced names in code:
 - `Skill(skill: "specks:clarifier")` not `Skill(skill: "clarifier")`
-- `Task(subagent_type: "specks:director")` not `Task(subagent_type: "director")`
+- `Task(subagent_type: "specks:coder-agent")` not `Task(subagent_type: "coder-agent")`
 
-**Syntax verification:** The exact Skill tool invocation syntax (`Skill(skill: "specks:clarifier")`) is verified in Step 10. If the actual syntax differs, update this section and all director references before proceeding past Step 10. Step 10 is the hard gate for syntax correctness.
+**Syntax verification:** The exact Skill tool invocation syntax (`Skill(skill: "specks:clarifier")`) is verified in Step 10. If the actual syntax differs, update this section and all references before proceeding past Step 10. Step 10 is the hard gate for syntax correctness.
 
 **Plugin directory layout:**
 
@@ -576,28 +635,37 @@ specks/                           # Plugin root (repo root)
 ├── .claude-plugin/
 │   └── plugin.json              # Plugin manifest
 ├── skills/                       # Skills (auto-discovered)
-│   ├── plan/
+│   ├── planner/                 # ORCHESTRATOR - planning loop
 │   │   └── SKILL.md
-│   ├── execute/
+│   ├── implementer/             # ORCHESTRATOR - implementation loop
 │   │   └── SKILL.md
-│   ├── clarifier/
+│   ├── architect/               # Sub-task (has agent pair)
 │   │   └── SKILL.md
-│   ├── critic/
+│   ├── author/                  # Sub-task (has agent pair)
 │   │   └── SKILL.md
-│   ├── reviewer/
+│   ├── coder/                   # Sub-task (has agent pair)
 │   │   └── SKILL.md
 │   ├── auditor/
 │   │   └── SKILL.md
+│   ├── clarifier/
+│   │   └── SKILL.md
+│   ├── committer/
+│   │   └── SKILL.md
+│   ├── critic/
+│   │   └── SKILL.md
+│   ├── interviewer/
+│   │   └── SKILL.md
 │   ├── logger/
 │   │   └── SKILL.md
-│   └── committer/
+│   └── reviewer/
 │       └── SKILL.md
 ├── agents/                       # Agents (auto-discovered, namespaced as specks:*)
-│   ├── director.md
-│   ├── planner.md
-│   ├── interviewer.md
-│   ├── architect.md
-│   └── implementer.md
+│   ├── architect-agent.md       # Agent pair for architect skill
+│   ├── author-agent.md          # Agent pair for author skill
+│   ├── coder-agent.md           # Agent pair for coder skill
+│   └── (interviewer is skill-only, no agent needed)
+├── agents/archived/              # Old/replaced agent files
+│   └── director.md              # Archived after Step 10.5
 ├── crates/                       # Rust CLI (unchanged)
 │   ├── specks/
 │   └── specks-core/
@@ -625,12 +693,12 @@ specks/                           # Plugin root (repo root)
 
 ### 3.0.1.1 Orchestration Flowcharts {#orchestration-flowcharts}
 
-These flowcharts define the director's orchestration logic. All steps reference these flows.
+These flowcharts define the orchestration logic for the planner and implementer skills. All steps reference these flows.
 
 **Legend:**
-- `[AGENT]` = spawned via Task tool (isolated context)
-- `(SKILL)` = invoked via Skill tool (inline, JSON output)
-- `{USER}` = interaction via interviewer agent
+- `[AGENT]` = spawned via Task tool (isolated context) - used for escalation
+- `(SKILL)` = invoked via Skill tool (inline, JSON output) - default for sub-tasks
+- `{USER}` = interaction via interviewer skill (AskUserQuestion)
 
 #### Planning Phase Flow {#flow-planning}
 
@@ -638,7 +706,7 @@ These flowcharts define the director's orchestration logic. All steps reference 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         PLANNING PHASE                                       │
 │                                                                              │
-│  User invokes /specks:plan "idea" or /specks:plan path/to/speck.md          │
+│  User invokes /specks:planner "idea" or /specks:planner path/to/speck.md    │
 │                                                                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
@@ -648,32 +716,34 @@ These flowcharts define the director's orchestration logic. All steps reference 
 │       │                                                                      │
 │       ▼                                                                      │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │ [DIRECTOR] receives input, mode=plan                                  │   │
+│  │ (PLANNER) orchestration skill receives input, runs INLINE            │   │
 │  │                                                                       │   │
 │  │ 1. Invoke (CLARIFIER) skill                                          │   │
 │  │    → Returns: analysis{}, questions[], assumptions[]                  │   │
 │  │                                                                       │   │
 │  │ 2. IF questions exist:                                                │   │
-│  │    → Spawn [INTERVIEWER] with questions                               │   │
+│  │    → Invoke (INTERVIEWER) skill/agent with questions                  │   │
 │  │    → Interviewer uses AskUserQuestion                                 │   │
 │  │    → Returns: user_answers{}                                          │   │
 │  │                                                                       │   │
-│  │ 3. Spawn [PLANNER] with:                                              │   │
+│  │ 3. Invoke (AUTHOR) skill with:  ← TRY SKILL FIRST                     │   │
 │  │    - Original idea/speck                                              │   │
 │  │    - User answers (if any)                                            │   │
 │  │    - Clarifier assumptions                                            │   │
 │  │    → Returns: draft speck path                                        │   │
+│  │                                                                       │   │
+│  │    IF task is complex → ESCALATE to [AUTHOR-AGENT]                    │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 │       │                                                                      │
 │       ▼                                                                      │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │ [DIRECTOR] review loop                                                │   │
+│  │ (PLANNER) review loop                                                 │   │
 │  │                                                                       │   │
 │  │ 4. Invoke (CRITIC) skill with draft speck                             │   │
 │  │    → Returns: skeleton_compliant, areas{}, issues[], recommendation   │   │
 │  │                                                                       │   │
 │  │ 5. IF recommendation == REJECT or REVISE:                             │   │
-│  │    → Spawn [INTERVIEWER] with critic issues                           │   │
+│  │    → Invoke (INTERVIEWER) skill/agent with critic issues              │   │
 │  │    → Present issues, get user decision: revise? accept anyway? abort? │   │
 │  │                                                                       │   │
 │  │    IF user says revise:                                               │   │
@@ -690,25 +760,26 @@ These flowcharts define the director's orchestration logic. All steps reference 
 ```
 
 **Key Points:**
-- Director orchestrates via Skill tool (clarifier, critic) and Task tool (interviewer, planner)
-- ALL user interaction goes through interviewer agent
-- Planner never asks users directly (no AskUserQuestion)
+- PLANNER is an orchestration skill, runs inline (no agent context)
+- Skill-first pattern: try (AUTHOR) skill, escalate to [AUTHOR-AGENT] if complex
+- One sub-task at a time (sequential invocation)
+- Maximum 1 agent context at any moment
 - Loop continues until critic approves OR user accepts
 
 ---
 
-#### Execution Phase Flow {#flow-execution}
+#### Implementation Phase Flow {#flow-implementation}
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         EXECUTION PHASE                                      │
+│                         IMPLEMENTATION PHASE                                      │
 │                                                                              │
-│  User invokes /specks:execute path/to/speck.md                               │
+│  User invokes /specks:implementer path/to/speck.md                           │
 │                                                                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │ [DIRECTOR] receives speck, mode=execute                               │   │
+│  │ (IMPLEMENTER) orchestration skill receives speck, runs INLINE        │   │
 │  │                                                                       │   │
 │  │ FOR EACH step in speck.execution_steps:                               │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
@@ -717,34 +788,37 @@ These flowcharts define the director's orchestration logic. All steps reference 
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │ STEP 1: Get Implementation Strategy                                   │   │
 │  │                                                                       │   │
-│  │ Spawn [ARCHITECT] with step details                                   │   │
+│  │ Invoke (ARCHITECT) skill with step details  ← TRY SKILL FIRST         │   │
 │  │ → Returns: strategy, expected_touch_set[], test_plan                  │   │
+│  │                                                                       │   │
+│  │ IF strategy is complex → ESCALATE to [ARCHITECT-AGENT]                │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 │       │                                                                      │
 │       ▼                                                                      │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │ STEP 2: Implementation (with Self-Monitoring)                         │   │
 │  │                                                                       │   │
-│  │ Spawn [IMPLEMENTER] agent with architect strategy                     │   │
-│  │ → Implementer reads strategy, writes code, runs tests                 │   │
-│  │ → Implementer self-monitors against expected_touch_set (see #smart-   │   │
-│  │   drift)                                                              │   │
+│  │ Invoke (CODER) skill with architect strategy  ← TRY SKILL FIRST       │   │
+│  │ → Coder reads strategy, writes code, runs tests                       │   │
+│  │ → Coder self-monitors against expected_touch_set (see #smart-drift)   │   │
 │  │ → Returns: success/failure + drift_assessment                         │   │
 │  │                                                                       │   │
-│  │ IF implementer.halted_for_drift:                                      │   │
-│  │   → Spawn [INTERVIEWER] with drift details                            │   │
-│  │   → User decides: continue anyway? back to architect? abort?          │   │
-│  │   → Director acts on user decision                                    │   │
+│  │ IF task is complex → ESCALATE to [CODER-AGENT]                        │   │
 │  │                                                                       │   │
-│  │ IF implementer.success == false (non-drift failure):                  │   │
-│  │   → Handle error, may retry or escalate                               │   │
+│  │ IF coder.halted_for_drift:                                            │   │
+│  │   → Invoke (INTERVIEWER) skill/agent with drift details               │   │
+│  │   → User decides: continue anyway? back to architect? abort?          │   │
+│  │   → IMPLEMENTER acts on user decision                                 │   │
+│  │                                                                       │   │
+│  │ IF coder.success == false (non-drift failure):                        │   │
+│  │   → Handle error, may retry or escalate to [CODER-AGENT]              │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 │       │                                                                      │
 │       ▼                                                                      │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
 │  │ STEP 3: Review + Audit                                                │   │
 │  │                                                                       │   │
-│  │ PARALLEL INVOCATION:                                                  │   │
+│  │ SEQUENTIAL INVOCATION (one at a time):                                │   │
 │  │                                                                       │   │
 │  │   (REVIEWER) skill                 (AUDITOR) skill                    │   │
 │  │   ├─ Checks plan adherence         ├─ Checks code quality             │   │
@@ -754,7 +828,7 @@ These flowcharts define the director's orchestration logic. All steps reference 
 │  │   └─ Returns: APPROVE|REVISE|      └─ Returns: APPROVE|FIX_REQUIRED|  │   │
 │  │              ESCALATE                         MAJOR_REVISION          │   │
 │  │                                                                       │   │
-│  │ Director evaluates both reports                                       │   │
+│  │ IMPLEMENTER evaluates both reports                                    │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 │       │                                                                      │
 │       ▼                                                                      │
@@ -762,9 +836,9 @@ These flowcharts define the director's orchestration logic. All steps reference 
 │  │ STEP 4: Resolution                                                    │   │
 │  │                                                                       │   │
 │  │ IF issues found:                                                      │   │
-│  │   ├─ Minor quality issues → Re-spawn [IMPLEMENTER] with fixes         │   │
-│  │   ├─ Design issues → Back to [ARCHITECT] for new strategy             │   │
-│  │   └─ Conceptual issues → Spawn [INTERVIEWER], may need re-planning    │   │
+│  │   ├─ Minor quality issues → Re-invoke (CODER) or [CODER-AGENT]        │   │
+│  │   ├─ Design issues → Back to (ARCHITECT) or [ARCHITECT-AGENT]         │   │
+│  │   └─ Conceptual issues → Invoke (INTERVIEWER), may need re-planning   │   │
 │  │                                                                       │   │
 │  │ IF both reports clean:                                                │   │
 │  │   1. Invoke (LOGGER) skill → Updates implementation log               │   │
@@ -784,11 +858,11 @@ These flowcharts define the director's orchestration logic. All steps reference 
 ```
 
 **Key Points:**
-- Director coordinates all skills and agents
-- Implementer includes **self-monitoring** for drift detection (see #smart-drift)
-- Implementer runs to completion OR self-halts when drift thresholds exceeded
-- On drift halt, director spawns interviewer for user decision
-- Reviewer and auditor run in parallel (both are inline skills)
+- IMPLEMENTER is an orchestration skill, runs inline (no agent context)
+- Skill-first pattern: try (ARCHITECT)/(CODER) skills, escalate to agents if complex
+- One sub-task at a time (sequential invocation, no parallelism)
+- Maximum 1 agent context at any moment
+- Coder includes **self-monitoring** for drift detection (see #smart-drift)
 - ALL escalation decisions go through interviewer for user input
 - Logger and committer are invoked after each successful step
 
@@ -796,19 +870,34 @@ These flowcharts define the director's orchestration logic. All steps reference 
 
 #### Tool Invocation Summary {#flow-tools}
 
-| Component | Type | Invocation | Purpose |
-|-----------|------|------------|---------|
-| **director** | Agent | Entry point (spawned by plan/execute skills) | Orchestrates entire workflow |
-| **planner** | Agent | `Task(subagent_type: "specks:planner")` | Creates/revises speck documents |
-| **interviewer** | Agent | `Task(subagent_type: "specks:interviewer")` | All user interaction |
-| **architect** | Agent | `Task(subagent_type: "specks:architect")` | Implementation strategies |
-| **implementer** | Agent | `Task(subagent_type: "specks:implementer")` | Executes architect strategies with self-monitoring for drift |
-| **clarifier** | Skill | `Skill(skill: "specks:clarifier")` | Generates clarifying questions |
-| **critic** | Skill | `Skill(skill: "specks:critic")` | Reviews speck quality |
-| **reviewer** | Skill | `Skill(skill: "specks:reviewer")` | Verifies step completion |
-| **auditor** | Skill | `Skill(skill: "specks:auditor")` | Code quality/security checks |
-| **logger** | Skill | `Skill(skill: "specks:logger")` | Updates implementation log |
-| **committer** | Skill | `Skill(skill: "specks:committer")` | Git commit operations |
+**Orchestrators (entry points, run inline):**
+
+| Component | Type | User Invocation | Purpose |
+|-----------|------|-----------------|---------|
+| **planner** | Skill | `/specks:planner "idea"` | Orchestrates planning loop |
+| **implementer** | Skill | `/specks:implementer path.md` | Orchestrates implementation loop |
+
+**Sub-tasks with skill+agent pairs:**
+
+| Skill | Agent | Purpose |
+|-------|-------|---------|
+| `Skill(skill: "specks:architect")` | `Task(subagent_type: "specks:architect-agent")` | Implementation strategies |
+| `Skill(skill: "specks:author")` | `Task(subagent_type: "specks:author-agent")` | Creates/revises speck documents |
+| `Skill(skill: "specks:coder")` | `Task(subagent_type: "specks:coder-agent")` | Executes strategies with drift detection |
+
+**Skill-only sub-tasks:**
+
+| Component | Invocation | Purpose |
+|-----------|------------|---------|
+| **auditor** | `Skill(skill: "specks:auditor")` | Code quality/security checks |
+| **clarifier** | `Skill(skill: "specks:clarifier")` | Generates clarifying questions |
+| **committer** | `Skill(skill: "specks:committer")` | Git commit operations |
+| **critic** | `Skill(skill: "specks:critic")` | Reviews speck quality |
+| **interviewer** | `Skill(skill: "specks:interviewer")` | All user interaction |
+| **logger** | `Skill(skill: "specks:logger")` | Updates implementation log |
+| **reviewer** | `Skill(skill: "specks:reviewer")` | Verifies step completion |
+
+*Note: AskUserQuestion works from skill context. Interviewer is skill-only (no agent variant needed).*
 
 ---
 
@@ -844,12 +933,13 @@ Each planning or execution session creates an audit trail in `.specks/runs/`.
 
 | Component | Access | Responsibility |
 |-----------|--------|----------------|
-| **director** | Write tool | Creates run directory (Bash), writes metadata.json and all skill outputs (Write) |
-| **planner** | Write | Writes draft speck to `.specks/` (not runs/) |
-| **architect** | Read | Reads speck; director persists strategy to runs/ |
-| **All skills** | None | Return JSON to director; director persists to runs/ |
+| **planner orchestrator** | Write, Bash | Creates run directory, writes metadata.json and all sub-task outputs for planning phase |
+| **implementer orchestrator** | Write, Bash | Creates run directory, writes metadata.json and all sub-task outputs for execution phase |
+| **author** | Write | Writes draft speck to `.specks/` (not runs/) |
+| **architect** | Read | Reads speck; orchestrator persists strategy to runs/ |
+| **All sub-tasks** | Varies | Return JSON to orchestrator; orchestrator persists to runs/ |
 
-**Key design:** Skills return JSON to director. Director persists all outputs to runs directory using the Write tool. This keeps skills stateless and director as single source of truth for audit trail.
+**Key design:** Sub-tasks return JSON to their orchestrator. The orchestrator (planner or implementer) persists all outputs to the runs directory. This keeps sub-tasks focused and orchestrators as single source of truth for audit trail.
 
 #### Session ID Format {#session-id}
 
@@ -859,21 +949,14 @@ Examples:
 - `20260206-143022-plan-a1b2c3`
 - `20260206-150145-execute-d4e5f6`
 
-**Generation method:** Director generates session ID at start via Bash:
-```bash
-# Generate session ID
-SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-6)"
-```
+**Generation method:** The orchestrator generates session ID at start via Bash using `/dev/urandom` (portable across macOS and Linux):
 
-Director passes session ID to all components. Fallback chain if primary fails:
 ```bash
-# Fallback 1: /dev/urandom
+# Generate session ID (MODE is "plan" or "impl")
 SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$(head -c 3 /dev/urandom | xxd -p)"
-
-# Fallback 2: PID + RANDOM (final fallback, always works on macOS/Linux)
-SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$$${RANDOM}"
 ```
-*Note: `date +%N` not used because it's unsupported on macOS.*
+
+*Note: Uses `/dev/urandom` instead of `uuidgen` for portability. `date +%N` not used because it's unsupported on macOS.*
 
 #### Metadata Schema {#run-metadata}
 
@@ -890,7 +973,7 @@ SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$$${RANDOM}"
 
 #### JSON Persistence Pattern {#json-persistence}
 
-Director writes JSON to the runs directory using the **Write tool** (not Bash). This avoids all escaping issues and is the natural tool for file creation.
+Orchestrators write JSON to the runs directory using the **Write tool** (not Bash). This avoids all escaping issues and is the natural tool for file creation.
 
 ```
 Write(file_path: ".specks/runs/20260206-143022-plan-a1b2c3/metadata.json", content: <json-string>)
@@ -899,15 +982,17 @@ Write(file_path: ".specks/runs/20260206-143022-plan-a1b2c3/metadata.json", conte
 **Why Write, not Bash:**
 - Write tool handles content exactly as provided - no escaping needed
 - More reliable than heredocs or echo for JSON with special characters
-- Audit trail is director's responsibility, not delegation - Write is appropriate
+- Audit trail is orchestrator's responsibility - Write is appropriate
 - Bash is reserved for: `mkdir -p` (directory creation), `uuidgen`/`date` (ID generation)
 
-**Director tool usage:**
+**Orchestrator tool usage:**
 | Tool | Used for |
 |------|----------|
 | Bash | `mkdir -p .specks/runs/<session-id>/planning`, session ID generation |
 | Write | All JSON file writes (metadata.json, skill outputs, agent outputs) |
 | Read | Reading speck files, checking existing state |
+| Skill | Invoking sub-tasks |
+| Task | Escalating to agent variants when needed |
 
 ---
 
@@ -925,28 +1010,76 @@ Each skill lives at `skills/<skill-name>/SKILL.md`.
 
 #### Skill Permissions Summary {#skill-permissions}
 
+**Orchestrators** (entry points, run the loops):
+
 | Skill | allowed-tools | Reason |
 |-------|---------------|--------|
-| **plan** | Task | Spawns director |
-| **execute** | Task | Spawns director |
-| **clarifier** | Read, Grep, Glob | Reads codebase for context |
-| **critic** | Read, Grep, Glob | Reads speck for review |
-| **reviewer** | Read, Grep, Glob | Checks plan artifacts |
+| **planner** | Skill, Task, Read, Grep, Glob, Write, Bash | Orchestrates planning loop, invokes sub-tasks, persists to runs/ |
+| **implementer** | Skill, Task, Read, Grep, Glob, Write, Bash | Orchestrates implementation loop, invokes sub-tasks, persists to runs/ |
+
+**Sub-tasks with skill+agent pairs:**
+
+| Skill | allowed-tools | Agent variant |
+|-------|---------------|---------------|
+| **architect** | Read, Grep, Glob | architect-agent (full agentic power) |
+| **author** | Read, Grep, Glob, Write, Edit | author-agent (full agentic power) |
+| **coder** | Read, Grep, Glob, Write, Edit, Bash | coder-agent (includes drift detection) |
+
+**Skill-only sub-tasks:**
+
+| Skill | allowed-tools | Reason |
+|-------|---------------|--------|
 | **auditor** | Read, Grep, Glob | Reads code for quality |
+| **clarifier** | Read, Grep, Glob | Reads codebase for context |
+| **committer** | Read, Grep, Glob, Bash | `git add`, `git commit`, `specks beads close` |
+| **critic** | Read, Grep, Glob | Reads speck for review |
+| **interviewer** | AskUserQuestion | Presents questions to user |
 | **logger** | Read, Grep, Glob, Edit | Updates implementation log |
-| **committer** | Read, Grep, Glob, Bash | `git add`, `git commit` |
+| **reviewer** | Read, Grep, Glob | Checks plan artifacts |
 
 **Baseline:** All skills get `Read, Grep, Glob` for codebase access. Additional tools added only where needed.
 
-**Note:** Implementer is an agent, not a skill. It includes self-monitoring for drift detection. See (#implementer-agent-contract) for its tool configuration and drift detection heuristics.
-
 #### Skill Tool Invocation Contract {#skill-invocation-contract}
 
-**Invocation:** The director invokes skills via the Skill tool using the skill's frontmatter `name:` and a single argument string or JSON payload.
+**Invocation:** Orchestrators invoke sub-tasks via the Skill tool (or Task tool for agent escalation) using the fully-qualified name and a JSON payload.
+
+**Skill invocation:**
+```
+Skill(skill: "specks:clarifier", args: '{"idea": "...", "speck_path": null}')
+```
+
+**Agent escalation:**
+```
+Task(subagent_type: "specks:author-agent", prompt: "Create speck for: ...")
+```
+
+##### How Skills Work (Critical Context) {#how-skills-work}
+
+**Skills work through prompt injection, not function calls.** This has important implications for orchestration:
+
+| Mechanism | How It Works | Output Capture |
+|-----------|--------------|----------------|
+| **Skill tool** | Injects skill content into Claude's prompt as instructions | Output flows through conversation context, visible to Claude's reasoning |
+| **Task tool** | Spawns isolated subagent with separate context | Agent returns structured output when complete |
+
+**Key insight:** Skills don't have return values. When Claude invokes a skill, the skill's SKILL.md content becomes part of Claude's instructions, and Claude executes within that expanded context.
+
+**Implications for orchestration:**
+1. **Skills don't need `Skill` in allowed-tools** - Claude decides which skills to use based on context and skill descriptions
+2. **Output capture is implicit** - Sub-task skill output appears in the conversation, and the orchestrator (which is also a skill running in Claude's context) can parse it
+3. **JSON output convention** - Sub-tasks output JSON-only so Claude can parse it as it continues reasoning
+4. **For complex I/O needs** - Use Task tool (agents) which have explicit input/output boundaries
+
+**Orchestrator output capture pattern:**
+1. Orchestrator invokes sub-task skill
+2. Sub-task skill outputs JSON (no prose, no fences)
+3. JSON appears in conversation context
+4. Orchestrator parses JSON and continues processing
+5. Orchestrator persists output to run directory using Write tool
 
 **Input format:**
-- Provide only the inputs listed in each skill spec
-- If multiple inputs are needed, encode as JSON (preferred) or a structured string
+- Provide only the inputs listed in each skill/agent spec
+- Encode as JSON (preferred)
 - Paths are repo-relative when possible
 
 **Output format:**
@@ -956,56 +1089,110 @@ Each skill lives at `skills/<skill-name>/SKILL.md`.
   - `error`: "string" describing the failure
   - `recommendation`: "REVISE|PAUSE|HALT" (use the closest matching enum for the spec)
 
-**Director parsing rules:**
-- Reject any non-JSON output and re-run the skill once
-- If the second run fails, escalate to the interviewer with an error summary
+**Orchestrator parsing rules:**
+- Reject any non-JSON output and re-run the sub-task once
+- If the second run fails, escalate: try agent variant if available, or invoke interviewer
 - Persist the raw JSON in the run directory for audit
 
-#### plan Skill (Entry Point) {#skill-plan}
+**Escalation triggers:**
+- Sub-task returns error or invalid JSON
+- Task complexity exceeds skill capability (heuristic: 3+ files, deep codebase exploration)
+- Reviewer/critic reports issues that skill variant cannot address
 
-**Spec S01: plan** {#s01-plan}
+#### planner Skill (Orchestrator) {#skill-planner}
+
+**Spec S01: planner** {#s01-planner}
 
 **Flow:** See (#flow-planning) for complete orchestration.
 
 ```yaml
 ---
-name: plan
-description: Create or revise a speck through agent collaboration
+name: planner
+description: Orchestrates the planning loop from idea to approved speck
 disable-model-invocation: true
-allowed-tools: Task
+allowed-tools: Skill, Task, Read, Grep, Glob, Write, Bash
 ---
 ```
-*Note: Task required to spawn director agent.*
 
 **Behavior:**
 1. Accepts: idea text OR path to existing speck
-2. Spawns director agent with `mode=plan` via Task tool
-3. Director executes Planning Phase Flow (#flow-planning)
-4. Returns: path to approved speck
+2. **Setup phase** (BEFORE any sub-task invocation):
+   ```bash
+   MODE="plan"
+   SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$(head -c 3 /dev/urandom | xxd -p)"
+   mkdir -p .specks/runs/${SESSION_ID}/planning
+   ```
+   Then write `metadata.json` using Write tool.
+3. Executes Planning Phase Flow (#flow-planning) directly:
+   - Invoke `Skill(specks:clarifier)` → persist to `001-clarifier.json`
+   - If questions: invoke `Skill(specks:interviewer)` → persist to `002-interviewer.json`
+   - Invoke `Skill(specks:author)` → persist to `003-author.json`
+     - Escalate to `Task(specks:author-agent)` if complex
+   - Invoke `Skill(specks:critic)` → persist to `004-critic.json`
+   - Loop if REVISE (increment counter), exit if APPROVE
+4. **Finalize phase**: Update `metadata.json` with `status: "completed"` and `completed_at`
+5. Returns: path to approved speck
+
+**State management:**
+- Orchestrator persists all sub-task outputs to runs directory using Write tool
+- File naming: `NNN-<subtask>.json` where NNN is zero-padded counter
+- Each sub-task receives relevant context as JSON input
+- One sub-task at a time (sequential invocation)
+
+**Escalation triggers:**
+- Author skill fails validation twice → escalate to author-agent
+- Critic issues require significant restructuring → escalate to author-agent
 
 ---
 
-#### execute Skill (Entry Point) {#skill-execute}
+#### implementer Skill (Orchestrator) {#skill-implementer}
 
-**Spec S02: execute** {#s02-execute}
+**Spec S02: implementer** {#s02-implementer}
 
-**Flow:** See (#flow-execution) for complete orchestration.
+**Flow:** See (#flow-implementation) for complete orchestration.
 
 ```yaml
 ---
-name: execute
-description: Execute a speck through agent orchestration
+name: implementer
+description: Orchestrates the implementation loop from speck to completed code
 disable-model-invocation: true
-allowed-tools: Task
+allowed-tools: Skill, Task, Read, Grep, Glob, Write, Bash
 ---
 ```
-*Note: Task required to spawn director agent.*
 
 **Behavior:**
 1. Accepts: path to approved speck
-2. Spawns director agent with `mode=execute` via Task tool
-3. Director executes Execution Phase Flow (#flow-execution) for each step
-4. Returns: completion status, log of changes
+2. **Setup phase** (BEFORE any sub-task invocation):
+   ```bash
+   MODE="impl"
+   SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$(head -c 3 /dev/urandom | xxd -p)"
+   mkdir -p .specks/runs/${SESSION_ID}/execution
+   ```
+   Then write `metadata.json` using Write tool.
+3. **For each step** in speck (iterate in order, respecting dependencies):
+   - Create step subdirectory: `mkdir -p .specks/runs/${SESSION_ID}/execution/step-N`
+   - Invoke `Skill(specks:architect)` → persist to `step-N/architect.json`
+     - Escalate to `Task(specks:architect-agent)` if strategy is complex
+   - Invoke `Skill(specks:coder)` → persist to `step-N/coder.json`
+     - Escalate to `Task(specks:coder-agent)` if implementation is complex or drift detected
+   - Invoke `Skill(specks:reviewer)` → persist to `step-N/reviewer.json`
+   - Invoke `Skill(specks:auditor)` → persist to `step-N/auditor.json`
+   - Handle issues: retry coder, go back to architect, or invoke interviewer
+   - Invoke `Skill(specks:logger)` → persist to `step-N/logger.json`
+   - Invoke `Skill(specks:committer)` → persist to `step-N/committer.json`
+4. **Finalize phase**: Write `execution/summary.json`, update `metadata.json` with `status: "completed"`
+5. Returns: completion status, log of changes
+
+**State management:**
+- Orchestrator persists all sub-task outputs to runs directory per step using Write tool
+- Step directories: `execution/step-0/`, `execution/step-1/`, etc.
+- Each sub-task receives relevant context as JSON input
+- One sub-task at a time (sequential invocation)
+
+**Escalation triggers:**
+- Architect skill struggles with complex codebase → escalate to architect-agent
+- Coder skill fails tests or detects drift → escalate to coder-agent
+- Coder skill touches 3+ unexpected files → escalate to coder-agent
 
 ---
 
@@ -1295,15 +1482,408 @@ allowed-tools: Read, Grep, Glob, Bash
   "committed": true,
   "commit_hash": "string",
   "bead_closed": true,
-  "bead_id": "string | null"
+  "bead_id": "string | null",
+  "warnings": ["string"]
+}
+```
+- `warnings`: Non-fatal issues encountered (e.g., bead already closed, bead close failed but commit succeeded)
+
+**Edge Case Handling:**
+
+| Scenario | Behavior | Output |
+|----------|----------|--------|
+| Bead already closed | Commit proceeds, report warning | `bead_closed: true, warnings: ["Bead already closed"]` |
+| Bead ID not found | Commit proceeds, report warning | `bead_closed: false, warnings: ["Bead not found: <id>"]` |
+| Commit succeeds, bead close fails | Report partial success | `committed: true, bead_closed: false, warnings: ["Bead close failed: <reason>"]` |
+| No bead_id provided | Commit only, skip bead close | `bead_closed: false, bead_id: null` |
+| Bead sync out of date | Not detectable by committer | Orchestrator responsibility to sync before implementation |
+
+**Principle:** The commit is the primary deliverable. Bead operations are secondary. If bead close fails, the committer still reports success for the commit but includes a warning about the bead failure.
+
+---
+
+#### interviewer Skill {#skill-interviewer}
+
+**Spec S09: interviewer** {#s09-interviewer}
+
+**Purpose:** Handle all user interaction. Present questions, feedback, and decisions via AskUserQuestion.
+
+**Frontmatter:**
+```yaml
+---
+name: interviewer
+description: Single point of user interaction for orchestration workflows
+allowed-tools: AskUserQuestion
+---
+```
+
+**Input JSON:**
+```json
+{
+  "context": "clarifier | critic | drift | review",
+  "speck_path": "string",
+  "step_anchor": "string | null",
+  "payload": { ... }
+}
+```
+- `context`: What triggered this interview
+- `speck_path`: Path to the speck being worked on
+- `step_anchor`: Which step (null during planning)
+- `payload`: Context-specific data (see Interviewer Skill Contract #interviewer-contract)
+
+**Output JSON:**
+```json
+{
+  "context": "clarifier | critic | drift | review",
+  "decision": "continue | halt | revise",
+  "user_answers": { ... },
+  "notes": "string | null"
 }
 ```
 
 ---
 
-#### implementer (Agent, not Skill) {#implementer-note}
+#### architect Skill {#skill-architect}
 
-**Note:** Implementer is an **agent**, not a skill. It includes self-monitoring for drift detection. See (#implementer-agent-contract) for the input/output contract and drift detection heuristics.
+**Spec S10: architect** {#s10-architect}
+
+**Purpose:** Create implementation strategies for speck steps. Skill variant for straightforward strategies.
+
+**Frontmatter:**
+```yaml
+---
+name: architect
+description: Creates implementation strategies for speck steps
+allowed-tools: Read, Grep, Glob
+---
+```
+*Note: Read-only skill. For complex strategies requiring deep exploration, orchestrator escalates to architect-agent.*
+
+**Input JSON:**
+```json
+{
+  "speck_path": "string",
+  "step_anchor": "string",
+  "revision_feedback": "string | null"
+}
+```
+- `speck_path`: Path to the speck
+- `step_anchor`: Which step to create a strategy for
+- `revision_feedback`: If re-running due to issues, contains feedback from reviewer/auditor
+
+**Output JSON:**
+```json
+{
+  "step_anchor": "string",
+  "approach": "string",
+  "expected_touch_set": ["string"],
+  "implementation_steps": [
+    {"order": 1, "description": "string", "files": ["string"]}
+  ],
+  "test_plan": "string",
+  "risks": ["string"]
+}
+```
+
+---
+
+#### author Skill {#skill-author}
+
+**Spec S11: author** {#s11-author}
+
+**Purpose:** Create and revise speck documents. Skill variant for simple edits and section updates.
+
+**Frontmatter:**
+```yaml
+---
+name: author
+description: Creates and revises speck documents following skeleton format
+allowed-tools: Read, Grep, Glob, Write, Edit
+---
+```
+*Note: For complex speck creation or major restructuring, orchestrator escalates to author-agent.*
+
+**Input JSON:**
+```json
+{
+  "idea": "string | null",
+  "speck_path": "string | null",
+  "user_answers": { ... },
+  "clarifier_assumptions": ["string"],
+  "critic_feedback": { ... } | null
+}
+```
+- `idea`: Original idea text (for new specks)
+- `speck_path`: Path to existing speck (for revisions)
+- `user_answers`: Answers from interviewer
+- `clarifier_assumptions`: Assumptions from clarifier
+- `critic_feedback`: If revising based on critic review
+
+**Output JSON:**
+```json
+{
+  "speck_path": "string",
+  "created": true,
+  "sections_written": ["string"],
+  "validation_status": "valid | warnings | errors"
+}
+```
+
+---
+
+#### coder Skill {#skill-coder}
+
+**Spec S12: coder** {#s12-coder}
+
+**Purpose:** Execute architect strategies. Skill variant for simple implementations.
+
+**Frontmatter:**
+```yaml
+---
+name: coder
+description: Executes architect strategies with drift detection
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash
+---
+```
+*Note: Includes drift detection. For complex implementations or when drift is detected, orchestrator escalates to coder-agent.*
+
+**Input JSON:**
+```json
+{
+  "speck_path": "string",
+  "step_anchor": "string",
+  "architect_strategy": {
+    "approach": "string",
+    "expected_touch_set": ["string"],
+    "implementation_steps": [{"order": 1, "description": "string", "files": ["string"]}],
+    "test_plan": "string"
+  },
+  "session_id": "string"
+}
+```
+
+**Output JSON:**
+```json
+{
+  "success": true,
+  "halted_for_drift": false,
+  "files_created": ["string"],
+  "files_modified": ["string"],
+  "tests_run": true,
+  "tests_passed": true,
+  "drift_assessment": {
+    "drift_severity": "none | minor | moderate | major",
+    "unexpected_changes": ["string"]
+  }
+}
+```
+
+---
+
+### 3.0.2.1 Escalation Guidelines {#escalation-guidelines}
+
+Orchestrators follow a **skill-first, agent-escalation** pattern. This section consolidates the escalation decision logic.
+
+#### Escalation Decision Matrix {#escalation-matrix}
+
+| Sub-task | Try Skill First | Escalate to Agent When |
+|----------|-----------------|------------------------|
+| **architect** | Always | Strategy requires exploring 10+ files, ambiguous requirements, or skill fails |
+| **author** | Always | Creating full speck from scratch, major restructuring, or skill fails twice |
+| **coder** | Always | Implementation touches 3+ files, drift detected, tests fail repeatedly, or skill fails |
+
+#### Pre-Invocation Complexity Detection {#pre-invocation-detection}
+
+Orchestrators can detect complexity BEFORE invoking a sub-task and skip directly to the agent variant. This saves time when the skill variant is unlikely to succeed.
+
+**Pre-invocation heuristics:**
+
+| Sub-task | Start with Agent When |
+|----------|----------------------|
+| **architect** | Step's `**Tasks:**` section references 10+ existing files, OR step requires changes across 3+ directories |
+| **author** | Creating NEW speck from idea (not revising existing), OR critic returned REJECT on previous attempt |
+| **coder** | Architect's `expected_touch_set` contains 5+ files, OR previous coder attempt halted for drift |
+
+**Default behavior:** If no pre-invocation heuristic triggers, always start with the skill variant.
+
+**Detection method:** Orchestrators analyze the speck content, step definition, and previous outputs before deciding which variant to invoke. This happens inline without additional tool calls.
+
+#### Escalation Triggers {#escalation-triggers}
+
+**General triggers (apply to all skill+agent pairs):**
+1. Skill returns error or invalid JSON → retry once, then escalate
+2. Skill returns success but follow-up check (reviewer/critic) reports issues → escalate on retry
+3. Task complexity exceeds skill capability (see matrix above) → escalate immediately
+
+**Specific triggers with concrete metrics:**
+
+**architect → architect-agent:**
+
+| Trigger | Metric | Detection |
+|---------|--------|-----------|
+| File count exceeds threshold | Step references 5+ existing files | Count files in step's `**Tasks:**` section |
+| Complex module interactions | Step spans 3+ directories | Analyze file paths in step |
+| Previous rejection | Reviewer returned REVISE on architect output | Check reviewer output in session state |
+
+**author → author-agent:**
+
+| Trigger | Metric | Detection |
+|---------|--------|-----------|
+| New speck creation | `idea` provided, no `speck_path` | Check input parameters |
+| Critic rejection | Critic returned REJECT (not REVISE) | Check critic output |
+| Repeated failures | Skeleton compliance fails 2+ times in session | Count validation failures in session state |
+| Output quality | Author output fails critic validation 2+ times | Track attempts in session state |
+
+**coder → coder-agent:**
+
+| Trigger | Metric | Detection |
+|---------|--------|-----------|
+| Multi-file strategy | `expected_touch_set` contains 3+ files | Count files in architect output |
+| Drift detected | `drift_severity` is "moderate" or "major" | Check coder output |
+| Test failures | Same test fails 3+ times | Track test results in session state |
+| Mid-implementation halt | Coder returns `halted_for_drift: true` | Check coder output |
+
+#### Escalation Protocol {#escalation-protocol}
+
+When escalating from skill to agent:
+1. Log the escalation reason in the run directory
+2. Pass the skill's partial output (if any) to the agent
+3. Pass the original input plus escalation context
+4. After agent completes, resume normal flow (don't re-run skill)
+
+---
+
+### 3.0.2.2 State Management {#state-management}
+
+Orchestrators (planner and implementer) manage state between sub-task invocations.
+
+#### Session State {#session-state}
+
+Each session maintains:
+```json
+{
+  "session_id": "YYYYMMDD-HHMMSS-<mode>-<uuid>",
+  "mode": "plan | implement",
+  "speck_path": "string",
+  "current_step": "string | null",
+  "sub_task_outputs": {
+    "<sub_task_name>": { ... }
+  }
+}
+```
+
+#### Context Passing Rules {#context-passing}
+
+When invoking a sub-task, pass only the context it needs:
+
+| Sub-task | Receives |
+|----------|----------|
+| **clarifier** | `idea`, `speck_path`, `critic_feedback` (if revising) |
+| **interviewer** | `context`, `speck_path`, `step_anchor`, `payload` (questions or issues) |
+| **author** | `idea`, `speck_path`, `user_answers`, `clarifier_assumptions`, `critic_feedback` |
+| **critic** | `speck_path`, `skeleton_path` |
+| **architect** | `speck_path`, `step_anchor`, `revision_feedback` (if retrying) |
+| **coder** | `speck_path`, `step_anchor`, `architect_strategy`, `session_id` |
+| **reviewer** | `speck_path`, `step_anchor`, `coder_output` (includes drift_assessment) |
+| **auditor** | `speck_path`, `step_anchor`, `files_to_audit`, `drift_assessment` |
+| **logger** | `speck_path`, `step_anchor`, `summary`, `files_changed`, `commit_hash` |
+| **committer** | `speck_path`, `step_anchor`, `proposed_message`, `files_to_stage`, `bead_id` |
+
+#### Persistence {#state-persistence}
+
+Orchestrators persist all sub-task outputs to the run directory:
+```
+.specks/runs/<session-id>/
+├── metadata.json           # Session state
+├── planning/               # Planning phase
+│   ├── 001-clarifier.json
+│   ├── 002-interviewer.json
+│   └── ...
+└── implementation/         # Implementation phase (per step)
+    ├── step-0/
+    │   ├── architect.json
+    │   ├── coder.json
+    │   └── ...
+    └── step-1/
+        └── ...
+```
+
+Each output file contains the raw JSON returned by the sub-task, enabling audit and debugging.
+
+#### State Reconstruction {#state-reconstruction}
+
+**Skills are stateless prompts.** Claude does not maintain persistent variables between tool calls. Orchestrators must reconstruct state by reading from the run directory after each sub-task invocation.
+
+**Reconstruction mechanism:**
+
+1. **Session ID discovery:** At the start of each orchestration, check if a session ID was passed as input (resume case). If not, generate a new one and create the run directory.
+
+2. **Counter determination:** Before persisting a sub-task output, list existing files in the relevant directory (`planning/` or `execution/step-N/`) and compute the next counter:
+   ```bash
+   # Example: find next counter for planning phase
+   ls .specks/runs/<session-id>/planning/*.json | wc -l
+   # If 3 files exist, next counter is 004
+   ```
+
+3. **Previous output retrieval:** When a sub-task needs context from a previous sub-task (e.g., author needs clarifier output), read the relevant JSON file from the run directory.
+
+4. **Current step tracking:** For implementation phase, read `metadata.json` to determine `current_step`. Update after each step completes.
+
+**Practical implication:** The SKILL.md templates for planner and implementer should include explicit instructions to:
+- Read existing run directory state at orchestration start
+- Persist outputs immediately after each sub-task
+- Read from persisted outputs when building context for subsequent sub-tasks
+
+This stateless-with-persistence pattern ensures the orchestrator can resume from interruption and maintains a complete audit trail.
+
+#### Resume Logic {#resume-logic}
+
+Orchestrators can resume from a partially completed session. Resume is triggered by passing an existing session ID as input.
+
+**Planner resume:**
+```
+/specks:planner --resume 20260207-143022-plan-abc123
+```
+
+1. Read `metadata.json` from `.specks/runs/<session-id>/`
+2. Check `status` field:
+   - If `completed`: Report already done, exit
+   - If `in_progress`: Continue from where interrupted
+3. List files in `planning/` to determine last completed sub-task
+4. Determine next sub-task based on planning flow
+5. Continue loop from that point
+
+**Implementer resume:**
+```
+/specks:implementer --resume 20260207-150145-impl-def456
+```
+
+1. Read `metadata.json` to get `current_step`
+2. For current step, check which sub-task outputs exist in `execution/step-N/`:
+   - If `committer.json` exists: step complete, move to next step
+   - If `coder.json` exists but no `reviewer.json`: resume at reviewer
+   - etc.
+3. Continue loop from determined point
+
+**Resume input format:**
+- Session ID only: `--resume <session-id>`
+- Orchestrator reads all state from run directory
+- No need to re-specify speck path or idea (stored in metadata.json)
+
+**Failure modes:**
+- Session directory doesn't exist: Report error, suggest starting fresh
+- Session marked `failed`: Report what failed, ask user whether to retry or abort
+- Corrupted metadata.json: Report error, cannot resume
+
+---
+
+#### coder-agent (Agent with Skill Variant) {#coder-agent-note}
+
+**Note:** Under the dual-orchestrator architecture (D08), implementation work is handled by:
+- `coder` **skill** - lightweight variant for simple implementations
+- `coder-agent` **agent** - full agentic power for complex implementations, includes self-monitoring for drift detection
+
+The orchestrator (`implementer` skill) tries the `coder` skill first and escalates to `coder-agent` when needed. See (#coder-agent-contract) for the input/output contract and drift detection heuristics.
 
 ---
 
@@ -1329,7 +1909,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 **Table T03: Agent Files to Remove** {#t03-agent-removal}
 
-These agents become skills per (#agents-skills-summary). Note: implementer stays as an agent (includes self-monitoring). Monitor is eliminated entirely (no skill replacement).
+These agents become skills per (#agents-skills-summary). Note: Under D08, the old `implementer` agent is renamed to `coder-agent` (with a `coder` skill variant). Monitor is eliminated entirely (no skill replacement).
 
 | File | Replacement |
 |------|-------------|
@@ -1345,20 +1925,23 @@ These agents become skills per (#agents-skills-summary). Note: implementer stays
 
 ### 3.0.4 Agent Updates {#agent-updates}
 
-Tool changes for agents that remain per (#agent-summary).
+**⚠️ NOTE:** This section was written for the original director-based architecture. After D08, agents are renamed with `-agent` suffix and director is deleted. The contracts below still apply to the agent variants.
 
-**Table T04: Agent Tool Changes** {#t04-agent-tools}
+Tool changes for agents per (#agent-summary).
 
-| Agent | Current Tools | New Tools |
-|-------|---------------|-----------|
-| director | Task, Read, Grep, Glob, Bash, Write, Edit | Task, Skill, Read, Grep, Glob, Bash, Write |
-| planner | Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion | Read, Grep, Glob, Bash, Write, Edit |
-| interviewer | Read, Grep, Glob, Bash, AskUserQuestion | Read, Grep, Glob, Bash, AskUserQuestion (unchanged) |
-| architect | Read, Grep, Glob, Bash | Read, Grep, Glob, Bash (unchanged) |
+**Table T04: Agent Tool Changes (Updated for D08)** {#t04-agent-tools}
+
+| Agent | Tools |
+|-------|-------|
+| architect-agent | Read, Grep, Glob, Bash |
+| author-agent | Read, Grep, Glob, Bash, Write, Edit |
+| coder-agent | Read, Grep, Glob, Bash, Write, Edit |
+
+*Note: director is deleted. Interviewer is now a skill (AskUserQuestion works from skills). Planner → author-agent. Implementer → coder-agent.*
 
 #### Architect Agent Output Contract {#architect-output}
 
-The architect agent returns JSON to the director, which is persisted to the runs directory and passed to the implementer agent.
+The architect-agent returns JSON to the orchestrator, which persists it to the runs directory and passes it to the coder (skill or agent).
 
 **Architect Output JSON:**
 ```json
@@ -1384,11 +1967,11 @@ The architect agent returns JSON to the director, which is persisted to the runs
 - `test_plan`: How to verify the implementation works
 - `risks`: Potential issues to watch for
 
-#### Interviewer Agent Contract {#interviewer-contract}
+#### Interviewer Skill Contract {#interviewer-contract}
 
-The interviewer agent handles all user interaction. Director spawns it with different input contexts; output format mirrors input structure.
+The interviewer skill handles all user interaction. Orchestrators invoke it with different input contexts; output format mirrors input structure.
 
-**Input JSON (from director):**
+**Input JSON (from orchestrator):**
 ```json
 {
   "context": "clarifier | critic | drift | review",
@@ -1407,7 +1990,7 @@ The `payload` structure depends on `context`:
 | `drift` | `{drift_assessment: {...}, files_touched: [...]}` | Implementer self-halted due to drift |
 | `review` | `{issues: [...], source: "reviewer\|auditor"}` | Conceptual issues from review |
 
-**Output JSON (to director):**
+**Output JSON (to orchestrator):**
 ```json
 {
   "context": "clarifier | critic | drift | review",
@@ -1419,14 +2002,16 @@ The `payload` structure depends on `context`:
 
 The `user_answers` structure mirrors the input payload - answers keyed to questions, resolutions keyed to issues, etc.
 
-#### Implementer Agent Contract {#implementer-agent-contract}
+#### Coder Agent Contract {#coder-agent-contract}
 
-The implementer agent executes architect strategies. It includes **self-monitoring** for drift detection: after each implementation sub-step, the implementer checks its own changes against the expected_touch_set and halts if drift thresholds are exceeded.
+The coder-agent executes architect strategies. It includes **self-monitoring** for drift detection: after each implementation sub-step, the coder checks its own changes against the expected_touch_set and halts if drift thresholds are exceeded.
 
-**Implementer Agent Definition:**
+*Note: The coder skill is a lightweight variant for simple implementations. The coder-agent is used for complex implementations or when the skill detects drift. Both share the same input/output contracts.*
+
+**Coder Agent Definition:**
 ```yaml
 ---
-name: implementer
+name: coder-agent
 description: Execute architect strategies with self-monitoring. Writes code, runs tests, creates artifacts. Self-halts when drift detected.
 tools: Read, Grep, Glob, Write, Edit, Bash
 model: inherit
@@ -1474,17 +2059,17 @@ The implementer uses smart heuristics to self-monitor, not just mechanical file 
 |----------|-----------|--------|
 | `none` | All files in expected set | Continue implementation |
 | `minor` | 1-2 yellow touches | Continue (note in output) |
-| `moderate` | 3-4 yellow OR 1 red | HALT and report to director |
-| `major` | 5+ yellow OR 2+ red | HALT and report to director |
+| `moderate` | 3-4 yellow OR 1 red | HALT and report to orchestrator |
+| `major` | 5+ yellow OR 2+ red | HALT and report to orchestrator |
 
 **4. Qualitative check:**
 The implementer evaluates whether unexpected changes are *consistent with the architect's approach*. Adding a helper function in the same module = OK. Refactoring unrelated subsystems = HALT.
 
 **5. Self-halt behavior:**
-When drift thresholds are exceeded, the implementer:
+When drift thresholds are exceeded, the coder (skill or agent):
 1. Stops further implementation work immediately
 2. Returns with `success: false` and `halted_for_drift: true`
-3. Includes full drift assessment in output for director to escalate via interviewer
+3. Includes full drift assessment in output for orchestrator to escalate via interviewer
 
 **Output (returned when agent completes or halts):**
 ```json
@@ -1519,9 +2104,9 @@ When drift thresholds are exceeded, the implementer:
 }
 ```
 
-**Note:** `drift_assessment` is **mandatory** in all implementer output, even when `halted_for_drift: false` and `drift_severity: none`. This improves debuggability, gives reviewer/auditor context about minor drift, and supports the "no fire-and-forget / audit-first" principle.
+**Note:** `drift_assessment` is **mandatory** in all coder output, even when `halted_for_drift: false` and `drift_severity: none`. This improves debuggability, gives reviewer/auditor context about minor drift, and supports the "no fire-and-forget / audit-first" principle.
 
-When `halted_for_drift: true`, the director spawns the interviewer to present drift details and get user decision: continue anyway, back to architect for new strategy, or abort.
+When `halted_for_drift: true`, the implementer orchestrator invokes the interviewer skill to present drift details and get user decision: continue anyway, back to architect for new strategy, or abort.
 
 ---
 
@@ -1654,6 +2239,24 @@ When `halted_for_drift: true`, the director spawns the interviewer to present dr
 
 #### Step 4: Update director agent {#step-4}
 
+**⚠️ HISTORICAL (superseded by Step 10.5)**
+
+This step was completed before the dual-orchestrator architecture (D08) was adopted. The director agent no longer exists—it was deleted in Step 10.5. The orchestration logic described here has been absorbed into the `planner` and `implementer` orchestration skills. This step is retained for historical reference only.
+
+**Migration Mapping (Step 4 → Step 10.5):**
+
+| Historical Work | New Location | Notes |
+|-----------------|--------------|-------|
+| 4.1: Director tools | `skills/planner/SKILL.md` allowed-tools | Skill, Task, Read, Grep, Glob, Write, Bash |
+| 4.1: Director tools | `skills/implementer/SKILL.md` allowed-tools | Same tools as planner |
+| 4.2: Planning flow | `skills/planner/SKILL.md` body | Main Loop section |
+| 4.3: Implementation flow | `skills/implementer/SKILL.md` body | Per-Step Loop section |
+| 4.4: Session initialization | Both orchestrator skills Setup Phase | Session ID generation, mkdir |
+| 4.4: Metadata management | Both orchestrator skills | Write metadata.json, update on completion |
+| 4.4: Output persistence | Both orchestrator skills | Persist sub-task outputs to run directory |
+
+---
+
 Step 4 is split into substeps to manage complexity. Each substep builds on the previous.
 
 ---
@@ -1729,35 +2332,35 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 
 ---
 
-##### Step 4.3: Implement director Execution Phase Flow {#step-4-3}
+##### Step 4.3: Implement director Implementation Phase Flow {#step-4-3}
 
 **Depends on:** #step-4-2
 
-**References:** [D02] Director is pure orchestrator, **(#flow-execution)**, (#flow-tools), (#implementer-agent-contract)
+**References:** [D02] Director is pure orchestrator, **(#flow-implementation)**, (#flow-tools), (#coder-agent-contract)
 
 **Artifacts:**
 - Updated `agents/director.md` (execution flow implementation)
 
 **Tasks:**
-- [x] Implement Execution Phase Flow per (#flow-execution):
+- [x] Implement Implementation Phase Flow per (#flow-implementation):
   - [x] **For each step** in speck (iterate in order, respecting dependencies):
     - [x] **Architect**: Spawn architect agent -> receive strategy JSON
     - [x] **Implementer**: Spawn implementer agent -> wait for completion
     - [x] **Drift handling**: If implementer returns halted_for_drift, spawn interviewer for escalation
-    - [x] **Review**: Invoke reviewer + auditor skills in parallel
+    - [x] **Review**: Invoke reviewer skill, then auditor skill (sequentially)
     - [x] **Finalize**: Invoke logger skill, invoke committer skill (with bead_id if present)
   - [x] Handle step completion and move to next step
 - [x] Use exact invocation syntax from (#flow-tools):
   - [x] `Task(subagent_type: "specks:architect")` for architect
   - [x] `Task(subagent_type: "specks:implementer")` for implementer
-  - [x] `Skill(skill: "specks:reviewer")` and `Skill(skill: "specks:auditor")` in parallel
+  - [x] `Skill(skill: "specks:reviewer")` then `Skill(skill: "specks:auditor")` (sequentially)
   - [x] `Skill(skill: "specks:logger")` then `Skill(skill: "specks:committer")`
 
 **Checkpoint:**
-- [x] Execution flow in director body matches (#flow-execution) diagram
+- [x] Execution flow in director body matches (#flow-implementation) diagram
 - [x] Implementer spawned via Task tool, runs to completion or self-halts
 - [x] Drift escalation path to interviewer exists (when implementer.halted_for_drift)
-- [x] Reviewer and auditor invoked in parallel
+- [x] Reviewer and auditor invoked sequentially
 - [x] Logger and committer invoked sequentially at step end
 
 **Rollback:**
@@ -1813,11 +2416,34 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 
 #### Step 5: Update other agents {#step-5}
 
+**⚠️ HISTORICAL (superseded by Step 10.5)**
+
+This step was completed before the dual-orchestrator architecture (D08) was adopted. The agents referenced here have been renamed or deleted in Step 10.5:
+- `planner` agent → renamed to `author-agent`
+- `implementer` agent → renamed to `coder-agent`
+- `interviewer` agent → deleted (now skill-only)
+
+This step is retained for historical reference only.
+
+**Migration Mapping (Step 5 → Step 10.5):**
+
+| Historical Work | New Location | Notes |
+|-----------------|--------------|-------|
+| `planner` agent body content | `agents/author-agent.md` | Renamed; speck creation logic preserved |
+| `planner` → receives clarifier output | `skills/author/SKILL.md` input | Input JSON schema includes clarifier_assumptions |
+| `interviewer` agent | `skills/interviewer/SKILL.md` | Converted to skill (AskUserQuestion works in skills) |
+| `interviewer` drift handling | `skills/interviewer/SKILL.md` context=drift | Payload includes drift_assessment |
+| `implementer` agent | `agents/coder-agent.md` | Renamed; drift detection logic preserved |
+| `implementer` drift detection | `skills/coder/SKILL.md` | Both skill and agent have drift detection |
+| `architect` agent | `agents/architect-agent.md` | Renamed; read-only, no changes needed |
+
+---
+
 **Depends on:** #step-4-4
 
 **Commit:** `refactor(agents): update planner, interviewer, and implementer`
 
-**References:** [D04] Interviewer handles all user interaction, Table T04, (#agent-updates), (#flow-planning), (#flow-execution), (#implementer-agent-contract)
+**References:** [D04] Interviewer handles all user interaction, Table T04, (#agent-updates), (#flow-planning), (#flow-implementation), (#coder-agent-contract)
 
 **Artifacts:**
 - Updated `agents/planner.md`
@@ -1836,10 +2462,10 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
   - [x] Receives: questions from clarifier skill OR issues from critic skill
   - [x] Uses AskUserQuestion to present to user
   - [x] Returns: structured user_answers{} or decisions to director
-- [x] **Update interviewer for execution phase** (per #flow-execution):
+- [x] **Update interviewer for execution phase** (per #flow-implementation):
   - [x] Handles drift escalation when implementer self-halts
   - [x] Handles conceptual issue escalation from reviewer/auditor
-- [x] **Update implementer agent** (per #implementer-agent-contract):
+- [x] **Update implementer agent** (per #coder-agent-contract):
   - [x] Update tools to: `tools: Read, Grep, Glob, Write, Edit, Bash`
   - [x] Add description per contract (includes self-monitoring)
   - [x] Update body to accept architect strategy JSON input
@@ -2082,7 +2708,7 @@ After completing Steps 8.1-8.6:
 - [x] Update CLAUDE.md agent list (5 agents, not 11)
 - [x] Update CLAUDE.md to mention skills
 - [x] Remove references to `specks plan`, `specks execute`, `specks setup claude`
-- [x] Document `/specks:plan` and `/specks:execute` as primary interface
+- [x] Document `/specks:planner` and `/specks:implementer` as primary interface (**clean break**; `plan`/`execute` are historical and deleted)
 - [x] Document `claude --plugin-dir .` for development
 - [x] Update README installation instructions
 - [x] Add a "Beads readiness checklist" section (CLI install, bd install, SPECKS_BD_PATH)
@@ -2107,29 +2733,31 @@ After completing Steps 8.1-8.6:
 
 **References:** (#beads-contract), (#orchestration-flowcharts), (#run-directory)
 
+**Historical note:** Step 10 was executed *before* the dual-orchestrator pivot in Step 10.5. It validated plugin loading and tool-call feasibility using the interim director-based architecture. After Step 10.5, `plan`/`execute` skills and the director agent are deleted (clean break).
+
 **Tasks:**
 - [x] Run `claude --plugin-dir .` from repo root
-- [x] Verify `/specks:plan` skill appears in `/help`
-- [x] Verify `/specks:execute` skill appears in `/help`
-- [x] Verify `specks:director` agent appears in `/agents`
-- [ ] Test invoking `/specks:plan "test idea"` (deferred to manual testing)
+- [x] HISTORICAL: Verify `/specks:plan` skill appears in `/help`
+- [x] HISTORICAL: Verify `/specks:execute` skill appears in `/help`
+- [x] HISTORICAL: Verify `specks:director` agent appears in `/agents`
+- [ ] HISTORICAL: Test invoking `/specks:plan "test idea"` (deferred to manual testing)
 
 **Skill tool syntax verification (HARD GATE):**
-- [x] Test minimal Skill invocation from director: `Skill(skill: "specks:clarifier")`
+- [x] HISTORICAL: Test minimal Skill invocation from director: `Skill(skill: "specks:clarifier")`
 - [x] Record exact working syntax in run artifacts
 - [x] If syntax differs from plan, STOP and update (#naming-conventions) and all director references before proceeding
-- [x] Verify Task tool syntax: `Task(subagent_type: "specks:director")`
+- [x] HISTORICAL: Verify Task tool syntax: `Task(subagent_type: "specks:director")`
 
 **Flow verification (per #orchestration-flowcharts):**
-- [x] Director uses Skill tool for: clarifier, critic, reviewer, auditor, logger, committer
-- [x] Director uses Task tool for: planner, interviewer, architect, implementer
+- [x] HISTORICAL: Director uses Skill tool for: clarifier, critic, reviewer, auditor, logger, committer
+- [x] HISTORICAL: Director uses Task tool for: planner, interviewer, architect, implementer
 - [x] Implementer includes self-monitoring for drift detection
 - [x] Interviewer handles ALL user interaction (director never uses AskUserQuestion)
 - [x] Planning flow matches (#flow-planning)
-- [x] Execution flow matches (#flow-execution)
+- [x] Execution flow matches (#flow-implementation)
 
 **Run directory verification (per #run-directory):**
-- [ ] After `/specks:plan "test idea"`, verify `.specks/runs/<session-id>/` created (deferred to manual testing)
+- [ ] HISTORICAL: After `/specks:plan "test idea"`, verify `.specks/runs/<session-id>/` created (deferred to manual testing)
 - [ ] Verify `metadata.json` exists with correct schema (deferred to manual testing)
 - [ ] Verify `planning/` subdirectory contains skill outputs (clarifier, critic, etc.) (deferred to manual testing)
 - [ ] Skill outputs are valid JSON matching their output specs (deferred to manual testing)
@@ -2142,9 +2770,9 @@ After completing Steps 8.1-8.6:
 
 **Checkpoint:**
 - [x] Plugin loads without errors
-- [x] All 8 skills discoverable
-- [x] All 5 agents discoverable
-- [x] `/specks:plan` can be invoked (skill visible in system)
+- [x] HISTORICAL: All 8 skills discoverable
+- [x] HISTORICAL: All 5 agents discoverable
+- [x] HISTORICAL: `/specks:plan` can be invoked (skill visible in system)
 - [x] Orchestration flows match flowcharts
 - [ ] Run directory created with audit trail (deferred to manual testing)
 - [x] Beads CLI callable from plugin context with JSON output parsed
@@ -2154,205 +2782,801 @@ After completing Steps 8.1-8.6:
 
 ---
 
-#### Step 10.5: Flatten Agent Architecture to Single Director Context {#step-10-5}
+#### Step 10.5: Dual-Orchestrator Architecture {#step-10-5}
 
 **Depends on:** #step-0
 
-**Commit:** `refactor: flatten agent architecture to single director context`
+**Commit:** `refactor: dual-orchestrator architecture with skill-first sub-tasks`
 
-**References:** [D01] Claude Code plugin architecture, (#agents-skills-summary), (#flow-planning), (#flow-execution), (#implementer-agent-contract)
+**References:** [D08] Dual-orchestrator architecture, (#agents-skills-summary), (#flow-planning), (#flow-implementation)
 
-**Context:** The current architecture creates 11+ nested agent contexts (director spawns architect, implementer, interviewer as agents), causing Claude Code to crash with "Aborted()" due to terminal rendering overload. This step flattens the architecture to ONE agent context by converting all other agents to skills.
+**Context:** The current architecture creates 11+ nested agent contexts (director spawns architect, implementer, interviewer as agents), causing Claude Code to crash with "Aborted()" due to terminal rendering overload. This step replaces the director with two orchestration skills and implements skill-first, agent-escalation for sub-tasks.
 
 **Architecture Change:**
 
 Before (BROKEN - 11+ contexts):
 ```
-/specks:execute (skill)
+/specks:plan or /specks:execute (skill)
   └── director (agent)
+        ├── planner (agent)
         ├── architect (agent) x N steps
         ├── implementer (agent) x N steps
         └── interviewer (agent) x ~3 per step
 ```
 
-After (STABLE - 1-2 contexts):
+After (STABLE - 0-1 agent contexts):
 ```
-/specks:execute (skill)
-  └── director (THE ONE AGENT)
-        ├── Skill(specks:architect)
-        ├── Skill(specks:implementer)
-        ├── Skill(specks:planner)
-        ├── Skill(specks:interviewer)*
-        └── (all other skills unchanged)
+/specks:planner (orchestration skill, runs inline)
+  ├── Skill(specks:clarifier)
+  ├── Skill(specks:author)      ← simple tasks
+  │   OR Task(specks:author-agent) ← complex tasks
+  ├── Skill(specks:critic)
+  └── Skill(specks:interviewer)
 
-* If AskUserQuestion fails from skill context, interviewer stays as agent (2 contexts max)
+/specks:implementer (orchestration skill, runs inline)
+  ├── Skill(specks:architect)   ← simple strategies
+  │   OR Task(specks:architect-agent) ← complex strategies
+  ├── Skill(specks:coder)       ← simple implementations
+  │   OR Task(specks:coder-agent) ← complex implementations
+  ├── Skill(specks:reviewer)
+  ├── Skill(specks:auditor)
+  ├── Skill(specks:logger)
+  └── Skill(specks:committer)
 ```
+
+**Naming Changes:**
+- `planner` agent → `author` (skill) + `author-agent` (agent)
+- `implementer` agent → `coder` (skill) + `coder-agent` (agent)
+- `architect` agent → `architect` (skill) + `architect-agent` (agent)
+- `planner` → NEW orchestration skill (planning loop)
+- `implementer` → NEW orchestration skill (implementation loop)
+- `plan` and `execute` entry point skills → DELETED (replaced by planner/implementer)
+- `director` agent → DELETED (orchestration absorbed into planner/implementer)
+
+**Key Principles:**
+1. **Skill-first:** Orchestrators invoke skill variants by default
+2. **Agent-escalation:** Escalate to agent variant when task is complex or skill struggles
+3. **One-at-a-time:** Orchestrators invoke sub-tasks sequentially (no parallelism)
+4. **Max 1 agent:** At most one agent context active at any time
+5. **Direct invocation:** Any sub-task can be invoked directly via `/specks:<name>`
 
 **Artifacts:**
-- `skills/architect/SKILL.md` - New skill (converted from agent)
-- `skills/implementer/SKILL.md` - New skill (converted from agent)
-- `skills/planner/SKILL.md` - New skill (converted from agent)
-- `skills/interviewer/SKILL.md` - New skill (if AskUserQuestion works from skills)
-- `agents/director.md` - Updated to use Skill tool exclusively
-- `agents/archived/` - Old agent files moved here
+- `skills/planner/SKILL.md` - NEW orchestration skill (planning loop)
+- `skills/implementer/SKILL.md` - NEW orchestration skill (implementation loop)
+- `skills/architect/SKILL.md` - NEW skill variant
+- `skills/author/SKILL.md` - NEW skill variant (renamed from planner)
+- `skills/coder/SKILL.md` - NEW skill variant (renamed from implementer)
+- `agents/architect-agent.md` - RENAMED from architect.md
+- `agents/author-agent.md` - RENAMED from planner.md
+- `agents/coder-agent.md` - RENAMED from implementer.md
+- `agents/archived/` - Old agent files (director.md, interviewer.md) and deleted entry skills
 
 **Tasks:**
 
-##### 10.5.1: Test AskUserQuestion from skill context {#step-10-5-1}
+##### 10.5.1: Verify skill tool invocation capabilities {#step-10-5-1}
 
-- [ ] Create minimal test skill `skills/test-ask/SKILL.md`:
-  ```yaml
-  ---
-  name: test-ask
-  description: Test AskUserQuestion availability from skill context
-  allowed-tools: AskUserQuestion
-  ---
-  Call AskUserQuestion with: "Does this work? (yes/no)"
-  Return the user's response as JSON: {"response": "..."}
-  ```
-- [ ] Run `claude --plugin-dir .` and invoke `/specks:test-ask`
-- [ ] Document result: WORKS or FAILS
-- [ ] If FAILS: interviewer will remain an agent (acceptable fallback)
-- [ ] Delete `skills/test-ask/` after test
+**STATUS: VERIFIED** (2026-02-07)
 
-##### 10.5.2: Create architect skill {#step-10-5-2}
+All three capability tests passed:
 
-- [ ] Create `skills/architect/SKILL.md` with frontmatter:
-  ```yaml
-  ---
-  name: architect
-  description: Creates implementation strategies for speck steps
-  allowed-tools: Read, Grep, Glob
-  ---
-  ```
-- [ ] Copy implementation strategy logic from `agents/architect.md`
-- [ ] Define JSON input contract (speck_path, step_anchor, revision_feedback)
-- [ ] Define JSON output contract (approach, expected_touch_set, implementation_steps, test_plan, risks)
-- [ ] Specify: "Return JSON-only output (no prose, no markdown, no code fences)"
+| Test | Result | Implication |
+|------|--------|-------------|
+| Skill→Skill | ✓ SUCCESS | Orchestrators CAN invoke sub-task skills |
+| Skill→Agent | ✓ SUCCESS | Orchestrators CAN escalate to agents |
+| AskUserQuestion | ✓ SUCCESS | Interviewer is skill-only (no agent fallback) |
 
-##### 10.5.3: Create implementer skill {#step-10-5-3}
+- [x] Created test skills: `test-skill-invoke`, `test-task-invoke`, `test-ask`
+- [x] Ran `claude --plugin-dir .` and invoked all three tests
+- [x] All tests passed - architecture is technically feasible
+- [x] Deleted test skills after verification
 
-- [ ] Create `skills/implementer/SKILL.md` with frontmatter:
-  ```yaml
-  ---
-  name: implementer
-  description: Execute architect strategies with self-monitoring for drift
-  allowed-tools: Read, Grep, Glob, Write, Edit, Bash
-  ---
-  ```
-- [ ] Copy implementation logic from `agents/implementer.md`
-- [ ] Preserve ALL drift detection logic and thresholds from (#smart-drift)
-- [ ] Define JSON input contract (speck_path, step_anchor, architect_strategy, continuation)
-- [ ] Define JSON output contract (success, halted_for_drift, files_*, drift_assessment)
-- [ ] Specify: "Return JSON-only output (no prose, no markdown, no code fences)"
+**Verified Syntax (AUTHORITATIVE):**
 
-##### 10.5.4: Create planner skill {#step-10-5-4}
+| Tool | Syntax | Example |
+|------|--------|---------|
+| Skill invocation | `Skill(skill: "<namespace>:<name>", args: <JSON>)` | `Skill(skill: "specks:clarifier", args: '{"idea": "..."}')`  |
+| Agent escalation | `Task(subagent_type: "<namespace>:<name>-agent", prompt: "...")` | `Task(subagent_type: "specks:author-agent", prompt: "Create speck for: ...")` |
 
-- [ ] Create `skills/planner/SKILL.md` with frontmatter:
-  ```yaml
-  ---
-  name: planner
-  description: Create or revise speck documents following skeleton format
-  allowed-tools: Read, Grep, Glob, Write, Edit
-  ---
-  ```
-- [ ] Copy speck creation logic from `agents/planner.md`
-- [ ] Preserve skeleton compliance requirements
-- [ ] Define JSON input contract (idea, speck_path, user_answers, clarifier_assumptions, critic_feedback)
-- [ ] Define JSON output contract (speck_path, created, sections_written, validation_status)
-- [ ] Specify: "Return JSON-only output (no prose, no markdown, no code fences)"
+**Skill argument passing:**
+- The `args` parameter accepts JSON strings
+- Skills receive the JSON args as a string via `$ARGUMENTS` (i.e., the `args` payload is exposed to the skill content as `$ARGUMENTS`)
+- If skill doesn't use `$ARGUMENTS`, Claude Code appends `ARGUMENTS: <input>` to skill content
 
-##### 10.5.5: Create interviewer skill (conditional) {#step-10-5-5}
+##### 10.5.2: Create interviewer skill (CRITICAL PATH) {#step-10-5-2}
 
-**If 10.5.1 result is WORKS:**
-- [ ] Create `skills/interviewer/SKILL.md` with frontmatter:
-  ```yaml
-  ---
-  name: interviewer
-  description: Present questions and issues to user, collect decisions
-  allowed-tools: Read, Grep, Glob, AskUserQuestion
-  ---
-  ```
-- [ ] Copy user interaction logic from `agents/interviewer.md`
-- [ ] Define JSON input contract (context, speck_path, step_anchor, payload)
-- [ ] Define JSON output contract (context, decision, user_answers, notes)
+**Priority:** FIRST - Interviewer is on critical path for all user interaction.
 
-**If 10.5.1 result is FAILS:**
-- [ ] Keep `agents/interviewer.md` as-is (fallback: 2 agent contexts max)
-- [ ] Document in director that Task tool is retained ONLY for interviewer
+**AskUserQuestion WORKS from skill context** (verified in 10.5.1)
 
-##### 10.5.6: Update director agent {#step-10-5-6}
+**Tasks:**
+- [ ] Create `skills/interviewer/SKILL.md`
+- [ ] Verify skill can be invoked by orchestrators
 
-- [ ] Update frontmatter skills list to include: architect, implementer, planner, interviewer (if skill)
-- [ ] If interviewer is skill: remove Task from tools list entirely
-- [ ] If interviewer is agent: keep Task tool, document "ONLY for interviewer"
-- [ ] Update Planning Mode Workflow section:
-  - Replace `Task(subagent_type: "specks:planner")` with `Skill(skill: "specks:planner")`
-  - Replace `Task(subagent_type: "specks:interviewer")` with `Skill(skill: "specks:interviewer")` (if applicable)
-- [ ] Update Execution Mode Workflow section:
-  - Replace `Task(subagent_type: "specks:architect")` with `Skill(skill: "specks:architect")`
-  - Replace `Task(subagent_type: "specks:implementer")` with `Skill(skill: "specks:implementer")`
-  - Replace `Task(subagent_type: "specks:interviewer")` with `Skill(skill: "specks:interviewer")` (if applicable)
-- [ ] Update Agent and Skill Invocation Patterns section
-- [ ] Update key invariants:
-  - Add: "Director is the ONLY agent context in the entire workflow"
-  - Update: "Director uses Skill tool for ALL components" (or "all except interviewer" if fallback)
+**Full SKILL.md content:**
 
-##### 10.5.7: Update entry point skills {#step-10-5-7}
+```markdown
+---
+name: interviewer
+description: Single point of user interaction for orchestration workflows
+allowed-tools: AskUserQuestion
+---
 
-- [ ] Update `skills/plan/SKILL.md`:
-  - Simplify to paper-thin: just spawn director with mode=plan
-  - Update workflow diagram to show all-skills architecture
-- [ ] Update `skills/execute/SKILL.md`:
-  - Simplify to paper-thin: just spawn director with mode=execute
-  - Update workflow diagram to show all-skills architecture
-- [ ] Update legend in both: remove `[AGENT]` for converted components
+## Purpose
 
-##### 10.5.8: Archive old agent files {#step-10-5-8}
+Handle ALL user interaction for specks orchestration. Receive questions, issues, or decisions from orchestrators and present them to the user via AskUserQuestion.
 
+## Input
+
+You receive JSON input via $ARGUMENTS:
+
+\`\`\`json
+{
+  "context": "clarifier | critic | drift | review",
+  "speck_path": ".specks/specks-N.md",
+  "step_anchor": "#step-N | null",
+  "payload": { ... }
+}
+\`\`\`
+
+### Payload by context:
+
+| Context | Payload | What to present |
+|---------|---------|-----------------|
+| `clarifier` | `{questions: [...], assumptions: [...]}` | Clarifying questions before planning |
+| `critic` | `{issues: [...], recommendation: "..."}` | Critic feedback on draft speck |
+| `drift` | `{drift_assessment: {...}, files_touched: [...]}` | Coder halted due to drift |
+| `review` | `{issues: [...], source: "reviewer|auditor"}` | Issues from review phase |
+
+## Behavior
+
+1. Parse the input JSON from $ARGUMENTS
+2. Format the payload into clear, actionable questions
+3. Use AskUserQuestion to present to user
+4. Capture user's decision
+5. Return structured JSON output
+
+## Output
+
+Return JSON-only (no prose, no fences):
+
+\`\`\`json
+{
+  "context": "clarifier | critic | drift | review",
+  "decision": "continue | halt | revise",
+  "user_answers": { ... },
+  "notes": "string | null"
+}
+\`\`\`
+```
+
+**Verification:**
+- [ ] Invoke `/specks:interviewer` directly with test JSON
+- [ ] Verify AskUserQuestion presents options correctly
+- [ ] Verify JSON output is returned
+
+---
+
+##### 10.5.3: Create architect skill+agent (simplest pair, read-only) {#step-10-5-3}
+
+**Priority:** SECOND - Simplest skill+agent pair, read-only operations only.
+
+**Tasks:**
+- [ ] Rename `agents/architect.md` → `agents/architect-agent.md`
+- [ ] Update agent frontmatter: `name: architect-agent`
+- [ ] Create `skills/architect/SKILL.md`
+
+**Full SKILL.md content:**
+
+```markdown
+---
+name: architect
+description: Creates implementation strategies for speck steps
+allowed-tools: Read, Grep, Glob
+---
+
+## Purpose
+
+Create implementation strategies for speck steps. Analyze the step requirements, explore the codebase, and produce a strategy with expected file changes.
+
+## Input
+
+You receive JSON input via $ARGUMENTS:
+
+\`\`\`json
+{
+  "speck_path": ".specks/specks-N.md",
+  "step_anchor": "#step-N",
+  "revision_feedback": "string | null"
+}
+\`\`\`
+
+## Behavior
+
+1. Read the speck and locate the specified step
+2. Analyze what the step requires (tasks, artifacts, tests)
+3. Explore the codebase to understand current state
+4. Design an implementation approach
+5. Identify ALL files that will be created or modified
+6. Return structured strategy JSON
+
+## Output
+
+Return JSON-only (no prose, no fences):
+
+\`\`\`json
+{
+  "step_anchor": "#step-N",
+  "approach": "High-level description of implementation approach",
+  "expected_touch_set": ["path/to/file1.rs", "path/to/file2.rs"],
+  "implementation_steps": [
+    {"order": 1, "description": "Create X", "files": ["path/to/file.rs"]},
+    {"order": 2, "description": "Update Y", "files": ["path/to/other.rs"]}
+  ],
+  "test_plan": "How to verify the implementation works",
+  "risks": ["Potential issue 1", "Potential issue 2"]
+}
+\`\`\`
+
+## Skill vs Agent
+
+- **Skill (this):** Straightforward strategies, clear requirements, < 10 files
+- **Agent (architect-agent):** Complex codebase exploration, ambiguous requirements, 10+ files
+```
+
+**Agent frontmatter update:**
+```yaml
+---
+name: architect-agent
+description: Full agentic power for complex implementation strategy creation
+tools: Read, Grep, Glob, Bash
+model: inherit
+---
+```
+
+**Verification:**
+- [ ] Invoke `/specks:architect` directly with test step
+- [ ] Verify JSON output contains expected_touch_set
+- [ ] Invoke architect-agent via Task tool
+
+---
+
+##### 10.5.4: Create author skill+agent {#step-10-5-4}
+
+**Tasks:**
+- [ ] Rename `agents/planner.md` → `agents/author-agent.md`
+- [ ] Update agent frontmatter: `name: author-agent`
+- [ ] Create `skills/author/SKILL.md`
+
+**Full SKILL.md content:**
+
+```markdown
+---
+name: author
+description: Creates and revises speck documents following skeleton format
+allowed-tools: Read, Grep, Glob, Write, Edit
+---
+
+## Purpose
+
+Create and revise speck documents. Follow the skeleton format strictly. Handle simple edits inline; complex restructuring should escalate to author-agent.
+
+## Input
+
+You receive JSON input via $ARGUMENTS:
+
+\`\`\`json
+{
+  "idea": "string | null",
+  "speck_path": "string | null",
+  "user_answers": { ... },
+  "clarifier_assumptions": ["string"],
+  "critic_feedback": { ... } | null
+}
+\`\`\`
+
+## Behavior
+
+1. If `idea` provided: Create new speck from scratch
+2. If `speck_path` provided: Revise existing speck
+3. Apply user_answers and assumptions
+4. If critic_feedback provided: Address the issues
+5. Write speck to `.specks/specks-{name}.md`
+6. Validate against skeleton
+
+## Output
+
+Return JSON-only (no prose, no fences):
+
+\`\`\`json
+{
+  "speck_path": ".specks/specks-N.md",
+  "created": true,
+  "sections_written": ["phase-overview", "execution-steps", "..."],
+  "validation_status": "valid | warnings | errors"
+}
+\`\`\`
+
+## Skill vs Agent
+
+- **Skill (this):** Simple edits, section updates, validation fixes
+- **Agent (author-agent):** Full speck creation from scratch, major restructuring
+```
+
+**Agent frontmatter update:**
+```yaml
+---
+name: author-agent
+description: Full agentic power for complex speck creation and revision
+tools: Read, Grep, Glob, Bash, Write, Edit
+model: inherit
+---
+```
+
+**Verification:**
+- [ ] Invoke `/specks:author` with simple revision task
+- [ ] Verify speck is written correctly
+- [ ] Invoke author-agent via Task tool for complex creation
+
+---
+
+##### 10.5.5: Create coder skill+agent (most complex, drift detection) {#step-10-5-5}
+
+**Priority:** Most complex sub-task. Includes drift detection.
+
+**Tasks:**
+- [ ] Rename `agents/implementer.md` → `agents/coder-agent.md`
+- [ ] Update agent frontmatter: `name: coder-agent`
+- [ ] Create `skills/coder/SKILL.md`
+- [ ] Preserve ALL drift detection logic from (#smart-drift)
+
+**Full SKILL.md content:**
+
+```markdown
+---
+name: coder
+description: Executes architect strategies with drift detection
+allowed-tools: Read, Grep, Glob, Write, Edit, Bash
+---
+
+## Purpose
+
+Execute architect strategies. Write code, run tests, detect drift. For simple implementations, complete inline. For complex work or drift, return and let orchestrator escalate.
+
+## Input
+
+You receive JSON input via $ARGUMENTS:
+
+\`\`\`json
+{
+  "speck_path": ".specks/specks-N.md",
+  "step_anchor": "#step-N",
+  "architect_strategy": {
+    "approach": "...",
+    "expected_touch_set": ["file1.rs", "file2.rs"],
+    "implementation_steps": [...],
+    "test_plan": "..."
+  },
+  "session_id": "20260207-143022-impl-abc123"
+}
+\`\`\`
+
+## Behavior
+
+1. Read the architect strategy
+2. Execute each implementation step in order
+3. After each step, perform drift detection (see below)
+4. Run tests per test_plan
+5. If drift exceeds threshold, HALT and return
+6. Return results
+
+## Drift Detection (#smart-drift)
+
+After each file write, check if file is in expected_touch_set:
+
+| Category | Description | Budget Impact |
+|----------|-------------|---------------|
+| **Green** | File in expected_touch_set | No impact |
+| **Yellow** | Adjacent directory (sibling, parent, child) | +1 to budget |
+| **Red** | Unrelated subsystem | +2 to budget |
+
+**Thresholds:**
+- `none`: All files in expected set
+- `minor`: 1-2 yellow (continue, note in output)
+- `moderate`: 3-4 yellow OR 1 red → HALT
+- `major`: 5+ yellow OR 2+ red → HALT
+
+## Output
+
+Return JSON-only (no prose, no fences):
+
+\`\`\`json
+{
+  "success": true,
+  "halted_for_drift": false,
+  "files_created": ["path/to/new.rs"],
+  "files_modified": ["path/to/existing.rs"],
+  "tests_run": true,
+  "tests_passed": true,
+  "drift_assessment": {
+    "drift_severity": "none | minor | moderate | major",
+    "expected_files": ["file1.rs", "file2.rs"],
+    "actual_changes": ["file1.rs", "file3.rs"],
+    "unexpected_changes": [
+      {"file": "file3.rs", "category": "yellow", "reason": "Adjacent to expected"}
+    ],
+    "drift_budget": {"yellow_used": 1, "yellow_max": 4, "red_used": 0, "red_max": 2}
+  }
+}
+\`\`\`
+
+## Skill vs Agent
+
+- **Skill (this):** Simple implementations, 1-2 files, tests pass
+- **Agent (coder-agent):** Complex multi-file changes, deep debugging, drift recovery
+```
+
+**Agent frontmatter update:**
+```yaml
+---
+name: coder-agent
+description: Execute architect strategies with self-monitoring. Full agentic power for complex implementations.
+tools: Read, Grep, Glob, Write, Edit, Bash
+model: inherit
+---
+```
+
+**Verification:**
+- [ ] Invoke `/specks:coder` with simple implementation
+- [ ] Verify drift_assessment is always present in output
+- [ ] Test drift detection by intentionally touching unexpected file
+- [ ] Invoke coder-agent via Task tool
+
+---
+
+##### 10.5.6: Create planner orchestration skill {#step-10-5-6}
+
+**Tasks:**
+- [ ] Create `skills/planner/SKILL.md`
+- [ ] Absorb planning loop logic from `agents/director.md`
+- [ ] Implement skill-first, agent-escalation pattern
+
+**Full SKILL.md content:**
+
+```markdown
+---
+name: planner
+description: Orchestrates the planning loop from idea to approved speck
+disable-model-invocation: true
+allowed-tools: Skill, Task, Read, Grep, Glob, Write, Bash
+---
+
+## Purpose
+
+ORCHESTRATOR. Entry point `/specks:planner`. Runs the planning loop from idea to approved speck.
+
+## Input
+
+User invokes with idea or speck path:
+- `/specks:planner "add user authentication"`
+- `/specks:planner .specks/specks-auth.md`
+
+## Planning Loop
+
+### Setup Phase
+
+\`\`\`bash
+MODE="plan"
+SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$(head -c 3 /dev/urandom | xxd -p)"
+mkdir -p .specks/runs/${SESSION_ID}/planning
+\`\`\`
+
+Write metadata.json with Write tool.
+
+### State Reconstruction (CRITICAL)
+
+**Skills are stateless.** You must reconstruct state from the run directory:
+
+1. **Counter:** Before each persist, count existing files in `planning/` to determine next number
+2. **Previous outputs:** Read persisted JSON files when building context for subsequent sub-tasks
+3. **Session ID:** Store in metadata.json and re-read if needed
+4. **Retry tracking:** If a sub-task fails, write `NNN-<subtask>-error.json`. Count error files for that sub-task to determine retry attempts.
+
+**File listing pattern (for counter):**
+\`\`\`bash
+# Get next counter for planning phase
+NEXT_NUM=$(printf "%03d" $(($(ls .specks/runs/${SESSION_ID}/planning/*.json 2>/dev/null | wc -l) + 1)))
+# Result: "001", "002", etc.
+\`\`\`
+
+### Main Loop
+
+For each sub-task:
+1. Invoke the skill/agent
+2. Parse the JSON output
+3. Determine next counter by listing existing files
+4. Persist output to `NNN-<subtask>.json`
+5. Use persisted outputs to build context for subsequent sub-tasks
+
+**Sub-task sequence:**
+
+1. **Clarify**: `Skill(skill: "specks:clarifier", args: '{"idea": "...", "speck_path": null}')`
+   - Persist output to `NNN-clarifier.json`
+
+2. **If questions exist**: `Skill(skill: "specks:interviewer", args: '{"context": "clarifier", ...}')`
+   - Persist output to `NNN-interviewer.json`
+
+3. **Author**: `Skill(skill: "specks:author", args: '{"idea": "...", "user_answers": {...}}')`
+   - If complex (new speck from scratch): `Task(subagent_type: "specks:author-agent", prompt: "...")`
+   - Persist output to `NNN-author.json`
+
+4. **Critic**: `Skill(skill: "specks:critic", args: '{"speck_path": "..."}')`
+   - Persist output to `NNN-critic.json`
+
+5. **If REVISE**: Loop back to step 3 with critic feedback
+   **If REJECT**: `Skill(skill: "specks:interviewer")` to get user decision
+   **If APPROVE**: Continue to finalize
+
+### Finalize
+
+Update metadata.json with `status: "completed"`, return speck path.
+
+## Constraints
+
+- ONE sub-task at a time (sequential invocation)
+- Maximum 1 agent context active at any time
+- Persist ALL sub-task outputs to run directory
+
+## Error Handling
+
+**Malformed JSON from sub-task:**
+1. Log the malformed output to run directory as `NNN-<subtask>-error.json`
+2. Retry the same sub-task once
+3. If retry also fails: escalate to agent variant (if available)
+4. If agent also fails: invoke interviewer to get user decision (abort/retry/skip)
+
+**Sub-task returns error object:**
+1. Check if error is recoverable (e.g., validation failure)
+2. If recoverable: retry with adjusted input
+3. If not recoverable: escalate to agent or interviewer
+
+**Agent escalation also fails:**
+1. Invoke interviewer with full context (skill error, agent error)
+2. Present options: abort planning, retry from beginning, continue with partial result
+3. Honor user decision
+
+**Example error recovery flow:**
+1. Invoke `Skill(specks:author, args: '{"idea": "..."}')`
+2. Output is malformed: `{speck_path: ...` (missing quotes, invalid JSON)
+3. Persist to `003-author-error.json`
+4. Retry: `Skill(specks:author, args: '{"idea": "..."}')`
+5. If retry succeeds: persist to `004-author.json`, continue
+6. If retry fails: escalate to `Task(subagent_type: "specks:author-agent", prompt: "...")`
+7. If agent fails: invoke interviewer for user decision
+```
+
+**Verification:**
+- [ ] Invoke `/specks:planner "test idea"`
+- [ ] Verify run directory created at `.specks/runs/<session-id>/`
+- [ ] Verify sub-task outputs persisted as JSON
+- [ ] Verify skill-first pattern (author skill tried before agent)
+
+---
+
+##### 10.5.7: Create implementer orchestration skill {#step-10-5-7}
+
+**Tasks:**
+- [ ] Create `skills/implementer/SKILL.md`
+- [ ] Absorb implementation loop logic from `agents/director.md`
+- [ ] Implement skill-first, agent-escalation pattern
+
+**Full SKILL.md content:**
+
+```markdown
+---
+name: implementer
+description: Orchestrates the implementation loop from speck to completed code
+disable-model-invocation: true
+allowed-tools: Skill, Task, Read, Grep, Glob, Write, Bash
+---
+
+## Purpose
+
+ORCHESTRATOR. Entry point `/specks:implementer`. Runs the implementation loop for each step in a speck.
+
+## Input
+
+User invokes with speck path:
+- `/specks:implementer .specks/specks-3.md`
+
+## Implementation Loop
+
+### Setup Phase
+
+\`\`\`bash
+MODE="impl"
+SESSION_ID="$(date +%Y%m%d-%H%M%S)-${MODE}-$(head -c 3 /dev/urandom | xxd -p)"
+mkdir -p .specks/runs/${SESSION_ID}/execution
+\`\`\`
+
+Write metadata.json with Write tool.
+
+### State Reconstruction (CRITICAL)
+
+**Skills are stateless.** You must reconstruct state from the run directory:
+
+1. **Current step:** Read metadata.json to determine which step to work on
+2. **Previous outputs:** Read persisted JSON files (architect.json, coder.json) when building context
+3. **Step completion:** Check which step-N directories exist and have committer.json (indicates complete)
+4. **Dependencies:** Parse speck to understand step dependencies before iterating
+5. **Retry tracking:** If a sub-task fails, write `step-N/<subtask>-error.json`. Count error files to determine retry attempts.
+
+**Dependency resolution:**
+Before starting a step, check its `**Depends on:**` line. If dependencies reference incomplete steps (no `committer.json` in their step-N directory), skip this step and try the next. If all remaining steps are blocked, report to user.
+
+### Per-Step Loop
+
+For each step in speck (respecting dependencies):
+
+1. Check if step already complete (step-N/committer.json exists) - skip if so
+2. Create step directory: `mkdir -p .specks/runs/${SESSION_ID}/execution/step-N`
+3. Update metadata.json with `current_step: "#step-N"`
+
+**Sub-task sequence:**
+
+1. **Architect**: `Skill(skill: "specks:architect", args: '{"speck_path": "...", "step_anchor": "#step-N"}')`
+   - If complex (10+ files): `Task(subagent_type: "specks:architect-agent", prompt: "...")`
+   - Persist to `step-N/architect.json`
+
+2. **Coder**: `Skill(skill: "specks:coder", args: '{"architect_strategy": {...}, ...}')`
+   - Read architect.json to get strategy
+   - If complex or drift: `Task(subagent_type: "specks:coder-agent", prompt: "...")`
+   - Persist to `step-N/coder.json`
+   - If `halted_for_drift`: invoke interviewer for decision
+
+3. **Reviewer**: `Skill(skill: "specks:reviewer", args: '{"step_anchor": "#step-N", ...}')`
+   - Read coder.json to get implementation output
+   - Persist to `step-N/reviewer.json`
+
+4. **Auditor**: `Skill(skill: "specks:auditor", args: '{"files_to_audit": [...], ...}')`
+   - Read coder.json to get files changed
+   - Persist to `step-N/auditor.json`
+
+5. **If issues**: Handle per escalation protocol
+   - Minor quality: retry coder
+   - Design issues: back to architect
+   - Conceptual: invoke interviewer
+
+6. **Logger**: `Skill(skill: "specks:logger", args: '{"step_anchor": "#step-N", ...}')`
+   - Persist to `step-N/logger.json`
+
+7. **Committer**: `Skill(skill: "specks:committer", args: '{"files_to_stage": [...], "bead_id": "...", ...}')`
+   - First, retrieve bead_id (see below)
+   - Persist to `step-N/committer.json`
+
+**Bead ID retrieval (before committer):**
+\`\`\`bash
+# Get bead_id for this step (if beads enabled)
+BEADS_STATUS=$(specks beads status ${SPECK_PATH} --json 2>/dev/null)
+if [ $? -eq 0 ]; then
+  BEAD_ID=$(echo $BEADS_STATUS | jq -r '.data.files[0].steps[] | select(.anchor == "'${STEP_ANCHOR}'") | .bead_id')
+else
+  BEAD_ID=""  # Beads not enabled or error
+fi
+\`\`\`
+Pass `bead_id: null` if beads not enabled or step has no linked bead.
+
+### Finalize
+
+Write `execution/summary.json`, update metadata.json with `status: "completed"`.
+
+## Constraints
+
+- ONE sub-task at a time (sequential invocation)
+- Maximum 1 agent context active at any time
+- Persist ALL sub-task outputs to run directory
+
+## Error Handling
+
+**Malformed JSON from sub-task:**
+1. Log the malformed output to `step-N/<subtask>-error.json`
+2. Retry the same sub-task once
+3. If retry also fails: escalate to agent variant (if available)
+4. If agent also fails: invoke interviewer to get user decision
+
+**Coder halts for drift:**
+1. This is NOT an error—it's expected behavior per drift detection
+2. Invoke interviewer with drift details
+3. User decides: continue anyway, back to architect, abort step
+
+**Test failures:**
+1. If tests fail ≤3 times: retry coder with test failure context
+2. If tests fail >3 times: escalate to coder-agent
+3. If agent also fails: invoke interviewer
+
+**Agent escalation also fails:**
+1. Invoke interviewer with full context
+2. Present options: abort step, skip step, retry from architect, abort entire run
+3. Honor user decision
+
+**Example error recovery flow:**
+1. Invoke `Skill(specks:coder, args: '{"architect_strategy": {...}}')`
+2. Coder returns `halted_for_drift: true` with `drift_severity: "moderate"`
+3. Persist to `step-0/coder.json` (includes drift_assessment)
+4. Invoke `Skill(specks:interviewer, args: '{"context": "drift", "payload": {...}}')`
+5. User decides "back to architect"
+6. Re-invoke `Skill(specks:architect, args: '{"revision_feedback": "Reduce scope..."}')`
+7. Continue with new strategy
+```
+
+**Verification:**
+- [ ] Invoke `/specks:implementer .specks/specks-test.md` on test speck
+- [ ] Verify step directories created
+- [ ] Verify sub-task outputs persisted as JSON
+- [ ] Verify skill-first pattern (architect/coder skills tried before agents)
+- [ ] Verify drift detection halts and escalates correctly
+
+---
+
+##### 10.5.8: Archive director and delete old skills {#step-10-5-8}
+
+**Tasks:**
 - [ ] Create `agents/archived/` directory
-- [ ] Move `agents/architect.md` to `agents/archived/architect.md`
-- [ ] Move `agents/implementer.md` to `agents/archived/implementer.md`
-- [ ] Move `agents/planner.md` to `agents/archived/planner.md`
-- [ ] If interviewer is skill: move `agents/interviewer.md` to `agents/archived/`
+- [ ] Move `agents/director.md` → `agents/archived/director.md`
+- [ ] Move `agents/interviewer.md` → `agents/archived/interviewer.md` (clean break; interviewer is skill-only)
+- [ ] Delete `skills/plan/` directory
+- [ ] Delete `skills/execute/` directory
+
+**Verification:**
+- [ ] `ls agents/*.md` shows 3 files (architect-agent, author-agent, coder-agent)
+- [ ] `ls agents/archived/` shows director.md
+- [ ] `ls skills/plan/` fails (deleted)
+- [ ] `ls skills/execute/` fails (deleted)
 
 ##### 10.5.9: Update documentation {#step-10-5-9}
 
 - [ ] Update `CLAUDE.md`:
-  - Change agent count from 5 to 1 (or 2 if interviewer fallback)
-  - Update agent/skill table
-  - Document single-agent architecture
-- [ ] Update (#agents-skills-summary) in this speck:
-  - Move architect, implementer, planner to skill table
-  - Update agent table to show only director (and interviewer if fallback)
-- [ ] Update (#flow-tools) table to reflect Skill() invocations
+  - Change agent count to 3 (architect-agent, author-agent, coder-agent)
+  - Update skill count to 12 (10 sub-tasks + 2 orchestrators)
+  - Document dual-orchestrator architecture
+  - Update `/specks:plan` → `/specks:planner`, `/specks:execute` → `/specks:implementer`
+- [ ] Update (#agents-skills-summary) in this speck (already done, verify)
+- [ ] Update (#flow-planning) to show planner orchestration skill
+- [ ] Update (#flow-implementation) to show implementer orchestration skill
+- [ ] Update (#flow-tools) table to reflect new skill/agent names
 
 **Verification Tests:**
 
 - [ ] Run `claude --plugin-dir .` - plugin loads without errors
-- [ ] Invoke `/specks:plan "test idea"` - planning loop completes without crash
-- [ ] Invoke `/specks:execute` on a test speck - execution loop completes without crash
-- [ ] Check debug log: verify no more than 2 agent contexts created
-- [ ] Verify all skill JSON outputs are parseable by director
-- [ ] Verify drift detection still works in implementer skill
+- [ ] Invoke `/specks:planner "test idea"` - planning loop completes without crash
+- [ ] Invoke `/specks:implementer` on a test speck - implementation loop completes without crash
+- [ ] Check debug log: verify maximum 1 agent context at any time
+- [ ] Verify skill-first pattern: orchestrator tries skill, can escalate to agent
+- [ ] Verify any sub-task can be invoked directly: `/specks:author`, `/specks:coder`, etc.
+- [ ] Verify drift detection still works in coder skill
 
 **Checkpoint:**
 
-- [ ] `ls skills/*/SKILL.md | wc -l` returns 12 (8 original + 4 new: architect, implementer, planner, interviewer)
-  - OR 11 if interviewer remains an agent
-- [ ] `ls agents/*.md | wc -l` returns 1 (director only)
-  - OR 2 if interviewer fallback (director + interviewer)
-- [ ] `agents/director.md` frontmatter includes all new skills
+- [ ] `ls skills/*/SKILL.md | wc -l` returns 12:
+  - 2 orchestrators: planner, implementer
+  - 7 skill-only sub-tasks: auditor, clarifier, committer, critic, interviewer, logger, reviewer
+  - 3 skill+agent pairs (skill side): architect, author, coder
+  - (plan and execute are DELETED, not counted)
+  - (Total: 2 + 7 + 3 = 12)
+- [ ] `ls agents/*.md | wc -l` returns 3:
+  - architect-agent, author-agent, coder-agent
+- [ ] No `director.md` in `agents/` (archived)
+- [ ] No `plan/` or `execute/` in `skills/` (deleted)
 - [ ] Planning loop completes without "Aborted()" crash
 - [ ] Execution loop completes without "Aborted()" crash
-- [ ] `agents/archived/` contains old agent files (architect, implementer, planner, and optionally interviewer)
+- [ ] Orchestrators demonstrate skill-first, agent-escalation pattern
 
 **Rollback:**
 
-- Restore agent files from `agents/archived/`
-- Revert `agents/director.md` changes
-- Delete new skill directories (architect, implementer, planner, interviewer)
-- Revert entry point skill changes
+- Restore `agents/director.md` from `agents/archived/`
+- Restore `skills/plan/` and `skills/execute/` from git
+- Rename agents back (remove `-agent` suffix)
+- Delete new orchestration skills (planner, implementer as orchestrators)
+- Delete new sub-task skills (architect, author, coder)
 
 **Commit after all checkpoints pass.**
 
@@ -2390,37 +3614,42 @@ After (STABLE - 1-2 contexts):
 
 ### 3.0.6 Deliverables and Checkpoints {#deliverables}
 
-**Deliverable:** Specks as a Claude Code plugin with pure orchestrator director and skill-based analysis.
+**Deliverable:** Specks as a Claude Code plugin with dual-orchestrator architecture and skill-first sub-tasks.
 
 #### Phase Exit Criteria ("Done means...") {#exit-criteria}
 
-All agents and skills per (#agents-skills-summary) are implemented and functional. Single-agent architecture verified.
+All agents and skills per (#agents-skills-summary) are implemented and functional. Dual-orchestrator architecture verified.
 
 - [ ] `.claude-plugin/plugin.json` exists with valid manifest
-- [ ] 1 agent definition exists in `agents/` (director only) - OR 2 if interviewer fallback
-- [ ] 12 skill directories exist in `skills/` per (#skill-summary) - OR 11 if interviewer is agent
-- [ ] Director has tools: Skill, Read, Grep, Glob, Bash, Write (no Task, Edit, AskUserQuestion) - OR keeps Task if interviewer fallback
-- [ ] Planning and execution loops complete WITHOUT "Aborted()" crashes
+- [ ] 3 agent definitions exist in `agents/` (architect-agent, author-agent, coder-agent)
+- [ ] 12 skill directories exist in `skills/` per (#skill-summary)
+- [ ] Orchestrators (`planner`, `implementer`) use skill-first, agent-escalation pattern
+- [ ] No `director.md` in `agents/` (archived)
+- [ ] No `plan/` or `execute/` in `skills/` (replaced by planner/implementer)
+- [ ] Planning and implementation loops complete WITHOUT "Aborted()" crashes
+- [ ] Maximum 1 agent context active at any time during loops
 - [ ] CLI has no plan, execute, or setup commands
 - [ ] `.claude/skills/` directory fully removed (Step 11 complete)
 - [ ] `cargo build` succeeds with no warnings
 - [ ] `cargo nextest run` passes all tests
 - [ ] `claude --plugin-dir .` loads specks as a plugin
-- [ ] `/specks:plan` and `/specks:execute` work
+- [ ] `/specks:planner` and `/specks:implementer` orchestration skills work
 - [ ] `/specks:logger` and `/specks:committer` work (replacements for bootstrap skills)
 
 #### Milestones (Within Phase) {#milestones}
 
 **Milestone M01: Plugin Structure Created** {#m01-plugin-created}
 - [ ] Plugin manifest exists
-- [ ] All 8 skills created in `skills/`
+- [ ] Initial 8 skills created in `skills/` (pre-Step 10.5)
+- [ ] Note: After Step 10.5, final count is 12 skills (see M04.5)
 - Steps 0-3 complete
 
 **Milestone M02: Agents Updated (Interim)** {#m02-agents-updated}
-- [ ] Director is pure orchestrator with Skill tool
+- [ ] ~~Director created as pure orchestrator with Skill tool (interim, pre-Step 10.5)~~ **SUPERSEDED**
 - [ ] 7 agent files removed (6 became skills, 1 eliminated)
-- [ ] 5 agents remain temporarily (pending Step 10.5 flattening)
+- [ ] ~~5 agents remain temporarily~~ → After Step 10.5: 3 agents remain
 - Steps 4-6 complete
+- Note: This milestone represents interim state; final architecture in M04.5
 
 **Milestone M03: Legacy Removed** {#m03-legacy-removed}
 - [ ] Obsolete `.claude/skills/` entries removed (specks-plan, specks-execute)
@@ -2433,13 +3662,17 @@ All agents and skills per (#agents-skills-summary) are implemented and functiona
 - [ ] Plugin verified working
 - Steps 9-10 complete
 
-**Milestone M04.5: Single-Agent Architecture Complete** {#m04-5-single-agent}
-- [ ] 4 agents converted to skills (architect, implementer, planner, interviewer*)
-- [ ] Only 1 agent remains (director) - OR 2 if interviewer fallback
-- [ ] 12 skills total (8 original + 4 converted) - OR 11 if interviewer is agent
-- [ ] No "Aborted()" crashes during planning/execution loops
+**Milestone M04.5: Dual-Orchestrator Architecture Complete** {#m04-5-dual-orchestrator}
+- [ ] Director deleted (archived)
+- [ ] 3 agents with `-agent` suffix: architect-agent, author-agent, coder-agent
+- [ ] 2 orchestration skills: planner, implementer
+- [ ] 4 new sub-task skills: architect, author, coder, interviewer
+- [ ] Old entry point skills (plan, execute) deleted
+- [ ] 12 skills total (2 orchestrators + 10 sub-tasks)
+- [ ] Skill-first, agent-escalation pattern demonstrated
+- [ ] Maximum 1 agent context at any time
+- [ ] No "Aborted()" crashes during planning/implementation loops
 - Step 10.5 complete
-- *interviewer remains agent if AskUserQuestion fails from skill context
 
 **Milestone M05: Bootstrap Cleanup Complete** {#m05-bootstrap-cleanup}
 - [ ] `.claude/skills/` fully removed (bootstrap skills deleted)
@@ -2449,22 +3682,26 @@ All agents and skills per (#agents-skills-summary) are implemented and functiona
 #### Roadmap / Follow-ons (Explicitly Not Required for Phase Close) {#roadmap}
 
 - [ ] Phase 4: Test full planning loop inside Claude Code
-- [ ] Phase 5: Test full execution loop inside Claude Code
+- [ ] Phase 5: Test full implementation loop inside Claude Code
 - [ ] Create public plugin marketplace for specks distribution
 - [ ] Performance benchmarking
 
 | Checkpoint | Verification |
 |------------|--------------|
 | Plugin manifest | `.claude-plugin/plugin.json` exists and is valid JSON |
-| Skills count | `ls skills/*/SKILL.md \| wc -l` returns 12 (or 11 if interviewer is agent) |
-| Agents count | `ls agents/*.md \| wc -l` returns 1 (or 2 if interviewer fallback) |
-| Director tools | `grep "^tools:" agents/director.md` has Skill, no Task (or Task only for interviewer fallback) |
+| Skills count | `ls skills/*/SKILL.md \| wc -l` returns 12 |
+| Agents count | `ls agents/*.md \| wc -l` returns 3 |
+| Agent naming | All agents have `-agent` suffix (architect-agent, author-agent, coder-agent) |
+| No director | `ls agents/director.md` fails (archived) |
+| No old entry skills | `ls skills/plan/` and `ls skills/execute/` both fail (deleted) |
+| Orchestrators exist | `ls skills/planner/SKILL.md skills/implementer/SKILL.md` succeeds |
 | CLI simplified | `specks --help` shows no plan/execute/setup |
 | Build clean | `cargo build` with no warnings |
 | Tests pass | `cargo nextest run` passes |
 | Plugin loads | `claude --plugin-dir .` succeeds |
 | Run directory | `.specks/runs/<session-id>/` created with metadata.json and skill outputs |
-| Beads callable | Agent can invoke `specks beads status --json` via Bash and parse output |
-| No crashes | Planning/execution loops complete without "Aborted()" |
+| Beads callable | Orchestrators can invoke `specks beads status --json` via Bash and parse output |
+| Max 1 agent | Debug log shows maximum 1 agent context during any loop |
+| No crashes | Planning/implementation loops complete without "Aborted()" |
 
 **Commit after all checkpoints pass.**

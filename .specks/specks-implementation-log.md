@@ -6,6 +6,69 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 10.5: Dual-Orchestrator Architecture Refinement | PLAN REFINED | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Full plan review, Step 10.5 substeps
+- Claude Code Skills documentation - `disable-model-invocation` flag behavior
+- Code-architect agent analysis - Two comprehensive reviews
+
+**Refinement Work Completed:**
+
+This session refined the Step 10.5 plan through two rounds of code-architect review, addressing 8 critical issues and applying 3 quick wins.
+
+| Task | Status |
+|------|--------|
+| Resolve parallel vs sequential contradiction | Done |
+| Document state management for orchestrators | Done |
+| Remove timeout-based escalation (not implementable) | Done |
+| Add error handling to orchestrator SKILL.md templates | Done |
+| Investigate disable-model-invocation flag | Done (confirmed correct) |
+| Add migration mapping from historical Steps 4-5 | Done |
+| Update milestones for post-10.5 counts | Done |
+| Specify resume logic for interrupted orchestration | Done |
+| Quick win: Add file listing pattern for counter | Done |
+| Quick win: Add error handling examples | Done |
+| Quick win: Add bead_id retrieval snippet | Done |
+
+**Files Modified:**
+- `.specks/specks-3.md` - Extensive updates to Step 10.5 substeps and SKILL.md templates
+
+**Key Additions to Plan:**
+1. **State Reconstruction section** (#state-reconstruction) - Documents stateless-with-persistence pattern
+2. **Resume Logic section** (#resume-logic) - `--resume <session-id>` mechanism
+3. **Migration mapping tables** - Where Steps 4-5 historical work lands in new architecture
+4. **Error handling sections** - Added to both planner and implementer SKILL.md templates
+5. **File listing pattern** - Bash snippet for counter determination
+6. **Bead ID retrieval** - How to get bead_id before committer invocation
+7. **Retry tracking** - Error file convention for counting retries
+8. **Dependency resolution** - How implementer checks step dependencies
+
+**Code-Architect Assessment:**
+- Final rating: **B+ (Ready to implement)**
+- No critical blockers identified
+- Top 3 risks: state reconstruction failure, JSON output malformation, retry loops
+
+**Implementation Order Confirmed:**
+1. 10.5.2 Interviewer (CRITICAL PATH)
+2. 10.5.3 Architect skill+agent
+3. 10.5.4 Author skill+agent
+4. 10.5.5 Coder skill+agent
+5. 10.5.6 Planner orchestrator
+6. 10.5.7 Implementer orchestrator
+7. 10.5.8 Archive director, delete old skills
+8. 10.5.9 Update docs
+
+**Key Decisions:**
+- `disable-model-invocation: true` is CORRECT for entry point skills (prevents auto-invocation)
+- All sub-task invocations are SEQUENTIAL (no parallelism)
+- Timeout-based escalation REMOVED (skills don't have timers)
+- Orchestrators read from run directory to reconstruct state after each tool call
+
+---
+
 ## [specks-3.md] Step 10.5: Flatten Agent Architecture to Single Director Context | PLANNED | 2026-02-06
 
 **Completed:** 2026-02-06 (planning phase - implementation pending)
