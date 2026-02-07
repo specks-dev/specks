@@ -46,20 +46,26 @@ cd your-project
 specks init
 ```
 
-This creates a `.specks/` directory and installs Claude Code skills to `.claude/skills/`.
-
-If you installed via binary download (not Homebrew), you may need to manually install the skills:
-
-```bash
-specks setup claude
-```
+This creates a `.specks/` directory with the skeleton template and configuration.
 
 Verify your installation:
 
 ```bash
 specks --version
-specks setup claude --check
 ```
+
+### Using as a Claude Code Plugin
+
+Specks is a Claude Code plugin. For development or local use:
+
+```bash
+cd /path/to/specks
+claude --plugin-dir .
+```
+
+This loads all specks skills and agents. You can then use:
+- `/specks:plan "your idea"` - Create a new speck
+- `/specks:execute .specks/specks-name.md` - Execute a speck
 
 ## Quick Start
 
@@ -74,7 +80,15 @@ This creates a `.specks/` directory with:
 - `config.toml` - Project configuration
 - `runs/` - Agent run artifacts (gitignored)
 
-2. Create a speck from the skeleton:
+2. Create a speck via Claude Code:
+
+```bash
+claude --plugin-dir /path/to/specks
+# Then in Claude Code:
+/specks:plan "add a health check endpoint"
+```
+
+Or manually from the skeleton:
 
 ```bash
 cp .specks/specks-skeleton.md .specks/specks-myfeature.md
@@ -86,7 +100,15 @@ cp .specks/specks-skeleton.md .specks/specks-myfeature.md
 specks validate specks-myfeature.md
 ```
 
-4. Track progress:
+4. Execute your speck:
+
+```bash
+claude --plugin-dir /path/to/specks
+# Then in Claude Code:
+/specks:execute .specks/specks-myfeature.md
+```
+
+5. Track progress:
 
 ```bash
 specks status specks-myfeature.md
@@ -135,75 +157,88 @@ specks status specks-1.md -v   # Verbose (show tasks)
 specks status specks-1.md --json  # Output as JSON
 ```
 
-### `specks plan`
+### `specks beads close`
 
-Create or revise a speck through an iterative planning loop.
+Close a bead to mark work complete.
 
 ```bash
-specks plan "add a health check endpoint"  # Create from idea
-specks plan .specks/specks-existing.md     # Revise existing speck
-specks plan --name myfeature "add caching" # Specify speck name
-specks plan --context design.md "new API"  # Include context files
+specks beads close bd-abc123                      # Close a bead
+specks beads close bd-abc123 --reason "Step done" # Close with reason
+specks beads close bd-abc123 --json               # JSON output
 ```
 
-The planning loop: interviewer gathers requirements, planner creates speck, critic reviews, interviewer presents results. Loop continues until you approve.
+## Planning and Execution (Claude Code Skills)
 
-### `specks execute`
+Planning and execution are handled via Claude Code skills, not CLI commands.
+
+### `/specks:plan`
+
+Create or revise a speck through agent collaboration.
+
+```
+/specks:plan "add a health check endpoint"    # Create from idea
+/specks:plan .specks/specks-existing.md       # Revise existing speck
+```
+
+The planning flow:
+1. **Clarifier** analyzes the idea and generates questions
+2. **Interviewer** presents questions and gathers user input
+3. **Planner** creates a structured speck
+4. **Critic** reviews for quality and implementability
+5. Loop continues until critic approves or user accepts
+
+### `/specks:execute`
 
 Execute a speck step-by-step with agent orchestration.
 
-```bash
-specks execute .specks/specks-1.md                    # Execute all steps
-specks execute .specks/specks-1.md --start-step "#step-2"  # Start from step
-specks execute .specks/specks-1.md --dry-run          # Preview without executing
-specks execute .specks/specks-1.md --commit-policy auto    # Auto-commit after steps
+```
+/specks:execute .specks/specks-feature.md
 ```
 
-### `specks setup`
+The execution flow for each step:
+1. **Architect** creates implementation strategy
+2. **Implementer** executes strategy (with self-monitoring for drift)
+3. **Reviewer** and **Auditor** verify work in parallel
+4. **Logger** updates implementation log
+5. **Committer** stages files and commits changes
 
-Manage Claude Code integration.
+## Agent and Skill Architecture
 
-```bash
-specks setup claude          # Install Claude Code skills to project
-specks setup claude --check  # Check skill installation status
-specks setup claude --force  # Force reinstall skills
-```
+Specks uses a multi-agent architecture implemented as a Claude Code plugin.
 
-## Agent Workflow
+### Agents (5)
 
-Specks uses a multi-agent architecture for creating and implementing specifications:
-
-### Agent Suite
+Agents handle complex, multi-step workflows:
 
 | Agent | Role | Description |
 |-------|------|-------------|
-| **Director** | Orchestrator | Central hub that coordinates all other agents |
-| **Planner** | Idea → Speck | Transforms ideas into structured plans |
-| **Architect** | Step → Strategy | Creates implementation strategies with expected touch sets |
-| **Implementer** | Strategy → Code | Executes architect strategies, writes code |
-| **Monitor** | Watchdog | Tracks progress, detects drift, signals halts |
-| **Reviewer** | Quality | Reviews completed work for issues |
-| **Auditor** | Compliance | Verifies adherence to spec and policies |
-| **Logger** | Documentation | Records run activity and decisions |
-| **Committer** | Git | Handles git operations (staging, committing) |
+| **director** | Orchestrator | Coordinates workflow via Task and Skill tools |
+| **planner** | Idea → Speck | Creates and revises speck documents |
+| **interviewer** | User Interaction | Single point of user interaction via AskUserQuestion |
+| **architect** | Step → Strategy | Creates implementation strategies with expected touch sets |
+| **implementer** | Strategy → Code | Executes strategies with self-monitoring for drift |
 
-### Workflow Phases
+### Skills (8)
 
-1. **Planning**: Director invokes Planner to create/refine a speck
-2. **Execution**: For each step:
-   - Director invokes Architect to create strategy
-   - Director invokes Implementer to execute strategy
-   - Monitor tracks progress and drift
-   - Reviewer/Auditor verify quality
-3. **Commit**: Committer handles git operations based on commit-policy
+Skills run inline for focused tasks:
+
+| Skill | Role | Description |
+|-------|------|-------------|
+| **plan** | Entry Point | Spawns director with mode=plan |
+| **execute** | Entry Point | Spawns director with mode=execute |
+| **clarifier** | Analysis | Analyzes ideas, returns clarifying questions |
+| **critic** | Review | Reviews speck quality and implementability |
+| **reviewer** | Verification | Verifies completed step matches plan |
+| **auditor** | Quality | Checks code quality, security, error handling |
+| **logger** | Documentation | Updates implementation log |
+| **committer** | Git | Stages files, commits changes, closes beads |
 
 ### Run Artifacts
 
-Agent runs create artifacts in `.specks/runs/<uuid>/`:
-- `director-plan.md` - Director's execution plan
-- `architect-plan.md` - Per-step architecture strategy
-- `monitor-report.md` - Progress and drift reports
-- `audit-report.md` - Compliance findings
+Agent runs create an audit trail in `.specks/runs/<session-id>/`:
+- `metadata.json` - Session info (mode, speck path, timestamps)
+- `planning/NNN-<skill>.json` - Skill outputs during planning
+- `execution/step-N/` - Per-step artifacts
 
 Run directories are gitignored by default.
 
@@ -342,6 +377,41 @@ specks beads pull specks-1.md
 # Output: specks-1: 3 checkboxes updated
 ```
 
+### Beads Readiness Checklist
+
+Before using beads integration, verify your setup:
+
+1. **Specks CLI installed and on PATH:**
+   ```bash
+   specks --version
+   # Should show: specks x.y.z
+   ```
+
+2. **Beads CLI (`bd`) installed and on PATH:**
+   ```bash
+   bd --version
+   # Should show: bd x.y.z
+   ```
+   If not on PATH, set `SPECKS_BD_PATH` or configure in `.specks/config.toml`.
+
+3. **Beads initialized in your project:**
+   ```bash
+   ls .beads/
+   # Should show: config.toml, beads.db, etc.
+   ```
+   If not present, run `bd init`.
+
+4. **Verify beads commands work:**
+   ```bash
+   specks beads status --json
+   # Should return valid JSON (even if no specks have beads yet)
+   ```
+
+**Discovery chain for `bd` binary:**
+1. `SPECKS_BD_PATH` environment variable (highest priority)
+2. `config.specks.beads.bd_path` from `.specks/config.toml`
+3. Default `"bd"` (expects `bd` on PATH)
+
 ## Configuration
 
 Project configuration lives in `.specks/config.toml`:
@@ -378,38 +448,38 @@ pull_checkbox_mode = "checkpoints"  # What to check: "checkpoints" or "all"
 |------|-------------|
 | E001 | Parse error |
 | E002 | Missing required field |
-| E005 | Invalid anchor format |
+| E005 | Invalid anchor format / Beads CLI not installed |
 | E006 | Duplicate anchor |
-| E009 | Not initialized |
+| E009 | Not initialized (.specks/ not found) |
 | E010 | Broken reference |
 | E011 | Circular dependency |
-| E013 | Beads not initialized |
-| E019 | Claude CLI not installed |
-| E020 | Agent invocation failed |
-| E021 | Agent timeout |
-| E022 | Monitor halted execution |
+| E013 | Beads not initialized (.beads/ not found) |
+| E016 | Beads command failed |
 
 ## Troubleshooting
-
-### "Claude CLI not installed"
-
-The `plan` and `execute` commands require Claude Code:
-
-```bash
-npm install -g @anthropic-ai/claude-code
-```
 
 ### "Not initialized"
 
 Run `specks init` in your project directory to create the `.specks/` directory.
 
-### "Skills not found"
+### "Beads CLI not installed" (E005)
 
-If you installed specks via binary download, install the Claude Code skills:
+The beads commands require the `bd` binary:
 
-```bash
-specks setup claude
-```
+1. Install the beads CLI from [beads releases](https://github.com/kocienda/beads/releases)
+2. Add to PATH, or set `SPECKS_BD_PATH` environment variable
+3. Verify: `bd --version`
+
+### "Beads not initialized" (E013)
+
+Run `bd init` in your project directory to create the `.beads/` directory.
+
+### "Beads command failed" (E016)
+
+A beads operation failed. Check the error message for details. Common causes:
+- Network connectivity issues
+- Invalid bead ID
+- Permission problems
 
 ### Validation Errors
 
@@ -421,12 +491,17 @@ specks validate specks-problem.md --json
 
 Common issues: missing sections, invalid anchor format, broken references.
 
-### Agent Timeout
+### Plugin Not Loading
 
-For complex operations, increase the timeout:
+If skills/agents aren't available in Claude Code:
 
 ```bash
-specks execute .specks/specks-complex.md --timeout 900
+# Verify you're loading the plugin
+claude --plugin-dir /path/to/specks
+
+# Check skills are discovered
+# In Claude Code: /help
+# Should list /specks:plan, /specks:execute, etc.
 ```
 
 ## Documentation

@@ -6,6 +6,55 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 9: Update documentation | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, section (#step-9), (#context), (#strategy)
+- `CLAUDE.md` - Existing project instructions
+- `README.md` - Existing user documentation
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update CLAUDE.md agent list (5 agents, not 11) | Done |
+| Update CLAUDE.md to mention skills | Done |
+| Remove references to `specks plan`, `specks execute`, `specks setup claude` | Done |
+| Document `/specks:plan` and `/specks:execute` as primary interface | Done |
+| Document `claude --plugin-dir .` for development | Done |
+| Update README installation instructions | Done |
+| Add a "Beads readiness checklist" section | Done |
+| Document error messages and next steps when `specks` or `bd` is missing | Done |
+
+**Files Modified:**
+- `CLAUDE.md` - Replaced "Agent Suite" (11 agents) with "Agent and Skill Architecture" (5 agents, 8 skills); added skill documentation; updated common commands to show skills vs CLI; added development workflow section
+- `README.md` - Removed `specks plan`, `specks execute`, `specks setup` sections; added Claude Code skills documentation; updated Quick Start; added Beads Readiness Checklist; updated Agent and Skill Architecture section; fixed Troubleshooting section
+- `.specks/specks-3.md` - Checked off Step 9 tasks and checkpoints
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 130 tests passed
+
+**Checkpoints Verified:**
+- CLAUDE.md reflects new architecture (5 agents, 8 skills, plugin-based): PASS
+- README documents plugin installation and beads readiness: PASS
+- No references to obsolete CLI commands in CLAUDE.md: PASS (grep returns 0)
+- No references to obsolete CLI commands in README.md: PASS (grep returns 0)
+- `/specks:plan` and `/specks:execute` documented in README: PASS (10 references)
+- `claude --plugin-dir .` documented: PASS (4 references in README)
+- Beads Readiness Checklist section present: PASS
+
+**Key Decisions/Notes:**
+- Documentation now accurately reflects the Claude Code plugin architecture
+- Removed all references to obsolete CLI commands (plan, execute, setup)
+- Added comprehensive Beads Readiness Checklist with 4-step verification
+- Updated Troubleshooting to include plugin loading and beads error guidance
+- Ready for Step 10: Verify plugin works
+
+---
+
 ## [specks-3.md] Step 8.6: Add specks beads close subcommand | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06

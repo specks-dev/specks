@@ -2050,18 +2050,18 @@ After completing Steps 8.1-8.6:
 - Updated `README.md`
 
 **Tasks:**
-- [ ] Update CLAUDE.md agent list (5 agents, not 11)
-- [ ] Update CLAUDE.md to mention skills
-- [ ] Remove references to `specks plan`, `specks execute`, `specks setup claude`
-- [ ] Document `/specks:plan` and `/specks:execute` as primary interface
-- [ ] Document `claude --plugin-dir .` for development
-- [ ] Update README installation instructions
-- [ ] Add a "Beads readiness checklist" section (CLI install, bd install, SPECKS_BD_PATH)
-- [ ] Document error messages and next steps when `specks` or `bd` is missing
+- [x] Update CLAUDE.md agent list (5 agents, not 11)
+- [x] Update CLAUDE.md to mention skills
+- [x] Remove references to `specks plan`, `specks execute`, `specks setup claude`
+- [x] Document `/specks:plan` and `/specks:execute` as primary interface
+- [x] Document `claude --plugin-dir .` for development
+- [x] Update README installation instructions
+- [x] Add a "Beads readiness checklist" section (CLI install, bd install, SPECKS_BD_PATH)
+- [x] Document error messages and next steps when `specks` or `bd` is missing
 
 **Checkpoint:**
-- [ ] CLAUDE.md reflects new architecture
-- [ ] README documents plugin installation and beads readiness
+- [x] CLAUDE.md reflects new architecture
+- [x] README documents plugin installation and beads readiness
 
 **Rollback:**
 - Revert from git
