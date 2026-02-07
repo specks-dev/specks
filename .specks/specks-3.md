@@ -2716,12 +2716,20 @@ After completing Steps 8.1-8.6:
 
 **References:** [D08] Two-agent orchestrator architecture, (#agents-skills-summary), (#flow-planning), (#flow-implementation)
 
-**Context:** Critical discoveries from testing:
-1. **Skills cannot orchestrate loops** - When skill A calls skill B and B returns, Claude naturally outputs the result and stops rather than continuing the loop.
-2. **Agents CAN orchestrate loops** - They run autonomously in their own context and continue until complete.
-3. **Agents cannot nest** - Claude Code aborts with "Aborted()" when agents spawn other agents.
+**Artifacts:**
+- `agents/planner-agent.md` - NEW orchestrator agent
+- `agents/implementer-agent.md` - NEW orchestrator agent
+- `skills/planner/SKILL.md` - UPDATED thin entry wrapper
+- `skills/implementer/SKILL.md` - NEW thin entry wrapper
+- `skills/*/SKILL.md` - UPDATED (10 sub-task skills without escalation)
+- `agents/archived/` - OLD agents moved here for reference
 
-Therefore: Two orchestrator agents (planner-agent, implementer-agent) that call skills for sub-tasks. No skill-to-agent escalation patterns.
+> **Context:** Critical discoveries from testing:
+> 1. **Skills cannot orchestrate loops** - When skill A calls skill B and B returns, Claude naturally outputs the result and stops rather than continuing the loop.
+> 2. **Agents CAN orchestrate loops** - They run autonomously in their own context and continue until complete.
+> 3. **Agents cannot nest** - Claude Code aborts with "Aborted()" when agents spawn other agents.
+>
+> Therefore: Two orchestrator agents (planner-agent, implementer-agent) that call skills for sub-tasks. No skill-to-agent escalation patterns.
 
 **Architecture:**
 
@@ -2751,23 +2759,69 @@ SUB-TASK SKILLS (10, called by agents, never spawn agents):
 - Skills: `SKILL.md` in `skills/<name>/` directory
 - Entry points: thin skills that spawn their corresponding agent
 
-**Artifacts:**
-- `agents/planner-agent.md` - NEW orchestrator agent
-- `agents/implementer-agent.md` - NEW orchestrator agent
-- `skills/planner/SKILL.md` - UPDATED thin entry wrapper
-- `skills/implementer/SKILL.md` - NEW thin entry wrapper
-- `skills/*/SKILL.md` - UPDATED (10 sub-task skills without escalation)
-- `agents/archived/` - OLD agents moved here for reference
+**Design Decisions Confirmed:**
+- Skill args syntax: `Skill(skill: "specks:name", args: '{"key": "value"}')` - test as we go
+- Session handling: Agents create their own run directories before calling skills
+- Parallelism: **Never** call skills in parallel. Reviewer + auditor run serially.
 
 **Tasks:**
+- [x] Complete substep 10.5.0: Update plan document
+- [ ] Complete substep 10.5.1: Create planner-agent
+- [ ] Complete substep 10.5.2: Create implementer-agent
+- [ ] Complete substep 10.5.3: Create thin entry skill wrappers
+- [ ] Complete substep 10.5.4: Update sub-task skills
+- [ ] Complete substep 10.5.5: Delete old agent files
+- [ ] Complete substep 10.5.6: Delete old entry point skills
+- [ ] Complete substep 10.5.7: Update documentation
+- [ ] Complete substep 10.5.8: Verification tests
+
+**Tests:**
+- [ ] Integration test: Plugin loads without errors
+- [ ] Integration test: Planning loop completes without "Aborted()" crash
+- [ ] Integration test: Implementation loop completes without "Aborted()" crash
+
+**Checkpoint:**
+- [ ] `ls skills/*/SKILL.md | wc -l` returns 12
+- [ ] `ls agents/*.md | wc -l` returns 2
+- [ ] `ls agents/archived/` shows `director.md`, `interviewer.md`
+- [ ] No `architect-agent.md`, `author-agent.md`, `coder-agent.md` exist
+- [ ] No `plan/` or `execute/` in `skills/`
+- [ ] No "Skill vs Agent" sections in any skill
+- [ ] Planning loop completes without "Aborted()" crash
+- [ ] Implementation loop completes without "Aborted()" crash
+
+**Rollback:**
+- Restore archived agents from `agents/archived/`
+- Restore deleted agents from git (architect-agent, author-agent, coder-agent)
+- Restore old entry skills from git (plan/, execute/)
+- Delete new agents (planner-agent, implementer-agent)
+- Delete new entry skill (implementer/)
+- Restore planner skill from git
+- Restore skill escalation sections from git
+
+**Commit after all checkpoints pass.**
 
 ---
 
-##### 10.5.0: Update plan document for two-agent architecture {#step-10-5-0}
+##### Step 10.5.0: Update plan document for two-agent architecture {#step-10-5-0}
 
-**Priority:** FIRST - Must complete before any implementation to avoid exit criteria failures.
+**Commit:** `docs: update plan for two-agent architecture`
 
-**Context:** The plan document has internal inconsistencies between early sections (written for skill-first/agent-escalation) and Step 10.5 (two-agent, no escalation). These must be reconciled before implementation.
+**References:** [D08] Two-agent orchestrator architecture, (#agents-skills-summary), (#flow-planning), (#flow-implementation), (#exit-criteria), (#m04-5-dual-orchestrator), (#escalation-guidelines), (#skill-permissions)
+
+**Artifacts:**
+- Updated `(#agents-skills-summary)` section
+- Updated `(#flow-planning)` section
+- Updated `(#flow-implementation)` section
+- Updated `(#exit-criteria)` section
+- Updated `(#m04-5-dual-orchestrator)` section
+- Updated checkpoint table
+- Superseded `(#escalation-guidelines)` section
+- Updated `(#skill-permissions)` section
+
+> **Priority:** FIRST - Must complete before any implementation to avoid exit criteria failures.
+>
+> **Context:** The plan document has internal inconsistencies between early sections (written for skill-first/agent-escalation) and Step 10.5 (two-agent, no escalation). These must be reconciled before implementation.
 
 **Sections to update:**
 
@@ -2783,62 +2837,68 @@ SUB-TASK SKILLS (10, called by agents, never spawn agents):
 | `(#skill-permissions)` | lines ~1011-1039 | planner/implementer → `Task` only |
 
 **Tasks:**
-
 - [x] Update `(#agents-skills-summary)`:
   - Change "3 agents" to "2 agents" ✓
   - Replace architect-agent, author-agent, coder-agent with planner-agent, implementer-agent ✓
   - Remove all "skill-first, agent-escalation" language ✓
   - Clarify: planner and implementer are THIN ENTRY SKILLS that spawn agents ✓
-
 - [x] Update `(#flow-planning)`:
   - Change "(PLANNER) orchestration skill receives input, runs INLINE" to "[PLANNER-AGENT] receives input, runs autonomously" ✓
   - Remove "IF task is complex → ESCALATE to [AUTHOR-AGENT]" branches ✓
   - Show: entry skill spawns agent, agent invokes skills ✓
-
 - [x] Update `(#flow-implementation)`:
   - Change "(IMPLEMENTER) orchestration skill receives speck, runs INLINE" to "[IMPLEMENTER-AGENT] receives speck, runs autonomously" ✓
   - Remove all escalation branches ✓
   - Change "run in parallel" to "run serially" for reviewer + auditor ✓
   - Show: entry skill spawns agent, agent invokes skills ✓
-
 - [x] Update `(#exit-criteria)`:
   - Change "3 agent definitions exist in `agents/` (architect-agent, author-agent, coder-agent)" to "2 agent definitions exist in `agents/` (planner-agent, implementer-agent)" ✓
   - Remove "Orchestrators use skill-first, agent-escalation pattern" criterion ✓
   - Add "Entry skills (`/specks:planner`, `/specks:implementer`) spawn orchestrator agents" ✓
-
 - [x] Update `(#m04-5-dual-orchestrator)`:
   - Change "3 agents with `-agent` suffix" to "2 agents: planner-agent, implementer-agent" ✓
   - Remove "Skill-first, agent-escalation pattern demonstrated" ✓
   - Add "Orchestrator agents run complete loops without nesting" ✓
-
 - [x] Update checkpoint table:
   - Change "Agents count | returns 3" to "Agents count | returns 2" ✓
   - Change agent naming verification to "planner-agent, implementer-agent" ✓
-
 - [x] Mark `(#escalation-guidelines)` as superseded:
   - Add header: "**SUPERSEDED by Step 10.5** - The skill-first, agent-escalation pattern has been replaced by the two-agent orchestrator architecture. Escalation is no longer used." ✓
-
 - [x] Update `(#skill-permissions)`:
   - Change planner row: `allowed-tools: Task` only ✓
   - Change implementer row: `allowed-tools: Task` only ✓
   - Remove "Agent variant" column references for architect, author, coder ✓
 
-**Design Decisions Confirmed:**
-- Skill args syntax: `Skill(skill: "specks:name", args: '{"key": "value"}')` - test as we go
-- Session handling: Agents create their own run directories before calling skills
-- Parallelism: **Never** call skills in parallel. Reviewer + auditor run serially.
+**Tests:**
+- [x] Drift prevention: All agent counts in document say "2" ✓
+- [x] Drift prevention: No references to "3 agents" remain ✓
+- [x] Drift prevention: No references to "skill-first, agent-escalation" remain (except in superseded section) ✓
 
-**Verification:**
-- [x] All agent counts in document say "2" ✓
-- [x] No references to "3 agents" remain ✓
-- [x] No references to "skill-first, agent-escalation" remain (except in superseded section) ✓
+**Checkpoint:**
+- [x] `grep -c "2 agents" .specks/specks-3.md` returns positive count ✓
+- [x] `grep -c "3 agents" .specks/specks-3.md` returns 0 ✓
 - [x] Flow diagrams show agents orchestrating, not skills ✓
 - [x] Exit criteria match Step 10.5 expected outcome ✓
 
+**Rollback:**
+- Revert plan document changes via git
+
+**Commit after all checkpoints pass.**
+
 ---
 
-##### 10.5.1: Create planner-agent orchestrator {#step-10-5-1}
+##### Step 10.5.1: Create planner-agent orchestrator {#step-10-5-1}
 
+**Depends on:** #step-10-5-0
+
+**Commit:** `feat(agents): add planner-agent orchestrator`
+
+**References:** [D08] Two-agent orchestrator architecture, (#flow-planning)
+
+**Artifacts:**
+- `agents/planner-agent.md` - NEW orchestrator agent
+
+**Tasks:**
 - [ ] Create `agents/planner-agent.md` with the following content:
 
 ```markdown
@@ -2896,14 +2956,7 @@ At the start of every invocation:
 2. Resolve `SESSION_ID`:
    - Fresh run: generate a new session id:
      ```bash
-     SHORT_UUID="$(
-       uuidgen 2>/dev/null \
-         | tr -d '-' \
-         | tr '[:upper:]' '[:lower:]' \
-         | cut -c1-6 \
-       || hexdump -n 3 -e '3/1 "%02x"' /dev/urandom
-     )"
-     SESSION_ID="$(date +%Y%m%d-%H%M%S)-plan-${SHORT_UUID}"
+     SESSION_ID="$(date +%Y%m%d-%H%M%S)-plan-$(head -c 3 /dev/urandom | xxd -p)"
      ```
    - Resume run: use the provided session id and require `.specks/runs/${SESSION_ID}/` to exist.
 
@@ -2984,17 +3037,34 @@ Persist output to `planning/<next-counter>-critic.json`
 - **Never stop mid-loop** (run until done)
 - **Never interact with user directly** (use interviewer skill)
 
-**Verification:**
-- [ ] Agent file created at `agents/planner-agent.md`
-- [ ] Frontmatter has: `tools: Skill, Read, Grep, Glob, Write, Bash`
-- [ ] Frontmatter does NOT include Task tool
+**Tests:**
+- [ ] Unit test: Agent file parses with valid YAML frontmatter
+- [ ] Drift prevention: Frontmatter does NOT include Task tool
+
+**Checkpoint:**
+- [ ] `test -f agents/planner-agent.md && echo "exists"` returns "exists"
+- [ ] `grep "tools:" agents/planner-agent.md | grep -v Task` succeeds
+- [ ] `grep "tools:.*Task" agents/planner-agent.md` fails (Task not in tools)
+
+**Rollback:**
+- Delete `agents/planner-agent.md`
+
+**Commit after all checkpoints pass.**
 
 ---
 
-##### 10.5.2: Create implementer-agent orchestrator {#step-10-5-2}
+##### Step 10.5.2: Create implementer-agent orchestrator {#step-10-5-2}
 
 **Depends on:** #step-10-5-1
 
+**Commit:** `feat(agents): add implementer-agent orchestrator`
+
+**References:** [D08] Two-agent orchestrator architecture, (#flow-implementation)
+
+**Artifacts:**
+- `agents/implementer-agent.md` - NEW orchestrator agent
+
+**Tasks:**
 - [ ] Create `agents/implementer-agent.md` with the following content:
 
 ```markdown
@@ -3058,14 +3128,7 @@ At the start of every invocation:
 2. Resolve `SESSION_ID`:
    - Fresh run: generate:
      ```bash
-     SHORT_UUID="$(
-       uuidgen 2>/dev/null \
-         | tr -d '-' \
-         | tr '[:upper:]' '[:lower:]' \
-         | cut -c1-6 \
-       || hexdump -n 3 -e '3/1 "%02x"' /dev/urandom
-     )"
-     SESSION_ID="$(date +%Y%m%d-%H%M%S)-impl-${SHORT_UUID}"
+     SESSION_ID="$(date +%Y%m%d-%H%M%S)-impl-$(head -c 3 /dev/urandom | xxd -p)"
      ```
    - Resume run: use provided session id and require `.specks/runs/${SESSION_ID}/` to exist.
 
@@ -3143,17 +3206,35 @@ If `commit_policy: manual`, invoke interviewer to confirm the prepared commit:
 - **Never interact with user directly** (use interviewer skill)
 ```
 
-**Verification:**
-- [ ] Agent file created at `agents/implementer-agent.md`
-- [ ] Frontmatter has: `tools: Skill, Read, Grep, Glob, Write, Bash`
-- [ ] Frontmatter does NOT include Task tool
+**Tests:**
+- [ ] Unit test: Agent file parses with valid YAML frontmatter
+- [ ] Drift prevention: Frontmatter does NOT include Task tool
+
+**Checkpoint:**
+- [ ] `test -f agents/implementer-agent.md && echo "exists"` returns "exists"
+- [ ] `grep "tools:" agents/implementer-agent.md | grep -v Task` succeeds
+- [ ] `grep "tools:.*Task" agents/implementer-agent.md` fails (Task not in tools)
+
+**Rollback:**
+- Delete `agents/implementer-agent.md`
+
+**Commit after all checkpoints pass.**
 
 ---
 
-##### 10.5.3: Create thin entry skill wrappers {#step-10-5-3}
+##### Step 10.5.3: Create thin entry skill wrappers {#step-10-5-3}
 
 **Depends on:** #step-10-5-1, #step-10-5-2
 
+**Commit:** `feat(skills): add thin entry wrappers for planner and implementer`
+
+**References:** [D08] Two-agent orchestrator architecture, (#skill-permissions)
+
+**Artifacts:**
+- `skills/planner/SKILL.md` - UPDATED thin entry wrapper
+- `skills/implementer/SKILL.md` - NEW thin entry wrapper
+
+**Tasks:**
 - [ ] Update `skills/planner/SKILL.md` to thin wrapper:
 
 ```markdown
@@ -3217,17 +3298,39 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 *Note:* This call is synchronous: the entry skill returns when the implementer-agent finishes, preserving the "no fire-and-forget" principle.
 ```
 
-**Verification:**
-- [ ] `skills/planner/SKILL.md` spawns planner-agent immediately
-- [ ] `skills/implementer/SKILL.md` created and spawns implementer-agent immediately
-- [ ] Both have `allowed-tools: Task` only
+**Tests:**
+- [ ] Unit test: Both skill files parse with valid YAML frontmatter
+- [ ] Drift prevention: Both have `allowed-tools: Task` only
+
+**Checkpoint:**
+- [ ] `grep "allowed-tools: Task" skills/planner/SKILL.md` succeeds
+- [ ] `grep "allowed-tools: Task" skills/implementer/SKILL.md` succeeds
+- [ ] `grep "planner-agent" skills/planner/SKILL.md` succeeds
+- [ ] `grep "implementer-agent" skills/implementer/SKILL.md` succeeds
+
+**Rollback:**
+- Restore `skills/planner/SKILL.md` from git
+- Delete `skills/implementer/` directory
+
+**Commit after all checkpoints pass.**
 
 ---
 
-##### 10.5.4: Update sub-task skills (remove escalation patterns) {#step-10-5-4}
+##### Step 10.5.4: Update sub-task skills (remove escalation patterns) {#step-10-5-4}
 
 **Depends on:** #step-10-5-3
 
+**Commit:** `refactor(skills): remove escalation patterns from sub-task skills`
+
+**References:** [D08] Two-agent orchestrator architecture
+
+**Artifacts:**
+- Updated `skills/author/SKILL.md`
+- Updated `skills/architect/SKILL.md`
+- Updated `skills/coder/SKILL.md`
+- Verified `skills/interviewer/SKILL.md`
+
+**Tasks:**
 - [ ] Update `skills/author/SKILL.md` - remove "## Skill vs Agent" section
 - [ ] Update `skills/architect/SKILL.md` - remove "## Skill vs Agent" section
 - [ ] Update `skills/coder/SKILL.md` - remove "## Skill vs Agent" section
@@ -3238,17 +3341,39 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 2. Remove any remaining references to "escalate to agent" or "agent variant"
 3. Skills always return JSON to the calling orchestrator agent
 
-**Verification:**
+**Tests:**
+- [ ] Drift prevention: No "Skill vs Agent" sections remain
+- [ ] Drift prevention: No "escalate" references remain
+
+**Checkpoint:**
 - [ ] `grep -r "Skill vs Agent" skills/` returns no matches
-- [ ] `grep -r "escalate" skills/` returns no matches
-- [ ] Interviewer skill has `allowed-tools: AskUserQuestion`
+- [ ] `grep -r "escalate" skills/` returns no matches (case-insensitive)
+- [ ] `grep "allowed-tools: AskUserQuestion" skills/interviewer/SKILL.md` succeeds
+
+**Rollback:**
+- Restore skill files from git
+
+**Commit after all checkpoints pass.**
 
 ---
 
-##### 10.5.5: Delete old agent files {#step-10-5-5}
+##### Step 10.5.5: Delete old agent files {#step-10-5-5}
 
 **Depends on:** #step-10-5-4
 
+**Commit:** `refactor(agents): archive old agents, delete obsolete agent files`
+
+**References:** [D08] Two-agent orchestrator architecture
+
+**Artifacts:**
+- `agents/archived/` directory created
+- `agents/archived/director.md` - archived
+- `agents/archived/interviewer.md` - archived
+- Deleted: `agents/architect-agent.md`
+- Deleted: `agents/author-agent.md`
+- Deleted: `agents/coder-agent.md`
+
+**Tasks:**
 - [ ] Create `agents/archived/` directory
 - [ ] Move `agents/director.md` to `agents/archived/director.md`
 - [ ] Move `agents/interviewer.md` to `agents/archived/interviewer.md`
@@ -3256,31 +3381,70 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 - [ ] Delete `agents/author-agent.md`
 - [ ] Delete `agents/coder-agent.md`
 
-**Verification:**
-- [ ] `ls agents/*.md` shows exactly 2 files: `planner-agent.md`, `implementer-agent.md`
-- [ ] `ls agents/archived/` shows `director.md`, `interviewer.md`
-- [ ] No `architect-agent.md`, `author-agent.md`, `coder-agent.md` exist
+**Tests:**
+- [ ] Drift prevention: Only 2 agent files remain in `agents/`
+- [ ] Drift prevention: Archived agents preserved for reference
+
+**Checkpoint:**
+- [ ] `ls agents/*.md | wc -l` returns 2
+- [ ] `ls agents/*.md` shows exactly `planner-agent.md` and `implementer-agent.md`
+- [ ] `ls agents/archived/` shows `director.md` and `interviewer.md`
+- [ ] `test ! -f agents/architect-agent.md` succeeds
+- [ ] `test ! -f agents/author-agent.md` succeeds
+- [ ] `test ! -f agents/coder-agent.md` succeeds
+
+**Rollback:**
+- Restore archived agents from `agents/archived/` to `agents/`
+- Restore deleted agents from git
+
+**Commit after all checkpoints pass.**
 
 ---
 
-##### 10.5.6: Delete old entry point skills {#step-10-5-6}
+##### Step 10.5.6: Delete old entry point skills {#step-10-5-6}
 
 **Depends on:** #step-10-5-5
 
+**Commit:** `refactor(skills): delete old entry point skills (plan, execute)`
+
+**References:** [D08] Two-agent orchestrator architecture
+
+**Artifacts:**
+- Deleted: `skills/plan/` directory
+- Deleted: `skills/execute/` directory
+
+**Tasks:**
 - [ ] Delete `skills/plan/` directory entirely
 - [ ] Delete `skills/execute/` directory entirely
 
-**Verification:**
-- [ ] `ls skills/plan/` fails (deleted)
-- [ ] `ls skills/execute/` fails (deleted)
+**Tests:**
+- [ ] Drift prevention: Old entry points removed
+
+**Checkpoint:**
+- [ ] `test ! -d skills/plan` succeeds
+- [ ] `test ! -d skills/execute` succeeds
 - [ ] `ls skills/*/SKILL.md | wc -l` returns 12
+
+**Rollback:**
+- Restore `skills/plan/` from git
+- Restore `skills/execute/` from git
+
+**Commit after all checkpoints pass.**
 
 ---
 
-##### 10.5.7: Update documentation {#step-10-5-7}
+##### Step 10.5.7: Update documentation {#step-10-5-7}
 
 **Depends on:** #step-10-5-6
 
+**Commit:** `docs: update CLAUDE.md for two-agent architecture`
+
+**References:** [D08] Two-agent orchestrator architecture, (#agents-skills-summary)
+
+**Artifacts:**
+- Updated `CLAUDE.md` Agent and Skill Architecture section
+
+**Tasks:**
 - [ ] Update `CLAUDE.md` Agent and Skill Architecture section:
   - Change agent count to 2: planner-agent, implementer-agent
   - Change skill count to 12: 2 entry wrappers + 10 sub-tasks
@@ -3289,25 +3453,50 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
   - Remove all references to "skill-first, agent-escalation" pattern
   - Remove all references to director agent
 
-**Verification:**
-- [ ] CLAUDE.md shows 2 agents, 12 skills
-- [ ] No references to "escalation" or "skill-first" pattern
-- [ ] Entry points documented as `/specks:planner` and `/specks:implementer`
+**Tests:**
+- [ ] Drift prevention: CLAUDE.md reflects new architecture
+
+**Checkpoint:**
+- [ ] `grep "2 agents" CLAUDE.md` or equivalent shows correct count
+- [ ] `grep -c "escalation" CLAUDE.md` returns 0
+- [ ] `grep "/specks:planner" CLAUDE.md` succeeds
+- [ ] `grep "/specks:implementer" CLAUDE.md` succeeds
+
+**Rollback:**
+- Restore `CLAUDE.md` from git
+
+**Commit after all checkpoints pass.**
 
 ---
 
-##### 10.5.8: Verification tests {#step-10-5-8}
+##### Step 10.5.8: Verification tests {#step-10-5-8}
 
 **Depends on:** #step-10-5-7
 
+**Commit:** `test: verify two-agent orchestrator architecture`
+
+**References:** [D08] Two-agent orchestrator architecture, (#exit-criteria)
+
+**Artifacts:**
+- Verified plugin loads without errors
+- Verified agent discovery works
+- Verified skill discovery works
+- Verified planning entry point works
+- Verified implementation entry point works
+
+**Tasks:**
 - [ ] Run `claude --plugin-dir .` - plugin loads without errors
 - [ ] Verify agent discovery: both planner-agent and implementer-agent visible
 - [ ] Verify skill discovery: all 12 skills visible
 - [ ] Test planning entry point: `/specks:planner "test idea"`
 - [ ] Test implementation entry point: `/specks:implementer .specks/specks-test.md`
 
-**Checkpoint:**
+**Tests:**
+- [ ] Integration test: Plugin loads without errors
+- [ ] Integration test: Planning loop completes without "Aborted()" crash
+- [ ] Integration test: Implementation loop completes without "Aborted()" crash
 
+**Checkpoint:**
 - [ ] `ls skills/*/SKILL.md | wc -l` returns 12
 - [ ] `ls agents/*.md | wc -l` returns 2
 - [ ] `ls agents/archived/` shows `director.md`, `interviewer.md`
@@ -3318,7 +3507,6 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 - [ ] Implementation loop completes without "Aborted()" crash
 
 **Rollback:**
-
 - Restore archived agents from `agents/archived/`
 - Restore deleted agents from git (architect-agent, author-agent, coder-agent)
 - Restore old entry skills from git (plan/, execute/)
@@ -3328,6 +3516,27 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 - Restore skill escalation sections from git
 
 **Commit after all checkpoints pass.**
+
+---
+
+#### Step 10.5 Summary {#step-10-5-summary}
+
+After completing Steps 10.5.0–10.5.8, you will have:
+- 2 orchestrator agents (planner-agent, implementer-agent) that run complete loops
+- 2 thin entry wrapper skills (planner, implementer) that spawn their corresponding agents
+- 10 sub-task skills without escalation patterns
+- Old agents archived or deleted
+- Old entry point skills deleted
+- Documentation updated to reflect new architecture
+
+**Final Step 10.5 Checkpoint:**
+- [ ] `ls agents/*.md | wc -l` returns 2
+- [ ] `ls skills/*/SKILL.md | wc -l` returns 12
+- [ ] Planning and implementation loops complete without "Aborted()" crashes
+- [ ] Maximum 1 agent context active at any time during loops
+
+**Commit after all checkpoints pass.**
+
 ---
 
 #### Step 11: Final cleanup (remove bootstrap skills) {#step-11}
