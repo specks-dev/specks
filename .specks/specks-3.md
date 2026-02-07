@@ -3484,25 +3484,25 @@ Do NOT do any setup, validation, or processing. The implementer-agent handles ev
 - Verified implementation entry point works
 
 **Tasks:**
-- [ ] Run `claude --plugin-dir .` - plugin loads without errors
-- [ ] Verify agent discovery: both planner-agent and implementer-agent visible
-- [ ] Verify skill discovery: all 12 skills visible
-- [ ] Test planning entry point: `/specks:planner "test idea"`
+- [x] Run `claude --plugin-dir .` - plugin loads without errors
+- [x] Verify agent discovery: both planner-agent and implementer-agent visible
+- [x] Verify skill discovery: all 12 skills visible
+- [x] Test planning entry point: `/specks:planner "test idea"`
 - [ ] Test implementation entry point: `/specks:implementer .specks/specks-test.md`
 
 **Tests:**
-- [ ] Integration test: Plugin loads without errors
-- [ ] Integration test: Planning loop completes without "Aborted()" crash
+- [x] Integration test: Plugin loads without errors
+- [x] Integration test: Planning loop completes without "Aborted()" crash
 - [ ] Integration test: Implementation loop completes without "Aborted()" crash
 
 **Checkpoint:**
-- [ ] `ls skills/*/SKILL.md | wc -l` returns 12
-- [ ] `ls agents/*.md | wc -l` returns 2
-- [ ] `ls agents/archived/` shows `director.md`, `interviewer.md`
-- [ ] No `architect-agent.md`, `author-agent.md`, `coder-agent.md` exist
-- [ ] No `plan/` or `execute/` in `skills/`
-- [ ] No "Skill vs Agent" sections in any skill
-- [ ] Planning loop completes without "Aborted()" crash
+- [x] `ls skills/*/SKILL.md | wc -l` returns 12
+- [x] `ls agents/*.md | wc -l` returns 2
+- [x] `ls agents/archived/` shows `director.md`, `interviewer.md`
+- [x] No `architect-agent.md`, `author-agent.md`, `coder-agent.md` exist
+- [x] No `plan/` or `execute/` in `skills/`
+- [x] No "Skill vs Agent" sections in any skill
+- [x] Planning loop completes without "Aborted()" crash
 - [ ] Implementation loop completes without "Aborted()" crash
 
 **Rollback:**

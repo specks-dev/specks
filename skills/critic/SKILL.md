@@ -2,6 +2,7 @@
 name: critic
 description: Review speck quality and implementability - skeleton compliance is HARD GATE
 allowed-tools: Read, Grep, Glob
+context: fork
 ---
 
 ## Purpose

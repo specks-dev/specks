@@ -2,6 +2,7 @@
 name: clarifier
 description: Analyze ideas and generate clarifying questions
 allowed-tools: Read, Grep, Glob
+context: fork
 ---
 
 ## Purpose

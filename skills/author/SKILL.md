@@ -2,6 +2,7 @@
 name: author
 description: Creates and revises speck documents following skeleton format
 allowed-tools: Read, Grep, Glob, Write, Edit
+context: fork
 ---
 
 ## Purpose
