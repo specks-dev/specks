@@ -1872,28 +1872,33 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 
 ---
 
-#### Step 7: Remove legacy skill directories {#step-7}
+#### Step 7: Remove legacy skill directories (partial) {#step-7}
 
 **Depends on:** #step-1
 
-**Commit:** `refactor(skills): remove legacy .claude/skills directory`
+**Commit:** `refactor(skills): remove obsolete .claude/skills entries`
 
 **References:** [D06] Clean breaks, Table T02, (#files-to-remove)
 
 **Artifacts:**
-- Deleted `.claude/skills/` directory
+- Deleted obsolete skill directories from `.claude/skills/`
+- Kept 3 bootstrap skills until Phase 3 is verified working
 
 **Tasks:**
-- [ ] Delete `.claude/skills/specks-plan/` (moved to `skills/plan/`)
-- [ ] Delete `.claude/skills/specks-execute/` (moved to `skills/execute/`)
-- [ ] Delete `.claude/skills/implement-plan/` (CLI infrastructure, no replacement needed)
-- [ ] Delete `.claude/skills/update-plan-implementation-log/` (replaced by `skills/logger/`)
-- [ ] Delete `.claude/skills/prepare-git-commit-message/` (replaced by `skills/committer/`)
-- [ ] Delete `.claude/skills/` directory if empty
+- [x] Delete `.claude/skills/specks-plan/` (moved to `skills/plan/`)
+- [x] Delete `.claude/skills/specks-execute/` (moved to `skills/execute/`)
+- [ ] ~~Delete `.claude/skills/implement-plan/`~~ **KEPT** (bootstrap: needed to implement remaining Phase 3 steps)
+- [ ] ~~Delete `.claude/skills/update-plan-implementation-log/`~~ **KEPT** (bootstrap: needed until `skills/logger/` is verified)
+- [ ] ~~Delete `.claude/skills/prepare-git-commit-message/`~~ **KEPT** (bootstrap: needed until `skills/committer/` is verified)
+- [ ] ~~Delete `.claude/skills/` directory if empty~~ **DEFERRED** (to Step 11)
+
+**Bootstrap Note:** Three legacy skills are temporarily retained because they are used to implement Phase 3 itself. We cannot use the new infrastructure to build the new infrastructure until the new infrastructure is complete and verified. These will be removed in Step 11 after Step 10 verification passes.
 
 **Checkpoint:**
-- [ ] `.claude/skills/` directory does not exist
-- [ ] `skills/` at repo root contains all 8 skills
+- [x] `.claude/skills/specks-plan/` does not exist
+- [x] `.claude/skills/specks-execute/` does not exist
+- [x] `skills/` at repo root contains all 8 skills
+- [x] Bootstrap skills remain in `.claude/skills/`: implement-plan, update-plan-implementation-log, prepare-git-commit-message
 
 **Rollback:**
 - Restore from git
@@ -2120,6 +2125,36 @@ After completing Steps 8.1-8.6:
 
 ---
 
+#### Step 11: Final cleanup (remove bootstrap skills) {#step-11}
+
+**Depends on:** #step-10
+
+**Commit:** `chore: remove bootstrap skills after Phase 3 verification`
+
+**References:** (#step-7), [D06] Clean breaks
+
+**Context:** During Phase 3 implementation, we kept 3 legacy skills in `.claude/skills/` because they were needed to implement Phase 3 itself (bootstrapping problem). Now that Step 10 has verified the new plugin infrastructure works, we can safely remove them.
+
+**Tasks:**
+- [ ] Verify Step 10 checkpoints all passed (new infrastructure works)
+- [ ] Delete `.claude/skills/implement-plan/`
+- [ ] Delete `.claude/skills/update-plan-implementation-log/`
+- [ ] Delete `.claude/skills/prepare-git-commit-message/`
+- [ ] Delete `.claude/skills/` directory
+
+**Checkpoint:**
+- [ ] `.claude/skills/` directory does not exist
+- [ ] `/specks:logger` works (replacement for update-plan-implementation-log)
+- [ ] `/specks:committer` works (replacement for prepare-git-commit-message)
+- [ ] No references to `.claude/skills/` remain in codebase
+
+**Rollback:**
+- Restore from git (though at this point the new infrastructure is verified working)
+
+**Commit after all checkpoints pass.**
+
+---
+
 ### 3.0.6 Deliverables and Checkpoints {#deliverables}
 
 **Deliverable:** Specks as a Claude Code plugin with pure orchestrator director and skill-based analysis.
@@ -2133,11 +2168,12 @@ All agents and skills per (#agents-skills-summary) are implemented and functiona
 - [ ] 8 skill directories exist in `skills/` per (#skill-summary)
 - [ ] Director has tools: Task, Skill, Read, Grep, Glob, Bash, Write (no Edit, AskUserQuestion)
 - [ ] CLI has no plan, execute, or setup commands
-- [ ] `.claude/skills/` directory removed
+- [ ] `.claude/skills/` directory fully removed (Step 11 complete)
 - [ ] `cargo build` succeeds with no warnings
 - [ ] `cargo nextest run` passes all tests
 - [ ] `claude --plugin-dir .` loads specks as a plugin
 - [ ] `/specks:plan` and `/specks:execute` work
+- [ ] `/specks:logger` and `/specks:committer` work (replacements for bootstrap skills)
 
 #### Milestones (Within Phase) {#milestones}
 
@@ -2153,14 +2189,20 @@ All agents and skills per (#agents-skills-summary) are implemented and functiona
 - Steps 4-6 complete
 
 **Milestone M03: Legacy Removed** {#m03-legacy-removed}
-- [ ] `.claude/skills/` removed
+- [ ] Obsolete `.claude/skills/` entries removed (specks-plan, specks-execute)
 - [ ] Rust orchestration code removed
+- [ ] Bootstrap skills retained temporarily
 - Steps 7-8 complete
 
-**Milestone M04: Documentation Complete** {#m04-docs-complete}
+**Milestone M04: Documentation and Verification Complete** {#m04-docs-complete}
 - [ ] All docs updated
 - [ ] Plugin verified working
 - Steps 9-10 complete
+
+**Milestone M05: Bootstrap Cleanup Complete** {#m05-bootstrap-cleanup}
+- [ ] `.claude/skills/` fully removed (bootstrap skills deleted)
+- [ ] New skills (`/specks:logger`, `/specks:committer`) verified working
+- Step 11 complete
 
 #### Roadmap / Follow-ons (Explicitly Not Required for Phase Close) {#roadmap}
 

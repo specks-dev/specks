@@ -6,6 +6,28 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 7: Remove legacy skill directories (partial) | PARTIAL | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**Summary:** Deleted obsolete `.claude/skills/` entries (specks-plan, specks-execute). Retained 3 bootstrap skills (implement-plan, update-plan-implementation-log, prepare-git-commit-message) needed to complete Phase 3 implementation. Final cleanup deferred to Step 11 after new infrastructure is verified.
+
+**Files Changed:**
+- .claude/skills/specks-plan/ (deleted, moved to skills/plan/)
+- .claude/skills/specks-execute/ (deleted, moved to skills/execute/)
+
+**Files Retained (bootstrap):**
+- .claude/skills/implement-plan/ (needed to implement remaining steps)
+- .claude/skills/update-plan-implementation-log/ (needed until skills/logger/ verified)
+- .claude/skills/prepare-git-commit-message/ (needed until skills/committer/ verified)
+
+**Deferred to Step 11:**
+- Final deletion of bootstrap skills after Step 10 verification passes
+
+**Commit:** (pending)
+
+---
+
 ## [specks-3.md] Step 6: Remove agent files that became skills | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
