@@ -6,6 +6,50 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 4.1: Update director tools and remove legacy CLI | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#step-4-1), (#agent-updates), Table T04
+- [D02] Director is pure orchestrator (#d02-pure-orchestrator)
+- [D07] Skill invocation via Skill tool (#d07-skill-invocation)
+- `agents/specks-director.md` - Current director agent definition
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Change tools line to: `tools: Task, Skill, Read, Grep, Glob, Bash, Write` | Done |
+| Remove Edit from tools (keep Write for audit trail) | Done |
+| Add `skills` frontmatter field to preload analysis skills | Done |
+| Remove "Path 1: External CLI" section entirely from body | Done |
+| Remove all references to `specks plan "idea"` CLI command | Done |
+| Remove all references to `specks execute` CLI command | Done |
+| Remove any direct file writing logic | Done |
+
+**Files Modified:**
+- `agents/specks-director.md` - Updated tools line, added skills frontmatter, removed CLI invocation path, updated invocation protocol to skills-only
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 313 tests passed
+
+**Checkpoints Verified:**
+- `grep "^tools:" agents/specks-director.md` shows Task, Skill, Read, Grep, Glob, Bash, Write: PASS
+- No Edit or AskUserQuestion in tools: PASS
+- `grep -c "specks plan\|specks execute" agents/specks-director.md` returns 0: PASS
+- `grep "^skills:" agents/specks-director.md` lists preloaded skills: PASS
+
+**Key Decisions/Notes:**
+- Added Skill tool to director's tools for invoking inline skills (clarifier, critic, reviewer, auditor, logger, committer)
+- Preloaded 6 skills via `skills` frontmatter field
+- Replaced two-path invocation (CLI + skills) with skills-only invocation (`/specks:plan`, `/specks:execute`)
+- File is still named `specks-director.md` - rename to `director.md` happens in Step 6
+- Ready for Step 4.2: Implement director Planning Phase Flow
+
+---
+
 ## [specks-3.md] Step 3: Create utility skills | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06

@@ -1639,19 +1639,19 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 - Updated `agents/director.md` (tools and legacy removal only)
 
 **Tasks:**
-- [ ] Change tools line to: `tools: Task, Skill, Read, Grep, Glob, Bash, Write`
-- [ ] Remove Edit from tools (keep Write for audit trail)
-- [ ] Add `skills` frontmatter field to preload analysis skills (clarifier, critic, reviewer, auditor, logger, committer)
-- [ ] Remove "Path 1: External CLI" section entirely from body
-- [ ] Remove all references to `specks plan "idea"` CLI command (replaced by `/specks:plan`)
-- [ ] Remove all references to `specks execute` CLI command (replaced by `/specks:execute`)
-- [ ] Remove any direct file writing logic (director delegates to skills/agents)
+- [x] Change tools line to: `tools: Task, Skill, Read, Grep, Glob, Bash, Write`
+- [x] Remove Edit from tools (keep Write for audit trail)
+- [x] Add `skills` frontmatter field to preload analysis skills (clarifier, critic, reviewer, auditor, logger, committer)
+- [x] Remove "Path 1: External CLI" section entirely from body
+- [x] Remove all references to `specks plan "idea"` CLI command (replaced by `/specks:plan`)
+- [x] Remove all references to `specks execute` CLI command (replaced by `/specks:execute`)
+- [x] Remove any direct file writing logic (director delegates to skills/agents)
 
 **Checkpoint:**
-- [ ] `grep "^tools:" agents/director.md` shows Task, Skill, Read, Grep, Glob, Bash, Write
-- [ ] No Edit or AskUserQuestion in tools (Write is allowed for audit trail)
-- [ ] `grep -c "specks plan\|specks execute" agents/director.md` returns 0
-- [ ] `grep "^skills:" agents/director.md` lists preloaded skills
+- [x] `grep "^tools:" agents/director.md` shows Task, Skill, Read, Grep, Glob, Bash, Write
+- [x] No Edit or AskUserQuestion in tools (Write is allowed for audit trail)
+- [x] `grep -c "specks plan\|specks execute" agents/director.md` returns 0
+- [x] `grep "^skills:" agents/director.md` lists preloaded skills
 
 **Rollback:**
 - Revert from git

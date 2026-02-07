@@ -1,7 +1,8 @@
 ---
 name: specks-director
 description: Central orchestrator for specks workflow. Invoke when executing or planning a speck.
-tools: Task, Read, Grep, Glob, Bash, Write, Edit
+tools: Task, Skill, Read, Grep, Glob, Bash, Write
+skills: specks:clarifier, specks:critic, specks:reviewer, specks:auditor, specks:logger, specks:committer
 model: opus
 ---
 
@@ -31,23 +32,14 @@ You are the hub in a hub-and-spoke architecture. All other agents report to you;
 
 ## Invocation Protocol
 
-You can be invoked via two equivalent paths:
+You are invoked via Claude Code skills:
 
-**Path 1: External CLI (terminal workflow)**
-```bash
-specks plan "idea" | specks plan path/to/speck.md
-specks execute path/to/speck.md [options]
 ```
-The CLI shells out to `claude` CLI which invokes you.
+/specks:plan "idea" | /specks:plan path/to/speck.md
+/specks:execute path/to/speck.md [options]
+```
 
-**Path 2: Internal Claude Code (session workflow)**
-```
-/specks-plan "idea" | /specks-plan path/to/speck.md
-/specks-execute path/to/speck.md [options]
-```
-Slash command skills invoke you directly via Task tool.
-
-Both paths provide the same parameters and produce identical outcomes.
+Skills invoke you via the Task tool with `subagent_type: "specks:director"`.
 
 **Parameters:**
 
