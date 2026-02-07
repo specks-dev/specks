@@ -6,6 +6,57 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 10.5.5: Create coder skill+agent (most complex, drift detection) | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Step 10.5.5 specification and (#smart-drift) drift detection logic
+- `.specks/specks-skeleton.md` - Skeleton format requirements for step structure awareness
+- `agents/implementer.md` - Original implementer agent (renamed to coder-agent)
+- (#coder-agent-contract) - Input/output JSON contract specification
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Rename `agents/implementer.md` → `agents/coder-agent.md` | Done |
+| Update coder-agent frontmatter (`name: coder-agent`, `model: inherit`) | Done |
+| Update coder-agent references (director → implementer orchestration skill) | Done |
+| Add skeleton format awareness section to coder-agent | Done |
+| Create `skills/coder/SKILL.md` with full drift detection | Done |
+| Add skeleton format awareness section to coder skill | Done |
+| Preserve ALL drift detection logic from (#smart-drift) | Done |
+| Fix accidental "directory" → "implementer orchestration skilly" replacements | Done |
+
+**Files Created:**
+- `skills/coder/SKILL.md` - Coder skill with complete drift detection (proximity scoring, file type modifiers, thresholds, self-halt behavior) and skeleton awareness
+
+**Files Modified:**
+- `agents/coder-agent.md` - Renamed from implementer.md, updated frontmatter, added skeleton format awareness, updated all references
+
+**Verification Results:**
+
+| Checkpoint | Status |
+|------------|--------|
+| Invoke `/specks:coder` with simple implementation | PASS |
+| Verify drift_assessment is always present in output | PASS |
+| Test drift detection by intentionally touching unexpected file | PASS (halted with drift_severity: "moderate" for red-category /tmp/ file) |
+| Invoke coder-agent via Task tool | PASS |
+
+**Key Decisions/Notes:**
+
+**Skeleton Awareness (P0 Requirement):**
+Both the coder skill and coder-agent now include a "CRITICAL: Understanding Speck Step Format" section that documents the skeleton structure they will be implementing. This ensures the coder understands:
+- Step format: Tasks, Tests, Checkpoint, Rollback, References, Depends on, Commit
+- What to do: Complete tasks, run tests, verify checkpoints, produce artifacts
+- What NOT to do: Commit (committer skill), update implementation log (logger skill)
+
+**Drift Detection Verified:**
+The drift detection correctly identified `/tmp/specks-drift-test.txt` as a red-category drift (unrelated subsystem) and halted with `drift_severity: "moderate"` before writing any files.
+
+---
+
 ## [specks-3.md] Steps 10.5.3-10.5.4: Create architect and author skill+agent pairs | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

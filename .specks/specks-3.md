@@ -3124,10 +3124,10 @@ model: inherit
 **Priority:** Most complex sub-task. Includes drift detection.
 
 **Tasks:**
-- [ ] Rename `agents/implementer.md` → `agents/coder-agent.md`
-- [ ] Update agent frontmatter: `name: coder-agent`
-- [ ] Create `skills/coder/SKILL.md`
-- [ ] Preserve ALL drift detection logic from (#smart-drift)
+- [x] Rename `agents/implementer.md` → `agents/coder-agent.md`
+- [x] Update agent frontmatter: `name: coder-agent`
+- [x] Create `skills/coder/SKILL.md`
+- [x] Preserve ALL drift detection logic from (#smart-drift)
 
 **Full SKILL.md content:**
 
@@ -3226,10 +3226,10 @@ model: inherit
 ```
 
 **Verification:**
-- [ ] Invoke `/specks:coder` with simple implementation
-- [ ] Verify drift_assessment is always present in output
-- [ ] Test drift detection by intentionally touching unexpected file
-- [ ] Invoke coder-agent via Task tool
+- [x] Invoke `/specks:coder` with simple implementation
+- [x] Verify drift_assessment is always present in output
+- [x] Test drift detection by intentionally touching unexpected file
+- [x] Invoke coder-agent via Task tool
 
 ---
 
