@@ -6,6 +6,75 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Plan Finalization: Phase 3 Plugin Architecture | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan for Claude Code plugin restructuring
+- Claude Code plugin documentation (code.claude.com/docs/en/plugins)
+- Claude Code subagents documentation (code.claude.com/docs/en/sub-agents)
+- `crates/specks-core/src/beads.rs` - BeadsCli.close() implementation
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Fix agent count mismatch (4 → 5 agents in exit-criteria) | Done |
+| Fix skill count mismatch (scope: 8→7, exit-criteria: 10→9→8) | Done |
+| Fix agent naming convention (specks-director.md → director.md) | Done |
+| Add agent rename step to Step 6 | Done |
+| Fix Step 6 checkpoint pattern (agents/specks-*.md → agents/*.md) | Done |
+| Fix Step 10 implementer tool list (Skill → Task) | Done |
+| Clarify Step 8 commit strategy (batch substeps 8.1-8.6) | Done |
+| Update D02 and Table T04 for director Write tool | Done |
+| Verify logger doesn't need Write (specks init creates log) | Done |
+| Add close_reason to committer input schema | Done |
+| Add Interviewer Agent Contract with input/output schemas | Done |
+| Verify implementer has model: inherit | Done |
+| Add session ID fallback chain (uuidgen → /dev/urandom → $$RANDOM) | Done |
+| Fix Step 7 implement-plan reference (CLI infrastructure, no replacement) | Done |
+| Eliminate monitor skill - merge into implementer self-monitoring | Done |
+| Add Smart Drift Detection section to implementer contract | Done |
+| Simplify execution flow (remove polling pattern) | Done |
+| Update skill count 9→8, agent files to remove 6→7 | Done |
+| Add specks-monitor.md to deletion list | Done |
+| Update Step 8 title to include beads close | Done |
+| Fix director remit (Write for audit trail only) | Done |
+| Add drift_assessment to reviewer/auditor input/output | Done |
+| Add Skill tool syntax verification as HARD GATE in Step 10 | Done |
+| Add --reason flag to beads close command documentation | Done |
+| Mark drift_assessment as mandatory in implementer output | Done |
+
+**Files Modified:**
+- `.specks/specks-3.md` - Comprehensive plan updates across all sections
+
+**Key Decisions/Notes:**
+
+1. **Monitor Elimination**: The monitor skill was eliminated and its drift detection logic merged into the implementer agent as self-monitoring. This simplifies orchestration (no polling loop) while maintaining safety via:
+   - Implementer self-halt on drift (`halted_for_drift` + `drift_assessment`)
+   - Reviewer/auditor catching anything the implementer misses
+   - Explicit escalation path through interviewer when drift occurs
+
+2. **Plugin Agent Namespacing**: Confirmed Task tool uses colon format (`specks:director`) matching skill namespacing (`/specks:plan`). Agent files renamed from `specks-director.md` to `director.md` to avoid redundant `specks:specks-director`.
+
+3. **Skill Tool Syntax**: Marked as verified in Step 10 (HARD GATE). If actual syntax differs from `Skill(skill: "specks:clarifier")`, plan must be updated before proceeding.
+
+4. **Session ID Generation**: macOS-compatible fallback chain: uuidgen → /dev/urandom → $$RANDOM. Removed `date +%N` (unsupported on macOS).
+
+5. **drift_assessment Mandatory**: Always included in implementer output (even with no drift) for audit-first principle and reviewer/auditor context.
+
+6. **Beads Close**: BeadsCli.close() already exists in Rust. Step 8.6 adds CLI subcommand wrapper with --reason flag support.
+
+**Final Counts:**
+- 5 agents: director, planner, interviewer, architect, implementer
+- 8 skills: plan, execute, clarifier, critic, reviewer, auditor, logger, committer
+- 7 agent files to remove: 6 become skills + 1 eliminated (monitor)
+
+**Quality Assessment:** Plan rated 8.5/10 by code-architect. Ready for implementation.
+
+---
+
 ## [specks-2.md] Step 8.3.6.2: Implement Semantic Color Theme | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
