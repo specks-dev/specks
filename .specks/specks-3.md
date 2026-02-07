@@ -1796,35 +1796,35 @@ Step 4 is split into substeps to manage complexity. Each substep builds on the p
 - Updated `agents/implementer.md`
 
 **Tasks:**
-- [ ] Remove AskUserQuestion from planner's tools
-- [ ] **Update planner body content** (per #flow-planning step 3):
-  - [ ] Remove "Ask Clarifying Questions" workflow (interviewer handles this now)
-  - [ ] Receives: idea, user_answers, clarifier_assumptions from director
-  - [ ] Returns: draft speck path
-  - [ ] Ensure workflow focuses on speck creation/revision only
-- [ ] **Update interviewer body content** (per #flow-planning steps 2, 5):
-  - [ ] Emphasize role as single point of user interaction
-  - [ ] Receives: questions from clarifier skill OR issues from critic skill
-  - [ ] Uses AskUserQuestion to present to user
-  - [ ] Returns: structured user_answers{} or decisions to director
-- [ ] **Update interviewer for execution phase** (per #flow-execution):
-  - [ ] Handles drift escalation when implementer self-halts
-  - [ ] Handles conceptual issue escalation from reviewer/auditor
-- [ ] **Update implementer agent** (per #implementer-agent-contract):
-  - [ ] Update tools to: `tools: Read, Grep, Glob, Write, Edit, Bash`
-  - [ ] Add description per contract (includes self-monitoring)
-  - [ ] Update body to accept architect strategy JSON input
-  - [ ] Implement self-monitoring for drift detection per (#smart-drift)
-  - [ ] Return structured JSON output per contract (includes drift_assessment)
-- [ ] Verify architect doesn't need changes (read-only analysis, no user interaction)
+- [x] Remove AskUserQuestion from planner's tools
+- [x] **Update planner body content** (per #flow-planning step 3):
+  - [x] Remove "Ask Clarifying Questions" workflow (interviewer handles this now)
+  - [x] Receives: idea, user_answers, clarifier_assumptions from director
+  - [x] Returns: draft speck path
+  - [x] Ensure workflow focuses on speck creation/revision only
+- [x] **Update interviewer body content** (per #flow-planning steps 2, 5):
+  - [x] Emphasize role as single point of user interaction
+  - [x] Receives: questions from clarifier skill OR issues from critic skill
+  - [x] Uses AskUserQuestion to present to user
+  - [x] Returns: structured user_answers{} or decisions to director
+- [x] **Update interviewer for execution phase** (per #flow-execution):
+  - [x] Handles drift escalation when implementer self-halts
+  - [x] Handles conceptual issue escalation from reviewer/auditor
+- [x] **Update implementer agent** (per #implementer-agent-contract):
+  - [x] Update tools to: `tools: Read, Grep, Glob, Write, Edit, Bash`
+  - [x] Add description per contract (includes self-monitoring)
+  - [x] Update body to accept architect strategy JSON input
+  - [x] Implement self-monitoring for drift detection per (#smart-drift)
+  - [x] Return structured JSON output per contract (includes drift_assessment)
+- [x] Verify architect doesn't need changes (read-only analysis, no user interaction)
 
 **Checkpoint:**
-- [ ] Planner tools do not include AskUserQuestion
-- [ ] Planner body has no "Ask Clarifying Questions" section
-- [ ] Planner receives clarifier output as input parameter
-- [ ] Interviewer tools include AskUserQuestion
-- [ ] Interviewer body describes user interaction workflow per flowcharts
-- [ ] Implementer has correct tools and accepts architect strategy
+- [x] Planner tools do not include AskUserQuestion
+- [x] Planner body has no "Ask Clarifying Questions" section
+- [x] Planner receives clarifier output as input parameter
+- [x] Interviewer tools include AskUserQuestion
+- [x] Interviewer body describes user interaction workflow per flowcharts
+- [x] Implementer has correct tools and accepts architect strategy
 
 **Rollback:**
 - Revert from git

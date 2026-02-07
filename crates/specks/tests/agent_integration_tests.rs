@@ -146,8 +146,11 @@ fn test_execution_agents_have_required_sections() {
         );
 
         // All execution agents should document inputs they receive
+        // (Input Contract, Inputs You Receive, or "From the director" are all valid)
         assert!(
-            content.contains("## Inputs You Receive") || content.contains("From the director"),
+            content.contains("## Inputs You Receive")
+                || content.contains("## Input Contract")
+                || content.contains("From the director"),
             "Agent {} missing input documentation",
             agent
         );
@@ -223,31 +226,32 @@ fn test_critic_complements_reviewer_and_auditor() {
 // =============================================================================
 
 #[test]
-fn test_implementer_documents_halt_signal_checking() {
+fn test_implementer_documents_drift_detection() {
     let path = agents_dir().join("specks-implementer.md");
     let content = fs::read_to_string(&path).expect("Failed to read implementer agent");
 
-    // Implementer must check for halt signals
+    // Implementer must self-monitor for drift (per specks-3.md #implementer-agent-contract)
     assert!(
-        content.contains(".halt") || content.contains("halt signal"),
-        "Implementer agent must document halt signal checking"
+        content.contains("drift") || content.contains("Drift"),
+        "Implementer agent must document drift detection"
     );
 
-    // Implementer should document partial completion
+    // Implementer should document self-halt behavior
     assert!(
-        content.contains("partial") || content.contains("Partial"),
-        "Implementer agent must document partial completion handling"
+        content.contains("self-halt") || content.contains("Self-halt") || content.contains("halted_for_drift"),
+        "Implementer agent must document self-halt behavior"
     );
 }
 
 #[test]
-fn test_implementer_invokes_implement_plan_skill() {
+fn test_implementer_documents_output_contract() {
     let path = agents_dir().join("specks-implementer.md");
     let content = fs::read_to_string(&path).expect("Failed to read implementer agent");
 
+    // Implementer must document its output contract (per specks-3.md #implementer-agent-contract)
     assert!(
-        content.contains("implement-plan"),
-        "Implementer agent must invoke implement-plan skill"
+        content.contains("## Output Contract") || content.contains("drift_assessment"),
+        "Implementer agent must document output contract with drift_assessment"
     );
 }
 

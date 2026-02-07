@@ -6,6 +6,66 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-3.md] Step 5: Update other agents | COMPLETE | 2026-02-06
+
+**Completed:** 2026-02-06
+
+**References Reviewed:**
+- `.specks/specks-3.md` - Phase 3 plan, sections (#step-5), (#agent-updates), (#flow-planning), (#flow-execution)
+- [D04] Interviewer handles all user interaction (#d04-interviewer-role)
+- Table T04: Agent Tool Changes (#t04-agent-tools)
+- (#interviewer-contract) - Interviewer input/output JSON contract
+- (#implementer-agent-contract) - Implementer input/output with drift assessment
+- (#smart-drift) - Smart drift detection heuristics
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove AskUserQuestion from planner's tools | Done |
+| Remove "Ask Clarifying Questions" workflow from planner | Done |
+| Planner receives idea, user_answers, clarifier_assumptions from director | Done |
+| Planner workflow focuses on speck creation/revision only | Done |
+| Interviewer emphasizes single point of user interaction | Done |
+| Interviewer receives questions from clarifier OR issues from critic | Done |
+| Interviewer uses AskUserQuestion to present to user | Done |
+| Interviewer returns structured user_answers or decisions | Done |
+| Interviewer handles drift escalation when implementer self-halts | Done |
+| Interviewer handles conceptual issue escalation from reviewer/auditor | Done |
+| Implementer tools updated to: Read, Grep, Glob, Write, Edit, Bash | Done |
+| Implementer description includes self-monitoring | Done |
+| Implementer accepts architect strategy JSON input | Done |
+| Implementer implements self-monitoring for drift detection | Done |
+| Implementer returns structured JSON with drift_assessment | Done |
+| Verify architect doesn't need changes | Done |
+
+**Files Modified:**
+- `agents/specks-planner.md` - Removed AskUserQuestion from tools; replaced "Ask Clarifying Questions" section with JSON input contract (user_answers, clarifier_assumptions)
+- `agents/specks-interviewer.md` - Complete rewrite to match new contract with 4 contexts (clarifier, critic, drift, review) and structured input/output
+- `agents/specks-implementer.md` - Complete rewrite per (#implementer-agent-contract) with self-monitoring, drift detection, proximity scoring, and structured JSON output
+- `crates/specks/tests/agent_integration_tests.rs` - Updated 3 tests to match new architecture (self-monitoring replaces halt signals and implement-plan skill)
+
+**Test Results:**
+- `cargo build`: PASS (no warnings)
+- `cargo nextest run`: 313 tests passed
+
+**Checkpoints Verified:**
+- Planner tools do not include AskUserQuestion: PASS
+- Planner body has no "Ask Clarifying Questions" section: PASS
+- Planner receives clarifier output as input parameter: PASS
+- Interviewer tools include AskUserQuestion: PASS
+- Interviewer body describes user interaction workflow per flowcharts: PASS
+- Implementer has correct tools and accepts architect strategy: PASS
+
+**Key Decisions/Notes:**
+- Planner no longer asks users directly - interviewer handles all user interaction
+- Interviewer has 4 contexts: clarifier (questions), critic (feedback), drift (halt), review (issues)
+- Implementer self-monitors for drift using proximity scoring (green/yellow/red categories)
+- Updated tests to check for drift detection instead of halt signals
+- Architect agent confirmed unchanged (read-only analysis, no user interaction)
+
+---
+
 ## [specks-3.md] Step 4.4: Add director run directory audit trail | COMPLETE | 2026-02-06
 
 **Completed:** 2026-02-06
