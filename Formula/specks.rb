@@ -16,12 +16,12 @@ class Specks < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/specks-dev/specks/releases/download/v#{version}/specks-#{version}-macos-arm64.tar.gz"
-      # SHA256 ARM64: f4669f5b579479cdeb4ab3bed7730102e5b0ccfeafb4fab9e4014783b6f29723
-      sha256 "f4669f5b579479cdeb4ab3bed7730102e5b0ccfeafb4fab9e4014783b6f29723"
+      # SHA256 ARM64: d9dee8b9e4c11142bbf05f24ff741f42b0e96155397e8c1b04d3ca83823c42fe
+      sha256 "d9dee8b9e4c11142bbf05f24ff741f42b0e96155397e8c1b04d3ca83823c42fe"
     else
       url "https://github.com/specks-dev/specks/releases/download/v#{version}/specks-#{version}-macos-x86_64.tar.gz"
-      # SHA256 X86_64: 296a10f3c64b1375e878be9fa21a432c2a015235012ebf545047ac7445a122d0
-      sha256 "296a10f3c64b1375e878be9fa21a432c2a015235012ebf545047ac7445a122d0"
+      # SHA256 X86_64: 8ceedad1345167f521802b87d44601d4e27d5cb1d64a5768ddd80fab4f746a1d
+      sha256 "8ceedad1345167f521802b87d44601d4e27d5cb1d64a5768ddd80fab4f746a1d"
     end
   end
 
