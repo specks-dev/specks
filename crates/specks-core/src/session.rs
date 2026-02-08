@@ -333,7 +333,7 @@ mod tests {
         // Year should be reasonable (between 2020 and 2100)
         let year: i32 = date_parts[0].parse().expect("Year should be valid number");
         assert!(
-            year >= 2020 && year <= 2100,
+            (2020..=2100).contains(&year),
             "Year should be reasonable: {}",
             year
         );

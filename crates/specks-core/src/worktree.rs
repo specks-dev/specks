@@ -556,6 +556,6 @@ mod tests {
 
         // Validate year is reasonable
         let year: i32 = parts[0][..4].parse().expect("Year should be valid");
-        assert!(year >= 2020 && year <= 2100);
+        assert!((2020..=2100).contains(&year));
     }
 }
