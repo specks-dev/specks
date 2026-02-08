@@ -78,7 +78,6 @@ specks init
 This creates a `.specks/` directory with:
 - `specks-skeleton.md` - Template for new specks
 - `config.toml` - Project configuration
-- `runs/` - Agent run artifacts (gitignored)
 
 2. Create a speck via Claude Code:
 
@@ -232,15 +231,6 @@ Skills run inline for focused tasks:
 | **auditor** | Quality | Checks code quality, security, error handling |
 | **logger** | Documentation | Updates implementation log |
 | **committer** | Git | Stages files, commits changes, closes beads |
-
-### Run Artifacts
-
-Agent runs create an audit trail in `.specks/runs/<session-id>/`:
-- `metadata.json` - Session info (mode, speck path, timestamps)
-- `planning/NNN-<skill>.json` - Skill outputs during planning
-- `execution/step-N/` - Per-step artifacts
-
-Run directories are gitignored by default.
 
 ## Speck Format
 

@@ -6,6 +6,45 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-9.md] Step 1: Update README.md | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 1 specification (#step-1, lines 145-173)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove "Run Artifacts" subsection describing `.specks/runs/<session-id>/` | Done |
+| Remove "runs/` - Agent run artifacts (gitignored)" from Quick Start section | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `README.md` - Removed obsolete runs directory references from Quick Start and Run Artifacts sections
+
+**Test Results:**
+- Visual inspection: README.md flows coherently (PASS)
+- `grep -c "runs/" README.md`: Returns 0 (PASS)
+- `grep -c "\.specks/runs" README.md`: Returns 0 (PASS)
+
+**Checkpoints Verified:**
+- `grep -c "runs/" README.md` returns 0: PASS
+- `grep -c "\.specks/runs" README.md` returns 0: PASS
+
+**Key Decisions/Notes:**
+- Removed the "Run Artifacts" subsection that described the obsolete `.specks/runs/<session-id>/` directory structure
+- Removed the runs reference from the Quick Start directory structure listing
+- The README.md now accurately reflects that the planner is stateless and the implementer uses worktrees, not runs directories
+- This is step 2 of 5 in the cleanup of runs directory references across the codebase
+
+---
+
 ## [specks-9.md] Step 0: Update .gitignore | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
