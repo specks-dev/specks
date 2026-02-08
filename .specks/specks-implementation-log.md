@@ -6,6 +6,45 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-8.md] Step 0: Add Worktree Directory to Gitignore | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-8.md` - Step 0 specification (lines 920-950)
+- [D01] Worktrees replace session directories
+- [Q04] Artifact retention (optional uncommitted step artifacts)
+- (#context, #step-0)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add `.specks-worktrees/` entry to `.gitignore` | Done |
+| Add `.specks/step-artifacts/` entry to `.gitignore` | Done |
+
+**Files Created:**
+None
+
+**Files Modified:**
+- `.gitignore` - Added two entries to ignore worktree directories and optional step artifacts
+
+**Test Results:**
+- `grep -q 'specks-worktrees' .gitignore` - returns success (line 30)
+- `grep -q 'specks/step-artifacts' .gitignore` - returns success (line 33)
+
+**Checkpoints Verified:**
+- `.specks-worktrees/` entry exists in `.gitignore`: PASS
+- `.specks/step-artifacts/` entry exists in `.gitignore`: PASS
+
+**Key Decisions/Notes:**
+- The `.specks-worktrees/` directory will house isolated git worktrees for each speck implementation
+- The `.specks/step-artifacts/` directory is for optional local debugging artifacts that should not be committed
+- Both entries follow the existing pattern in `.gitignore` for specks-related directories (alongside `.specks/runs/`)
+- This is the foundational step for the worktree integration feature (Phase 1.0)
+
+---
+
 ## [specks-7.md] Step 1: Update implementer skill to fix beads workflow | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

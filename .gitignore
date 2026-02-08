@@ -25,3 +25,9 @@ aside
 
 # Specks run artifacts (never commit)
 .specks/runs/
+
+# Specks worktrees
+.specks-worktrees/
+
+# Specks step artifacts (optional local debug)
+.specks/step-artifacts/
