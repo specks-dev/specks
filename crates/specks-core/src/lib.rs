@@ -38,6 +38,7 @@ pub use config::{
 pub use error::SpecksError;
 pub use interaction::{InteractionAdapter, InteractionError, InteractionResult, ProgressHandle};
 pub use parser::parse_speck;
+pub use session::{Session, SessionStatus, load_session, now_iso8601, save_session};
 pub use types::{
     Anchor, BeadsHints, Checkpoint, CheckpointKind, Decision, Question, Speck, SpeckMetadata,
     SpeckStatus, Step, Substep,
@@ -46,7 +47,6 @@ pub use validator::{
     Severity, ValidationConfig, ValidationIssue, ValidationLevel, ValidationResult, validate_speck,
     validate_speck_with_config,
 };
-pub use session::{Session, SessionStatus, load_session, now_iso8601, save_session};
 pub use worktree::{
     WorktreeConfig, cleanup_worktrees, create_worktree, derive_speck_slug, generate_branch_name,
     list_worktrees, sanitize_branch_name,

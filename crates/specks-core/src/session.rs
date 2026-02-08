@@ -1,10 +1,10 @@
 //! Session state management for worktree-based speck implementations
 
+use crate::error::SpecksError;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
 use std::path::Path;
-use crate::error::SpecksError;
 
 /// Session status for worktree-based implementation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,16 +151,15 @@ pub fn load_session(worktree_path: &Path) -> Result<Session, SpecksError> {
 
     if !session_path.exists() {
         return Err(SpecksError::FileNotFound(
-            session_path.display().to_string()
+            session_path.display().to_string(),
         ));
     }
 
     let content = fs::read_to_string(&session_path)?;
-    let session: Session = serde_json::from_str(&content)
-        .map_err(|e| SpecksError::Parse {
-            message: format!("Failed to parse session.json: {}", e),
-            line: None,
-        })?;
+    let session: Session = serde_json::from_str(&content).map_err(|e| SpecksError::Parse {
+        message: format!("Failed to parse session.json: {}", e),
+        line: None,
+    })?;
 
     Ok(session)
 }
@@ -176,11 +175,10 @@ pub fn save_session(session: &Session) -> Result<(), SpecksError> {
     fs::create_dir_all(&specks_dir)?;
 
     let session_path = specks_dir.join("session.json");
-    let content = serde_json::to_string_pretty(session)
-        .map_err(|e| SpecksError::Parse {
-            message: format!("Failed to serialize session: {}", e),
-            line: None,
-        })?;
+    let content = serde_json::to_string_pretty(session).map_err(|e| SpecksError::Parse {
+        message: format!("Failed to serialize session: {}", e),
+        line: None,
+    })?;
 
     fs::write(&session_path, content)?;
 
@@ -218,7 +216,8 @@ mod tests {
             speck_slug: "auth".to_string(),
             branch_name: "specks/auth-20260208-143022".to_string(),
             base_branch: "main".to_string(),
-            worktree_path: "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022".to_string(),
+            worktree_path: "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022"
+                .to_string(),
             created_at: "2026-02-08T14:30:22Z".to_string(),
             status: SessionStatus::InProgress,
             current_step: 2,
@@ -313,8 +312,16 @@ mod tests {
 
         // Check basic format: YYYY-MM-DDTHH:MM:SS.MMMZ
         assert!(timestamp.len() >= 20, "Timestamp too short: {}", timestamp);
-        assert!(timestamp.ends_with('Z'), "Timestamp should end with Z: {}", timestamp);
-        assert!(timestamp.contains('T'), "Timestamp should contain T: {}", timestamp);
+        assert!(
+            timestamp.ends_with('Z'),
+            "Timestamp should end with Z: {}",
+            timestamp
+        );
+        assert!(
+            timestamp.contains('T'),
+            "Timestamp should contain T: {}",
+            timestamp
+        );
 
         // Verify it can be parsed (basic validation)
         let parts: Vec<&str> = timestamp.split('T').collect();
@@ -325,6 +332,10 @@ mod tests {
 
         // Year should be reasonable (between 2020 and 2100)
         let year: i32 = date_parts[0].parse().expect("Year should be valid number");
-        assert!(year >= 2020 && year <= 2100, "Year should be reasonable: {}", year);
+        assert!(
+            year >= 2020 && year <= 2100,
+            "Year should be reasonable: {}",
+            year
+        );
     }
 }

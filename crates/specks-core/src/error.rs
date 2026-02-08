@@ -294,9 +294,9 @@ impl SpecksError {
 
             SpecksError::WorktreeAlreadyExists => 3, // Worktree already exists (exit code 3 per T02)
             SpecksError::GitVersionInsufficient => 4, // Git version insufficient (exit code 4 per T02)
-            SpecksError::NotAGitRepository => 5, // Not a git repository (exit code 5 per T02)
+            SpecksError::NotAGitRepository => 5,      // Not a git repository (exit code 5 per T02)
             SpecksError::BaseBranchNotFound { .. } => 6, // Base branch not found (exit code 6 per T02)
-            SpecksError::SpeckHasNoSteps => 8, // Speck has no steps (exit code 8 per T02)
+            SpecksError::SpeckHasNoSteps => 8,           // Speck has no steps (exit code 8 per T02)
             SpecksError::WorktreeCreationFailed { .. } => 1, // Worktree creation failed
             SpecksError::WorktreeCleanupFailed { .. } => 1, // Worktree cleanup failed
         }

@@ -5,7 +5,7 @@
 
 use crate::error::SpecksError;
 use crate::parser::parse_speck;
-use crate::session::{now_iso8601, save_session, Session, SessionStatus};
+use crate::session::{Session, SessionStatus, now_iso8601, save_session};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -52,10 +52,8 @@ pub fn derive_speck_slug(speck_path: &Path) -> String {
 /// Returns "specks-worktree" as defensive fallback if result is empty.
 pub fn sanitize_branch_name(branch_name: &str) -> String {
     let sanitized: String = branch_name
-        .replace('/', "__")
-        .replace('\\', "__")
-        .replace(':', "_")
-        .replace(' ', "_")
+        .replace(['/', '\\'], "__")
+        .replace([':', ' '], "_")
         .chars()
         .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
         .collect();
@@ -71,11 +69,11 @@ pub fn sanitize_branch_name(branch_name: &str) -> String {
 fn generate_timestamp_utc() -> Result<String, SpecksError> {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| SpecksError::WorktreeCreationFailed {
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| {
+        SpecksError::WorktreeCreationFailed {
             reason: format!("system time error: {}", e),
-        })?;
+        }
+    })?;
 
     let secs = duration.as_secs();
 
@@ -134,11 +132,7 @@ fn is_leap_year(year: i32) -> bool {
 }
 
 fn days_in_year(year: i32) -> i64 {
-    if is_leap_year(year) {
-        366
-    } else {
-        365
-    }
+    if is_leap_year(year) { 366 } else { 365 }
 }
 
 fn year_to_days(year: i32) -> i64 {
@@ -164,18 +158,15 @@ impl<'a> GitCli<'a> {
 
     /// Check if git version is sufficient (2.15+)
     fn check_git_version(&self) -> Result<bool, SpecksError> {
-        let output = Command::new("git")
-            .arg("--version")
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    SpecksError::NotAGitRepository
-                } else {
-                    SpecksError::WorktreeCreationFailed {
-                        reason: format!("failed to run git: {}", e),
-                    }
+        let output = Command::new("git").arg("--version").output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::NotAGitRepository
+            } else {
+                SpecksError::WorktreeCreationFailed {
+                    reason: format!("failed to run git: {}", e),
                 }
-            })?;
+            }
+        })?;
 
         if !output.status.success() {
             return Ok(false);
@@ -184,12 +175,15 @@ impl<'a> GitCli<'a> {
         let version_str = String::from_utf8_lossy(&output.stdout);
         // Parse version (e.g., "git version 2.39.0")
         if let Some(version_part) = version_str.split_whitespace().nth(2) {
-            if let Some(major_minor) = version_part.split('.').take(2).collect::<Vec<_>>().get(0..2)
+            if let Some(major_minor) = version_part
+                .split('.')
+                .take(2)
+                .collect::<Vec<_>>()
+                .get(0..2)
             {
-                if let (Ok(major), Ok(minor)) = (
-                    major_minor[0].parse::<u32>(),
-                    major_minor[1].parse::<u32>(),
-                ) {
+                if let (Ok(major), Ok(minor)) =
+                    (major_minor[0].parse::<u32>(), major_minor[1].parse::<u32>())
+                {
                     return Ok(major > 2 || (major == 2 && minor >= 15));
                 }
             }
@@ -253,9 +247,11 @@ impl<'a> GitCli<'a> {
 
     /// Add a worktree
     fn worktree_add(&self, path: &Path, branch: &str) -> Result<(), SpecksError> {
-        let path_str = path.to_str().ok_or_else(|| SpecksError::WorktreeCreationFailed {
-            reason: format!("worktree path is not valid UTF-8: {}", path.display()),
-        })?;
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| SpecksError::WorktreeCreationFailed {
+                reason: format!("worktree path is not valid UTF-8: {}", path.display()),
+            })?;
 
         let output = Command::new("git")
             .arg("-C")
@@ -278,9 +274,11 @@ impl<'a> GitCli<'a> {
 
     /// Remove a worktree
     fn worktree_remove(&self, path: &Path) -> Result<(), SpecksError> {
-        let path_str = path.to_str().ok_or_else(|| SpecksError::WorktreeCleanupFailed {
-            reason: format!("worktree path is not valid UTF-8: {}", path.display()),
-        })?;
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| SpecksError::WorktreeCleanupFailed {
+                reason: format!("worktree path is not valid UTF-8: {}", path.display()),
+            })?;
 
         let output = Command::new("git")
             .arg("-C")
@@ -466,10 +464,7 @@ pub fn list_worktrees(repo_root: &Path) -> Result<Vec<Session>, SpecksError> {
 ///
 /// Checks each worktree branch for merged status per D09 (git-only).
 /// If dry_run is true, returns what would be removed without actually removing.
-pub fn cleanup_worktrees(
-    repo_root: &Path,
-    dry_run: bool,
-) -> Result<Vec<String>, SpecksError> {
+pub fn cleanup_worktrees(repo_root: &Path, dry_run: bool) -> Result<Vec<String>, SpecksError> {
     let git = GitCli::new(repo_root);
     let sessions = list_worktrees(repo_root)?;
     let mut removed = Vec::new();

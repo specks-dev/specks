@@ -15,5 +15,5 @@ pub use status::run_status;
 pub use validate::run_validate;
 pub use version::run_version;
 pub use worktree::{
-    run_worktree_cleanup, run_worktree_create, run_worktree_list, WorktreeCommands,
+    WorktreeCommands, run_worktree_cleanup, run_worktree_create, run_worktree_list,
 };

@@ -7,7 +7,7 @@ use clap::Subcommand;
 use serde::Serialize;
 use specks_core::{
     session::Session,
-    worktree::{cleanup_worktrees, create_worktree, list_worktrees, WorktreeConfig},
+    worktree::{WorktreeConfig, cleanup_worktrees, create_worktree, list_worktrees},
 };
 use std::path::PathBuf;
 
@@ -150,16 +150,15 @@ pub fn run_worktree_create(
 }
 
 /// Run worktree list command
-pub fn run_worktree_list(
-    json_output: bool,
-    quiet: bool,
-) -> Result<i32, String> {
+pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> {
     let repo_root = std::env::current_dir().map_err(|e| e.to_string())?;
 
     match list_worktrees(&repo_root) {
         Ok(sessions) => {
             if json_output {
-                let data = ListData { worktrees: sessions };
+                let data = ListData {
+                    worktrees: sessions,
+                };
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
@@ -224,14 +223,12 @@ pub fn run_worktree_cleanup(
                             println!("  - {}", branch);
                         }
                     }
+                } else if removed.is_empty() {
+                    println!("No merged worktrees removed");
                 } else {
-                    if removed.is_empty() {
-                        println!("No merged worktrees removed");
-                    } else {
-                        println!("Removed {} merged worktree(s):", removed.len());
-                        for branch in removed {
-                            println!("  - {}", branch);
-                        }
+                    println!("Removed {} merged worktree(s):", removed.len());
+                    for branch in removed {
+                        println!("  - {}", branch);
                     }
                 }
             }
@@ -269,9 +266,7 @@ mod tests {
 
     #[test]
     fn test_list_data_serialization() {
-        let data = ListData {
-            worktrees: vec![],
-        };
+        let data = ListData { worktrees: vec![] };
 
         let json = serde_json::to_string(&data).expect("serialization should succeed");
         assert!(json.contains("worktrees"));

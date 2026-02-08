@@ -222,10 +222,12 @@ fn test_worktree_lifecycle() {
     assert_eq!(session["speck_slug"], "test-worktree");
     assert_eq!(session["base_branch"], "main");
     assert_eq!(session["status"], "pending");
-    assert!(session["branch_name"]
-        .as_str()
-        .unwrap()
-        .starts_with("specks/test-worktree-"));
+    assert!(
+        session["branch_name"]
+            .as_str()
+            .unwrap()
+            .starts_with("specks/test-worktree-")
+    );
 
     // Step 4: Verify worktree directory structure
     assert!(
@@ -266,13 +268,24 @@ fn test_worktree_lifecycle() {
 
     // Commit the session.json in the worktree (simulating what implementer does)
     Command::new("git")
-        .args(["-C", worktree_path.to_str().unwrap(), "add", ".specks/session.json"])
+        .args([
+            "-C",
+            worktree_path.to_str().unwrap(),
+            "add",
+            ".specks/session.json",
+        ])
         .current_dir(temp.path())
         .output()
         .expect("failed to stage session.json");
 
     Command::new("git")
-        .args(["-C", worktree_path.to_str().unwrap(), "commit", "-m", "Add session"])
+        .args([
+            "-C",
+            worktree_path.to_str().unwrap(),
+            "commit",
+            "-m",
+            "Add session",
+        ])
         .current_dir(temp.path())
         .output()
         .expect("failed to commit session.json");
@@ -404,7 +417,10 @@ fn test_worktree_list_json_output() {
         .output()
         .expect("failed to run specks worktree list --json");
 
-    assert!(output.status.success(), "worktree list --json should succeed");
+    assert!(
+        output.status.success(),
+        "worktree list --json should succeed"
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Parse JSON
@@ -463,13 +479,24 @@ fn test_worktree_cleanup_dry_run() {
 
     // Commit the session.json in the worktree
     Command::new("git")
-        .args(["-C", worktree_path.to_str().unwrap(), "add", ".specks/session.json"])
+        .args([
+            "-C",
+            worktree_path.to_str().unwrap(),
+            "add",
+            ".specks/session.json",
+        ])
         .current_dir(temp.path())
         .output()
         .expect("failed to stage session.json");
 
     Command::new("git")
-        .args(["-C", worktree_path.to_str().unwrap(), "commit", "-m", "Add session"])
+        .args([
+            "-C",
+            worktree_path.to_str().unwrap(),
+            "commit",
+            "-m",
+            "Add session",
+        ])
         .current_dir(temp.path())
         .output()
         .expect("failed to commit session.json");
@@ -500,7 +527,9 @@ fn test_worktree_cleanup_dry_run() {
     assert!(output.status.success(), "cleanup --dry-run should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Would remove") || stdout.contains("would remove") || !stdout.trim().is_empty(),
+        stdout.contains("Would remove")
+            || stdout.contains("would remove")
+            || !stdout.trim().is_empty(),
         "dry-run should show what would be removed: {}",
         stdout
     );
@@ -539,7 +568,10 @@ fn test_worktree_create_duplicate_fails() {
         .output()
         .expect("failed to run specks worktree create");
 
-    assert!(output.status.success(), "first worktree create should succeed");
+    assert!(
+        output.status.success(),
+        "first worktree create should succeed"
+    );
 
     // Try to create duplicate
     let output = Command::new(specks_binary())
