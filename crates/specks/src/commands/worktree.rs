@@ -297,9 +297,9 @@ mod integration_tests {
         let temp = tempfile::tempdir().expect("failed to create temp dir");
         let repo_path = temp.path().to_path_buf();
 
-        // Initialize git repo
+        // Initialize git repo with explicit main branch
         Command::new("git")
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .current_dir(&repo_path)
             .output()
             .expect("failed to init git repo");
