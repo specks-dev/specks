@@ -6,6 +6,52 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Step 2.3: Create Logger and Committer Agents | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 2.3 specification (lines 973-1000)
+- Spec S08: logger-agent (#s08-logger)
+- Spec S09: committer-agent (#s09-committer)
+- `.claude/skills/update-plan-implementation-log/SKILL.md` - Reference for logger-agent format
+- [D02] Nine Sub-Agents with Specific Tool Sets
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/logger-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S08 | Done |
+| Include log entry format requirements | Done |
+| Create `agents/committer-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S09 | Done |
+| Include edge case handling table | Done |
+| Revise logger-agent to match SKILL.md patterns | Done |
+
+**Files Created:**
+- `agents/logger-agent.md` - Updates implementation log with Edit tool (tools: Read, Grep, Glob, Edit)
+- `agents/committer-agent.md` - Stages files, commits, closes beads (tools: Read, Grep, Glob, Bash)
+
+**Files Modified:**
+- `.specks/specks-4.md` - Checked off all Step 2.3 and Step 2 Summary checkboxes
+
+**Test Results:**
+- Smoke test: Both agent files have valid YAML frontmatter
+
+**Checkpoints Verified:**
+- `ls agents/logger-agent.md agents/committer-agent.md` both exist: PASS
+- `ls agents/*-agent.md | wc -l` returns 9 (Step 2 Summary): PASS
+
+**Key Decisions/Notes:**
+- Logger-agent revised to closely match update-plan-implementation-log SKILL.md patterns
+- Added explicit Edit tool pattern with old_string/new_string example
+- Added log file structure (lines 1-9), quality gates, and critical reminders
+- Committer includes edge case table: manual+not confirmed, missing bead_id, bead already closed, bead not found, commit succeeds but bead close fails
+- Logger runs BEFORE committer; orchestrator adds log file to committer's files_to_stage for atomic commits
+
+---
+
 ## [specks-4.md] Step 2.2: Create Reviewer and Auditor Agents | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

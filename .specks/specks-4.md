@@ -981,18 +981,18 @@ After each agent conversion:
 - `agents/committer-agent.md` - with full specification from Spec S09
 
 **Tasks:**
-- [ ] Create `agents/logger-agent.md` with frontmatter: `name: logger-agent`, `description: <purpose>`, `tools: Read, Grep, Glob, Edit`
-- [ ] Include input/output JSON schemas from Spec S08
-- [ ] Include log entry format requirements
-- [ ] Create `agents/committer-agent.md` with frontmatter: `name: committer-agent`, `description: <purpose>`, `tools: Read, Grep, Glob, Bash`
-- [ ] Include input/output JSON schemas from Spec S09
-- [ ] Include edge case handling table
+- [x] Create `agents/logger-agent.md` with frontmatter: `name: logger-agent`, `description: <purpose>`, `tools: Read, Grep, Glob, Edit`
+- [x] Include input/output JSON schemas from Spec S08
+- [x] Include log entry format requirements
+- [x] Create `agents/committer-agent.md` with frontmatter: `name: committer-agent`, `description: <purpose>`, `tools: Read, Grep, Glob, Bash`
+- [x] Include input/output JSON schemas from Spec S09
+- [x] Include edge case handling table
 
 **Tests:**
-- [ ] Smoke test: Each agent file has valid YAML frontmatter
+- [x] Smoke test: Each agent file has valid YAML frontmatter
 
 **Checkpoint:**
-- [ ] `ls agents/logger-agent.md agents/committer-agent.md` both exist
+- [x] `ls agents/logger-agent.md agents/committer-agent.md` both exist
 
 **Rollback:**
 - `rm agents/logger-agent.md agents/committer-agent.md`
@@ -1009,7 +1009,7 @@ After completing Steps 2.1-2.3, you will have:
 - Complete drift detection contract in coder-agent
 
 **Final Step 2 Checkpoint:**
-- [ ] `ls agents/*-agent.md | wc -l` returns 9 (3 planning + 6 implementation)
+- [x] `ls agents/*-agent.md | wc -l` returns 9 (3 planning + 6 implementation)
 
 ---
 
