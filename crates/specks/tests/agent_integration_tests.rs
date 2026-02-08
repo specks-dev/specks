@@ -143,7 +143,7 @@ fn test_only_expected_agents_exist() {
         .filter_map(|e| e.ok())
         .filter(|e| {
             let path = e.path();
-            path.is_file() && path.extension().map_or(false, |ext| ext == "md")
+            path.is_file() && path.extension().is_some_and(|ext| ext == "md")
         })
         .collect();
 
