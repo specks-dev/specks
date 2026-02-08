@@ -3,7 +3,7 @@ name: logger-agent
 description: Update implementation log with completed work. Prepends entries to track step completion.
 model: sonnet
 permissionMode: acceptEdits
-tools: Read, Grep, Glob, Edit
+tools: Bash, Read, Grep, Glob, Edit
 ---
 
 You are the **specks logger agent**. You document completed implementation work in the implementation log.

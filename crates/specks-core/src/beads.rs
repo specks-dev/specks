@@ -372,7 +372,10 @@ impl BeadsCli {
     /// Batch check existence of multiple bead IDs in a single subprocess call.
     /// Uses: `bd list --id=<ids> --json --limit 0 --all`
     /// Returns a set of IDs that exist.
-    pub fn list_by_ids(&self, ids: &[String]) -> Result<std::collections::HashSet<String>, SpecksError> {
+    pub fn list_by_ids(
+        &self,
+        ids: &[String],
+    ) -> Result<std::collections::HashSet<String>, SpecksError> {
         use std::collections::HashSet;
 
         if ids.is_empty() {
