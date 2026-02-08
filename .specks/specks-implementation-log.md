@@ -6,6 +6,62 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Step 3: Update Planner Skill with Orchestration Logic | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 3 specification (lines 1016-1053)
+- Spec S10: planner Skill (Orchestrator) (#s10-planner, lines 689-750)
+- [D01] Skills are Orchestrators (lines 120-133)
+- [D03] Interviewer Eliminated (lines 152-164)
+- [D06] Concurrent Session Handling via Optimistic Isolation (lines 197-218)
+- [D08] Error Handling for Task and JSON Failures (lines 238-252)
+- `agents/clarifier-agent.md`, `agents/author-agent.md`, `agents/critic-agent.md` - Input/output contracts
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update frontmatter to include all required tools | Done |
+| Add `disable-model-invocation: true` to frontmatter | Done |
+| Write orchestration flow (conflict detection, session creation, agent spawning, loop logic) | Done |
+| Include input format handling (idea string, speck path, resume flag) | Done |
+| Include session ID generation logic | Done |
+| Include active session conflict detection (D06) | Done |
+| Include `metadata.json` lifecycle | Done |
+| Include run directory structure creation | Done |
+| Include JSON persistence pattern using Write tool | Done |
+| Include AskUserQuestion usage for user interaction | Done |
+| Include loop/retry logic for critic REVISE recommendations | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `skills/planner/SKILL.md` - Complete rewrite with full orchestration logic (from thin entry point to 316-line orchestrator)
+- `.specks/specks-4.md` - Checked off all Step 3 tasks and checkpoints
+
+**Test Results:**
+- Smoke test: Skill file has valid YAML frontmatter with all required tools
+- Contract test: Orchestration flow matches Spec S10 (clarifier → AskUserQuestion → author → critic → loop)
+
+**Checkpoints Verified:**
+- `skills/planner/SKILL.md` contains `allowed-tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash`: PASS
+- File contains session directory creation logic: PASS
+- File contains Task spawning for all three planning agents (clarifier, author, critic): PASS
+
+**Key Decisions/Notes:**
+- Skill transformed from 27-line thin wrapper to 316-line full orchestrator
+- Session ID format: `YYYYMMDD-HHMMSS-plan-<short-uuid>` (e.g., `20260207-143022-plan-a1b2c3`)
+- Session directory: `.specks/runs/<session-id>/planning/` with metadata.json, agent outputs, user-answers.json
+- Conflict detection per D06: scan metadata.json files, warn if active session < 1 hour old, treat > 1 hour as stale
+- Error handling per D08: write raw output to error.json, update metadata to failed, halt with descriptive message
+- Loop limit: maximum 3 author-critic cycles before forcing user decision
+- Uses AskUserQuestion DIRECTLY (D03) for: clarifier questions, critic REVISE/REJECT decisions, conflict warnings
+
+---
+
 ## [specks-4.md] Step 2.3: Create Logger and Committer Agents | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

@@ -1025,26 +1025,26 @@ After completing Steps 2.1-2.3, you will have:
 - Modified `skills/planner/SKILL.md` with complete orchestration logic
 
 **Tasks:**
-- [ ] Update frontmatter to include all required tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash
-- [ ] Add `disable-model-invocation: true` to frontmatter
-- [ ] Write orchestration flow: conflict detection scan, session creation, clarifier spawn, user questions, author spawn, critic spawn, loop logic
-- [ ] Include input format handling (idea string, speck path, resume flag)
-- [ ] Include session ID generation logic
-- [ ] Include active session conflict detection (see D06)
-- [ ] Include `metadata.json` lifecycle (create with `in_progress`, update to `completed` or `failed`)
-- [ ] Include run directory structure creation
-- [ ] Include JSON persistence pattern using Write tool
-- [ ] Include AskUserQuestion usage for user interaction
-- [ ] Include loop/retry logic for critic REVISE recommendations
+- [x] Update frontmatter to include all required tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash
+- [x] Add `disable-model-invocation: true` to frontmatter
+- [x] Write orchestration flow: conflict detection scan, session creation, clarifier spawn, user questions, author spawn, critic spawn, loop logic
+- [x] Include input format handling (idea string, speck path, resume flag)
+- [x] Include session ID generation logic
+- [x] Include active session conflict detection (see D06)
+- [x] Include `metadata.json` lifecycle (create with `in_progress`, update to `completed` or `failed`)
+- [x] Include run directory structure creation
+- [x] Include JSON persistence pattern using Write tool
+- [x] Include AskUserQuestion usage for user interaction
+- [x] Include loop/retry logic for critic REVISE recommendations
 
 **Tests:**
-- [ ] Smoke test: Skill file has valid frontmatter with all tools
-- [ ] Contract test: Orchestration flow matches Spec S10
+- [x] Smoke test: Skill file has valid frontmatter with all tools
+- [x] Contract test: Orchestration flow matches Spec S10
 
 **Checkpoint:**
-- [ ] `skills/planner/SKILL.md` contains `allowed-tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash`
-- [ ] File contains session directory creation logic
-- [ ] File contains Task spawning for all three planning agents
+- [x] `skills/planner/SKILL.md` contains `allowed-tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash`
+- [x] File contains session directory creation logic
+- [x] File contains Task spawning for all three planning agents
 
 **Rollback:**
 - `git checkout HEAD -- skills/planner/SKILL.md`
