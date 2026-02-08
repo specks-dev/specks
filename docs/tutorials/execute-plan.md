@@ -110,28 +110,7 @@ Options:
 - **n** or **pause**: Stop here, keep progress
 - **abort**: Stop and rollback uncommitted changes
 
-## Step 5: Monitor Progress
-
-As execution proceeds, a run directory is created:
-
-```bash
-ls -la .specks/runs/
-```
-
-Each run has a UUID-named directory containing:
-
-```
-.specks/runs/abc123-.../
-├── director-plan.md      # Overall execution plan
-├── architect-plan.md     # Per-step architecture strategies
-├── monitor-report.md     # Progress and drift reports
-├── audit-report.md       # Quality findings
-└── step-0/               # Per-step artifacts
-    ├── strategy.md
-    └── implementation.log
-```
-
-## Step 6: Execution Completes
+## Step 5: Execution Completes
 
 When all steps finish:
 
@@ -140,7 +119,6 @@ When all steps finish:
 > **Summary:**
 > - Steps completed: 3/3
 > - Commits created: 3
-> - Run directory: `.specks/runs/abc123-.../`
 >
 > All execution steps passed review and audit.
 
@@ -222,12 +200,6 @@ If the monitor detects significant drift, execution halts:
 > 2. Return to architect with feedback
 > 3. Abort execution
 
-Check the halt file:
-
-```bash
-cat .specks/runs/*/\.halt
-```
-
 To continue after reviewing:
 
 ```bash
@@ -267,59 +239,6 @@ specks status specks-feature.md
 
 # Resume from the next pending step
 specks execute .specks/specks-feature.md --start-step "#step-3"
-```
-
-## Understanding Run Artifacts
-
-### director-plan.md
-
-The director's overall execution plan:
-
-```markdown
-## Execution Plan
-
-**Speck:** specks-health-check.md
-**Steps:** 3
-**Dependencies:** step-1 -> step-0, step-2 -> step-1
-
-### Execution Order
-1. Step 0: Create Health Service Module
-2. Step 1: Add Health Check Route
-3. Step 2: Add Integration Tests
-```
-
-### architect-plan.md
-
-Per-step implementation strategies:
-
-```markdown
-## Step 0: Create Health Service Module
-
-### Expected Touch Set
-- `src/services/health.js` (create)
-- `src/services/index.js` (modify)
-
-### Implementation Approach
-1. Create health service with database check function...
-2. Add uptime calculation using process.uptime()...
-```
-
-### monitor-report.md
-
-Progress tracking and drift detection:
-
-```markdown
-## Monitor Report
-
-### Step 0 Progress
-- [x] health.js created
-- [x] index.js modified
-- Drift: none
-
-### Step 1 Progress
-- [x] route added to app.js
-- [x] route handler implemented
-- Drift: none
 ```
 
 ## Tips for Successful Execution

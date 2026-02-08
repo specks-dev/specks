@@ -6,6 +6,46 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-9.md] Step 3: Update execute-plan.md | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 3 specification (#step-3, lines 205-235)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove lines 115-131 that describe monitoring the runs directory structure | Done |
+| Remove lines 143-144 referencing the run directory in completion output | Done |
+| Remove lines 225-229 that describe checking the halt file | Done |
+| Update lines 273-323 "Understanding Run Artifacts" section - remove entirely | Done |
+| Ensure document still flows coherently after removals | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `docs/tutorials/execute-plan.md` - Removed all references to obsolete `.specks/runs/` directory structure and halt files. The tutorial now focuses on the worktree-based execution workflow without mentioning the deprecated runs directory.
+
+**Test Results:**
+- Visual inspection: Document flows coherently after section removals
+- Content check: Tutorial still provides complete guidance on execution workflow
+
+**Checkpoints Verified:**
+- `grep -c "runs/" docs/tutorials/execute-plan.md` returns 0: PASS
+- `grep -c "\.specks/runs" docs/tutorials/execute-plan.md` returns 0: PASS
+
+**Key Decisions/Notes:**
+- Removed multiple sections totaling approximately 70 lines of obsolete documentation
+- The "Understanding Run Artifacts" section (lines 273-323) was completely removed as it described functionality that no longer exists
+- Document maintains coherent narrative flow after removals, focusing on current worktree-based architecture
+
+---
+
 ## [specks-9.md] Step 2: Update getting-started.md | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
