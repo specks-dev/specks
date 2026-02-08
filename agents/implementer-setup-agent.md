@@ -77,6 +77,16 @@ Return structured JSON:
     "issues": []
   },
 
+  "beads": {
+    "sync_performed": true,
+    "root_bead": "bd-abc123",
+    "bead_mapping": {
+      "#step-0": "bd-abc123",
+      "#step-1": "bd-def456",
+      "#step-2": "bd-ghi789"
+    }
+  },
+
   "clarification_needed": null,
 
   "error": null
@@ -105,6 +115,12 @@ Return structured JSON:
    specks beads status
    ```
    If this fails, return `status: "error"` with `prerequisites.error` set.
+
+4. Sync beads for the target speck:
+   ```bash
+   specks beads sync <speck_path>
+   ```
+   This ensures all steps have bead IDs assigned. If this fails, return `status: "error"` with `prerequisites.error` set.
 
 ### Phase 2: Validate Speck File Exists
 
@@ -139,6 +155,31 @@ If the file does NOT exist, return immediately:
    - Which steps have open or no beads → `remaining_steps`
 
 4. Compute `next_step` as first item in `remaining_steps` (or null if empty)
+
+### Phase 4b: Extract Bead IDs from Speck
+
+After beads sync in Phase 1, extract bead IDs from the speck file:
+
+1. Read the speck file and look for bead ID annotations in step headers.
+   Expected pattern: `### Step N {#step-N} <!-- bd-xxxxxx -->`
+
+2. Build a `bead_mapping` dictionary:
+   - Key: step anchor (e.g., `#step-0`)
+   - Value: bead ID (e.g., `bd-abc123`)
+
+3. Identify the root bead (typically the bead for `#step-0`)
+
+4. Store this data in the `beads` output object:
+   ```json
+   {
+     "sync_performed": true,
+     "root_bead": "bd-abc123",
+     "bead_mapping": {
+       "#step-0": "bd-abc123",
+       "#step-1": "bd-def456"
+     }
+   }
+   ```
 
 ### Phase 4: Parse User Intent
 
@@ -177,12 +218,13 @@ For each step in `resolved_steps`:
 1. **Check exists**: Verify step anchor is in `all_steps`
 2. **Check dependencies**: Read step content for `**Depends on:**` line, verify those steps are in `completed_steps`
 3. **Check not already done**: If step is in `completed_steps`, flag as `already_completed`
+4. **Check has bead ID**: Verify step anchor exists in `bead_mapping`. If missing, this is a critical error.
 
 Populate `validation.issues` array:
 
 ```json
 {
-  "type": "dependency_not_met" | "already_completed" | "step_not_found",
+  "type": "dependency_not_met" | "already_completed" | "step_not_found" | "missing_bead_id",
   "step": "#step-3",
   "details": "Depends on #step-2 which is not complete",
   "blocking": true
@@ -192,6 +234,7 @@ Populate `validation.issues` array:
 ### Phase 7: Determine Output Status
 
 - If prerequisites failed → `status: "error"`
+- If any step in `all_steps` is missing a bead ID in `bead_mapping` → `status: "error"` with message "Beads sync failed: some steps are missing bead IDs"
 - If intent is `ambiguous` and no `user_answers` → `status: "needs_clarification"`
 - If validation has blocking issues and no override in `user_answers` → `status: "needs_clarification"`
 - Otherwise → `status: "ready"`
@@ -286,6 +329,15 @@ When `status: "needs_clarification"`, populate `clarification_needed`:
   "intent": {"parsed_as": "ambiguous", "raw_input": null},
   "resolved_steps": null,
   "validation": {"valid": true, "issues": []},
+  "beads": {
+    "sync_performed": true,
+    "root_bead": "bd-abc123",
+    "bead_mapping": {
+      "#step-0": "bd-abc123",
+      "#step-1": "bd-def456",
+      "#step-2": "bd-ghi789"
+    }
+  },
   "clarification_needed": {
     "type": "step_selection",
     "question": "Speck has 3 total steps. 0 completed, 3 remaining. What would you like to do?",
@@ -322,6 +374,15 @@ When `status: "needs_clarification"`, populate `clarification_needed`:
   "intent": {"parsed_as": "next", "raw_input": "next"},
   "resolved_steps": ["#step-1"],
   "validation": {"valid": true, "issues": []},
+  "beads": {
+    "sync_performed": true,
+    "root_bead": "bd-abc123",
+    "bead_mapping": {
+      "#step-0": "bd-abc123",
+      "#step-1": "bd-def456",
+      "#step-2": "bd-ghi789"
+    }
+  },
   "clarification_needed": null,
   "error": null
 }
@@ -349,6 +410,15 @@ When `status: "needs_clarification"`, populate `clarification_needed`:
   "intent": {"parsed_as": "remaining", "raw_input": "remaining"},
   "resolved_steps": [],
   "validation": {"valid": true, "issues": []},
+  "beads": {
+    "sync_performed": true,
+    "root_bead": "bd-abc123",
+    "bead_mapping": {
+      "#step-0": "bd-abc123",
+      "#step-1": "bd-def456",
+      "#step-2": "bd-ghi789"
+    }
+  },
   "clarification_needed": null,
   "error": null
 }
