@@ -6,6 +6,46 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-5.md] Step 0: Verify Claude Code Documentation | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-5.md` - Step 0 specification (lines 196-226)
+- [D01] Model Assignment Strategy
+- [D02] Aggressive Write Permissions
+- Claude Code sub-agent documentation at https://code.claude.com/docs/en/sub-agents
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Review Claude Code sub-agent documentation | Done |
+| Confirm `model:` field is supported in frontmatter | Done |
+| Confirm permissions field format | Done |
+| Note additional useful fields | Done |
+
+**Files Created:**
+- None (documentation review only)
+
+**Files Modified:**
+- None (documentation review only)
+
+**Test Results:**
+- Manual verification: documentation confirms frontmatter fields (PASS)
+
+**Checkpoints Verified:**
+- Document format verified and understood: PASS
+
+**Key Decisions/Notes:**
+- Confirmed model field supports haiku/sonnet/opus/inherit values
+- IMPORTANT DISCOVERY: Permission field is `permissionMode` (single string), NOT `permissions` (list)
+- Valid permissionMode values: acceptEdits, bypassPermissions, default
+- Steps 1-2 will use correct `permissionMode:` syntax instead of `permissions:` list
+- This discovery prevents YAML syntax errors in subsequent steps
+
+---
+
 ## [specks-4.md] Step 8: Update CLAUDE.md Documentation + Phase Complete | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07
