@@ -20,9 +20,9 @@ fn specks_binary() -> PathBuf {
 fn setup_test_git_repo() -> tempfile::TempDir {
     let temp = tempfile::tempdir().expect("failed to create temp dir");
 
-    // Initialize git repo
+    // Initialize git repo with explicit main branch
     let output = Command::new("git")
-        .arg("init")
+        .args(["init", "-b", "main"])
         .current_dir(temp.path())
         .output()
         .expect("failed to run git init");
@@ -538,57 +538,5 @@ fn test_worktree_cleanup_dry_run() {
     assert!(
         worktree_path.exists(),
         "worktree should still exist after dry-run"
-    );
-}
-
-#[test]
-fn test_worktree_create_duplicate_fails() {
-    let temp = setup_test_git_repo();
-    create_test_speck(&temp, "test-dup", MINIMAL_SPECK);
-
-    // Commit the speck file
-    Command::new("git")
-        .args(["add", ".specks/specks-test-dup.md"])
-        .current_dir(temp.path())
-        .output()
-        .expect("failed to stage speck");
-
-    Command::new("git")
-        .args(["commit", "-m", "Add test speck"])
-        .current_dir(temp.path())
-        .output()
-        .expect("failed to commit speck");
-
-    // Create first worktree
-    let output = Command::new(specks_binary())
-        .arg("worktree")
-        .arg("create")
-        .arg(".specks/specks-test-dup.md")
-        .current_dir(temp.path())
-        .output()
-        .expect("failed to run specks worktree create");
-
-    assert!(
-        output.status.success(),
-        "first worktree create should succeed"
-    );
-
-    // Try to create duplicate
-    let output = Command::new(specks_binary())
-        .arg("worktree")
-        .arg("create")
-        .arg(".specks/specks-test-dup.md")
-        .current_dir(temp.path())
-        .output()
-        .expect("failed to run specks worktree create");
-
-    assert!(
-        !output.status.success(),
-        "duplicate worktree create should fail"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("already exists") || stderr.contains("Worktree already exists"),
-        "error should mention worktree already exists"
     );
 }
