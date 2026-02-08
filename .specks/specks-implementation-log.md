@@ -6,6 +6,42 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-9.md] Step 0: Update .gitignore | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 0 specification (#step-0, lines 116-142)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove lines 26-27 (comment and `.specks/runs/` entry) from .gitignore | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `.gitignore` - Removed obsolete `.specks/runs/` entry and comment
+
+**Test Results:**
+- `grep "runs" .gitignore`: No results (PASS)
+- `grep "worktrees" .gitignore`: Returns `.specks-worktrees/` (PASS)
+
+**Checkpoints Verified:**
+- `grep "runs" .gitignore` returns no results: PASS
+- `grep "worktrees" .gitignore` returns `.specks-worktrees/`: PASS
+
+**Key Decisions/Notes:**
+- Removed the obsolete `.specks/runs/` directory reference from .gitignore as the runs directory was never implemented in the current architecture
+- The planner is stateless and the implementer uses worktrees (`.specks-worktrees/`), making the runs directory reference obsolete
+- This is the first step in cleaning up all runs directory references from the codebase
+
+---
+
 ## [specks-8.md] Step 6: Integration Testing and Documentation | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
