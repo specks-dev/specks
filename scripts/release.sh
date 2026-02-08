@@ -24,17 +24,26 @@ if [[ "$(git branch --show-current)" != "main" ]]; then
     exit 1
 fi
 
-echo "==> Checking for existing release..."
+# Clean up failed release if it exists
 if gh release view "v$VERSION" &>/dev/null; then
-    echo "Error: v$VERSION already released. Bump version number." >&2
-    exit 1
+    echo "==> Found existing release v$VERSION"
+    read -p "    Delete and retry? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "==> Deleting failed release v$VERSION..."
+        gh release delete "v$VERSION" --yes &>/dev/null || true
+    else
+        echo "Aborted." >&2
+        exit 1
+    fi
 fi
 
 # Clean up orphaned tag from failed release
 if git ls-remote --tags origin 2>/dev/null | grep -q "refs/tags/v$VERSION$"; then
-    echo "==> Cleaning up orphaned tag from failed release..."
+    echo "==> Cleaning up orphaned tag v$VERSION..."
     git push origin ":refs/tags/v$VERSION" &>/dev/null || true
 fi
+git tag -d "v$VERSION" &>/dev/null || true
 
 # Version check
 CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
