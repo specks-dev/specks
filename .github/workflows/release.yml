@@ -42,16 +42,16 @@ jobs:
         run: |
           # Create directory structure at root level (no wrapper directory)
           mkdir -p release/bin
-          mkdir -p release/share/specks/skills/specks-plan
-          mkdir -p release/share/specks/skills/specks-execute
+          mkdir -p release/share/specks/skills/planner
+          mkdir -p release/share/specks/skills/implementer
           mkdir -p release/share/specks/agents
 
           # Copy binary
           cp target/${{ matrix.target }}/release/specks release/bin/
 
-          # Copy skills
-          cp .claude/skills/specks-plan/SKILL.md release/share/specks/skills/specks-plan/
-          cp .claude/skills/specks-execute/SKILL.md release/share/specks/skills/specks-execute/
+          # Copy skills (orchestrators)
+          cp skills/planner/SKILL.md release/share/specks/skills/planner/
+          cp skills/implementer/SKILL.md release/share/specks/skills/implementer/
 
           # Copy agents
           cp agents/*.md release/share/specks/agents/
