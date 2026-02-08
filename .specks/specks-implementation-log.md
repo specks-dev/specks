@@ -6,6 +6,64 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Step 4: Update Implementer Skill with Orchestration Logic | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 4 specification (lines 1056-1094)
+- Spec S11: implementer Skill (Orchestrator) (#s11-implementer, lines 752-786)
+- [D01] Skills are Orchestrators
+- [D06] Concurrent Session Handling via Optimistic Isolation
+- [D08] Error Handling for Task and JSON Failures
+- `agents/architect-agent.md`, `agents/coder-agent.md`, `agents/reviewer-agent.md` - Input/output contracts
+- `agents/auditor-agent.md`, `agents/logger-agent.md`, `agents/committer-agent.md` - Input/output contracts
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update frontmatter to include all required tools | Done |
+| Add `disable-model-invocation: true` to frontmatter | Done |
+| Write orchestration flow for each step (architect → coder → drift → reviewer → auditor → logger → committer) | Done |
+| Include input format handling (speck path, start/end step, commit policy, resume) | Done |
+| Include session ID generation logic | Done |
+| Include active session conflict detection (D06) | Done |
+| Include `metadata.json` lifecycle | Done |
+| Include run directory structure creation per step | Done |
+| Include drift threshold evaluation and AskUserQuestion for drift decisions | Done |
+| Include retry logic for REVISE/FIX_REQUIRED recommendations | Done |
+| Include beads integration via `specks beads` commands | Done |
+| Include logger/committer coordination: add log file to committer's `files_to_stage` | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `skills/implementer/SKILL.md` - Complete rewrite with full orchestration logic (from 28-line thin wrapper to 509-line orchestrator)
+- `.specks/specks-4.md` - Checked off all Step 4 tasks and checkpoints
+
+**Test Results:**
+- Smoke test: Skill file has valid YAML frontmatter with all required tools
+- Contract test: Orchestration flow matches Spec S11 (beads check → setup → per-step loop with 6 agents)
+
+**Checkpoints Verified:**
+- `skills/implementer/SKILL.md` contains `allowed-tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash`: PASS
+- File contains per-step directory creation logic: PASS
+- File contains Task spawning for all six implementation agents: PASS
+
+**Key Decisions/Notes:**
+- Skill transformed from 28-line thin wrapper to 509-line full orchestrator
+- Session ID format: `YYYYMMDD-HHMMSS-impl-<short-uuid>` (e.g., `20260207-150145-impl-d4e5f6`)
+- Per-step directory structure: `.specks/runs/<session-id>/execution/step-N/` with all agent outputs
+- Beads integration: prerequisites check (fail fast), sync before step, close after commit
+- Drift evaluation: auto-approve none/minor, prompt user for moderate/major
+- Retry limits: 3 attempts for reviewer REVISE, 2 attempts for auditor FIX_REQUIRED, then escalate
+- Logger/committer coordination: `.specks/specks-implementation-log.md` included in `files_to_stage` for atomic commits
+- Commit policies: manual (stage only, user commits) vs auto (commit and close bead)
+
+---
+
 ## [specks-4.md] Step 3: Update Planner Skill with Orchestration Logic | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

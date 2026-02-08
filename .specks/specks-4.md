@@ -1065,27 +1065,27 @@ After completing Steps 2.1-2.3, you will have:
 - Modified `skills/implementer/SKILL.md` with complete orchestration logic
 
 **Tasks:**
-- [ ] Update frontmatter to include all required tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash
-- [ ] Add `disable-model-invocation: true` to frontmatter
-- [ ] Write orchestration flow for each step: conflict detection scan, architect, coder, drift check, reviewer, auditor, logger, committer
-- [ ] Include input format handling (speck path, start/end step, commit policy, resume)
-- [ ] Include session ID generation logic
-- [ ] Include active session conflict detection (see D06)
-- [ ] Include `metadata.json` lifecycle (create with `in_progress`, update to `completed` or `failed`)
-- [ ] Include run directory structure creation per step
-- [ ] Include drift threshold evaluation and AskUserQuestion for drift decisions
-- [ ] Include retry logic for REVISE/FIX_REQUIRED recommendations
-- [ ] Include beads integration via `specks beads` commands
-- [ ] Include logger/committer coordination: add log file to committer's `files_to_stage`
+- [x] Update frontmatter to include all required tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash
+- [x] Add `disable-model-invocation: true` to frontmatter
+- [x] Write orchestration flow for each step: conflict detection scan, architect, coder, drift check, reviewer, auditor, logger, committer
+- [x] Include input format handling (speck path, start/end step, commit policy, resume)
+- [x] Include session ID generation logic
+- [x] Include active session conflict detection (see D06)
+- [x] Include `metadata.json` lifecycle (create with `in_progress`, update to `completed` or `failed`)
+- [x] Include run directory structure creation per step
+- [x] Include drift threshold evaluation and AskUserQuestion for drift decisions
+- [x] Include retry logic for REVISE/FIX_REQUIRED recommendations
+- [x] Include beads integration via `specks beads` commands
+- [x] Include logger/committer coordination: add log file to committer's `files_to_stage`
 
 **Tests:**
-- [ ] Smoke test: Skill file has valid frontmatter with all tools
-- [ ] Contract test: Orchestration flow matches Spec S11
+- [x] Smoke test: Skill file has valid frontmatter with all tools
+- [x] Contract test: Orchestration flow matches Spec S11
 
 **Checkpoint:**
-- [ ] `skills/implementer/SKILL.md` contains `allowed-tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash`
-- [ ] File contains per-step directory creation logic
-- [ ] File contains Task spawning for all six implementation agents
+- [x] `skills/implementer/SKILL.md` contains `allowed-tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash`
+- [x] File contains per-step directory creation logic
+- [x] File contains Task spawning for all six implementation agents
 
 **Rollback:**
 - `git checkout HEAD -- skills/implementer/SKILL.md`
