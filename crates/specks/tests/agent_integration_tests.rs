@@ -8,7 +8,7 @@
 //!
 //! Note: As of Phase 4.0, the architecture changed to:
 //! - 2 orchestrator SKILLS (planner, implementer) in skills/
-//! - 9 sub-AGENTS invoked via Task tool in agents/
+//! - 11 sub-AGENTS invoked via Task tool in agents/
 
 use std::fs;
 use std::path::PathBuf;
@@ -54,9 +54,33 @@ fn parse_agent_frontmatter(content: &str) -> Option<(String, String, String)> {
     }
 }
 
-/// List of all sub-agents (Phase 4.0: 9 agents invoked via Task)
-/// Per specks-4.md, these are the sub-agents.
+/// List of all sub-agents (Phase 4.0+: 11 agents invoked via Task)
+/// Per specks-4.md and specks-5.md, these are the sub-agents.
 const ALL_AGENTS: &[&str] = &[
+    "clarifier-agent",
+    "author-agent",
+    "critic-agent",
+    "planner-setup-agent",
+    "architect-agent",
+    "coder-agent",
+    "reviewer-agent",
+    "auditor-agent",
+    "logger-agent",
+    "committer-agent",
+    "implementer-setup-agent",
+];
+
+/// Read-only agents (no Write/Edit/Bash)
+const READONLY_AGENTS: &[&str] = &[
+    "critic-agent",
+    "architect-agent",
+    "reviewer-agent",
+    "auditor-agent",
+];
+
+/// Core agents with full documentation structure (Input/Output contracts, Your Role, etc.)
+/// Setup agents have simpler structure and are excluded.
+const CORE_AGENTS: &[&str] = &[
     "clarifier-agent",
     "author-agent",
     "critic-agent",
@@ -66,15 +90,6 @@ const ALL_AGENTS: &[&str] = &[
     "auditor-agent",
     "logger-agent",
     "committer-agent",
-];
-
-/// Read-only agents (no Write/Edit/Bash)
-const READONLY_AGENTS: &[&str] = &[
-    "clarifier-agent",
-    "critic-agent",
-    "architect-agent",
-    "reviewer-agent",
-    "auditor-agent",
 ];
 
 // =============================================================================
@@ -134,8 +149,8 @@ fn test_only_expected_agents_exist() {
 
     assert_eq!(
         entries.len(),
-        9,
-        "Expected exactly 9 agent files, found {}",
+        11,
+        "Expected exactly 11 agent files, found {}",
         entries.len()
     );
 
@@ -155,9 +170,9 @@ fn test_only_expected_agents_exist() {
 // =============================================================================
 
 #[test]
-fn test_all_agents_have_input_contract() {
+fn test_core_agents_have_input_contract() {
     let dir = agents_dir();
-    for agent in ALL_AGENTS {
+    for agent in CORE_AGENTS {
         let path = dir.join(format!("{}.md", agent));
         let content = fs::read_to_string(&path)
             .unwrap_or_else(|_| panic!("Failed to read agent: {}", path.display()));
@@ -171,9 +186,9 @@ fn test_all_agents_have_input_contract() {
 }
 
 #[test]
-fn test_all_agents_have_output_contract() {
+fn test_core_agents_have_output_contract() {
     let dir = agents_dir();
-    for agent in ALL_AGENTS {
+    for agent in CORE_AGENTS {
         let path = dir.join(format!("{}.md", agent));
         let content = fs::read_to_string(&path)
             .unwrap_or_else(|_| panic!("Failed to read agent: {}", path.display()));
@@ -187,9 +202,9 @@ fn test_all_agents_have_output_contract() {
 }
 
 #[test]
-fn test_all_agents_document_role() {
+fn test_core_agents_document_role() {
     let dir = agents_dir();
-    for agent in ALL_AGENTS {
+    for agent in CORE_AGENTS {
         let path = dir.join(format!("{}.md", agent));
         let content = fs::read_to_string(&path)
             .unwrap_or_else(|_| panic!("Failed to read agent: {}", path.display()));

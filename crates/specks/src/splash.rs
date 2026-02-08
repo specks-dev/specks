@@ -19,19 +19,8 @@ pub fn show_splash() {
     let version = env!("CARGO_PKG_VERSION");
 
     // Print spectacles with info on the right
-    writeln!(
-        stdout,
-        "{}   specks v{}",
-        SPECTACLES[0],
-        version
-    )
-    .ok();
-    writeln!(
-        stdout,
-        "{}   Multi-agent orchestration",
-        SPECTACLES[1]
-    )
-    .ok();
+    writeln!(stdout, "{}   specks v{}", SPECTACLES[0], version).ok();
+    writeln!(stdout, "{}   Multi-agent orchestration", SPECTACLES[1]).ok();
     writeln!(stdout).ok();
 
     stdout.flush().ok();
