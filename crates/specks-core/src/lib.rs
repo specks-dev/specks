@@ -23,6 +23,12 @@ pub mod beads;
 /// Interaction adapter for mode-agnostic user interaction
 pub mod interaction;
 
+/// Session state management for worktree-based implementations
+pub mod session;
+
+/// Worktree management for speck implementations
+pub mod worktree;
+
 // Re-exports for convenience
 pub use beads::{BeadStatus, BeadsCli, Issue, IssueDetails, is_valid_bead_id};
 pub use config::{
@@ -39,4 +45,9 @@ pub use types::{
 pub use validator::{
     Severity, ValidationConfig, ValidationIssue, ValidationLevel, ValidationResult, validate_speck,
     validate_speck_with_config,
+};
+pub use session::{Session, SessionStatus, load_session, now_iso8601, save_session};
+pub use worktree::{
+    WorktreeConfig, cleanup_worktrees, create_worktree, derive_speck_slug, generate_branch_name,
+    list_worktrees, sanitize_branch_name,
 };

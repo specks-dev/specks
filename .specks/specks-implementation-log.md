@@ -6,6 +6,151 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-8.md] Step 2: Implement Worktree Core Module | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-8.md` - Step 2 specification (lines 987-1047)
+- [D01] Worktrees replace sessions
+- [D03] Path prefixing over directory changes
+- [D08] Filesystem-safe worktree directory names
+- [D09] Phase 1 "merged" definition is git-only
+- Spec S02 - Worktree path in agent inputs
+- Spec S05 - Speck slug derivation
+- Diagram Diag01 - Worktree lifecycle flow
+- Table T02 - Worktree command exit codes
+- Section: Worktree Lifecycle Flow (#worktree-lifecycle)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create WorktreeConfig struct | Done |
+| Implement derive_speck_slug per Spec S05 | Done |
+| Implement sanitize_branch_name per D08 | Done |
+| Implement create_worktree with validation | Done |
+| Validate speck has at least 1 execution step | Done |
+| Generate branch name: specks/<slug>-<timestamp> | Done |
+| Check if branch/worktree already exists | Done |
+| Create branch from base | Done |
+| Create worktree in .specks-worktrees/<sanitized>/ | Done |
+| Initialize session.json with status pending | Done |
+| Partial failure recovery (branch cleanup) | Done |
+| Partial failure recovery (worktree cleanup) | Done |
+| Implement list_worktrees | Done |
+| Run git worktree prune before listing | Done |
+| Scan .specks-worktrees/ for session.json | Done |
+| Skip orphaned directory entries | Done |
+| Implement cleanup_worktrees | Done |
+| Check merge status with git merge-base per D09 | Done |
+| Remove worktree via git worktree remove | Done |
+| Prune stale worktree metadata | Done |
+| Delete local branch after cleanup | Done |
+| Add GitCli wrapper for git operations | Done |
+| Export from lib.rs | Done |
+
+**Files Created:**
+- `crates/specks-core/src/worktree.rs` - Worktree management module with WorktreeConfig, derive_speck_slug, sanitize_branch_name, GitCli wrapper, create_worktree, list_worktrees, cleanup_worktrees, and helper functions for UTC timestamp generation
+
+**Files Modified:**
+- `crates/specks-core/src/error.rs` - Added worktree error variants E028-E034 with exit codes per Table T02:
+  - E028: WorktreeAlreadyExists (exit code 3)
+  - E029: GitVersionInsufficient (exit code 4)
+  - E030: NotAGitRepository (exit code 5)
+  - E031: BaseBranchNotFound (exit code 6)
+  - E032: SpeckHasNoSteps (exit code 8)
+  - E033: WorktreeCreationFailed (exit code 1)
+  - E034: WorktreeCleanupFailed (exit code 1)
+- `crates/specks-core/src/lib.rs` - Exported worktree module
+
+**Test Results:**
+- Unit test: `test_derive_speck_slug` - PASS (4 examples per Spec S05)
+- Unit test: `test_sanitize_branch_name` - PASS (5 cases including fallback)
+- Unit test: `test_generate_branch_name` - PASS (format validation)
+- Unit test: `test_generate_timestamp_utc` - PASS (UTC timestamp format YYYYMMDD-HHMMSS)
+- Build: `cargo build -p specks-core` - SUCCESS (no warnings)
+
+**Checkpoints Verified:**
+- [x] `cargo build -p specks-core` succeeds with no warnings
+- [x] All 4 unit tests pass (derive_speck_slug, sanitize_branch_name, generate_branch_name, generate_timestamp_utc)
+- [x] Worktree module exports all public functions
+- [x] Error codes E028-E034 added to SpecksError enum
+- [x] Exit codes match Table T02 specification
+
+**Key Decisions/Notes:**
+- **Spec S05 compliance**: derive_speck_slug strips "specks-" prefix from filename, handles edge cases
+- **D08 compliance**: sanitize_branch_name replaces problematic characters (/, \, :, space) with safe alternatives, includes defensive fallback "specks-worktree" for empty result
+- **D09 compliance**: cleanup_worktrees uses git merge-base --is-ancestor for merge detection (git-only, no GitHub API dependency)
+- **Partial failure recovery**: create_worktree implements cleanup on failure (if branch created but worktree fails → delete branch; if worktree created but session save fails → remove worktree and delete branch)
+- **GitCli wrapper**: Encapsulates all git operations with proper error handling, uses `git -C` for worktree path isolation
+- **UTC timestamp generation**: Manual implementation using UNIX epoch calculation (no chrono dependency), format: YYYYMMDD-HHMMSS
+- **Error handling fixed**: After auditor review, improved error handling for system time, git operations, and path validation
+
+---
+
+## [specks-8.md] Step 1: Implement Session State Module | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-8.md` - Step 1 specification (lines 948-985)
+- [D06] Minimal session state
+- [D10] Step completion semantics (NeedsReconcile status)
+- Spec S01 - session.json schema
+- Section: Session JSON Schema (#session-json-schema)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create Session struct with fields from Spec S01 | Done |
+| Create SessionStatus enum (5 variants) | Done |
+| Implement load_session function | Done |
+| Implement save_session function | Done |
+| Add serde derives for JSON serialization | Done |
+| Implement now_iso8601 timestamp utility | Done |
+| Export from lib.rs | Done |
+
+**Files Created:**
+- `crates/specks-core/src/session.rs` - Session state module with Session struct, SessionStatus enum (Pending, InProgress, Completed, Failed, NeedsReconcile), load_session/save_session functions, and ISO 8601 timestamp utility (now_iso8601)
+
+**Files Modified:**
+- `crates/specks-core/src/lib.rs` - Added session module declaration and re-exports (Session, SessionStatus, load_session, save_session, now_iso8601)
+
+**Test Results:**
+- Unit tests implemented: 7 tests
+  - `test_session_status_display` - PASS
+  - `test_session_status_serialization` - PASS
+  - `test_session_serialization_roundtrip` - PASS
+  - `test_status_transitions` - PASS
+  - `test_load_session_missing_file` - PASS
+  - `test_save_and_load_session` - PASS
+  - `test_now_iso8601_format` - PASS
+- Build verification: `cargo build -p specks-core` - SUCCESS
+- Test suite: `cargo nextest run -p specks-core session` - ALL PASS
+
+**Checkpoints Verified:**
+- Session struct has all fields per Spec S01: PASS
+  - schema_version, speck_path, speck_slug, branch_name, base_branch
+  - worktree_path, created_at, status, current_step, total_steps, beads_root
+- SessionStatus enum has 5 variants: PASS (Pending, InProgress, Completed, Failed, NeedsReconcile)
+- Serde serialization uses snake_case: PASS (e.g., "in_progress")
+- load_session reads from {worktree_path}/.specks/session.json: PASS
+- save_session writes to {worktree_path}/.specks/session.json: PASS
+- save_session creates .specks directory if missing: PASS
+- now_iso8601 generates ISO 8601 timestamps in UTC: PASS
+- Module exported from lib.rs: PASS
+
+**Key Decisions/Notes:**
+- Implemented custom now_iso8601 function to avoid external dependencies for timestamp generation
+- SessionStatus enum supports all workflow states including NeedsReconcile for partial failure handling
+- Session struct uses Option<String> for beads_root to support cases where beads are not synced
+- Error handling uses existing SpecksError types (FileNotFound, Parse)
+- All 7 unit tests pass, providing comprehensive coverage of session state management
+
+---
+
 ## [specks-8.md] Step 0: Add Worktree Directory to Gitignore | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
@@ -14,34 +159,33 @@ Entries are sorted newest-first.
 - `.specks/specks-8.md` - Step 0 specification (lines 920-950)
 - [D01] Worktrees replace session directories
 - [Q04] Artifact retention (optional uncommitted step artifacts)
-- (#context, #step-0)
+- `.gitignore` - Project gitignore file
 
 **Implementation Progress:**
 
 | Task | Status |
 |------|--------|
-| Add `.specks-worktrees/` entry to `.gitignore` | Done |
-| Add `.specks/step-artifacts/` entry to `.gitignore` | Done |
+| Add `.specks-worktrees/` entry to `.gitignore` | Verified (line 30) |
+| Add `.specks/step-artifacts/` entry to `.gitignore` | Verified (line 33) |
 
 **Files Created:**
-None
+- None (entries already existed)
 
 **Files Modified:**
-- `.gitignore` - Added two entries to ignore worktree directories and optional step artifacts
+- None (verification-only step)
 
 **Test Results:**
-- `grep -q 'specks-worktrees' .gitignore` - returns success (line 30)
-- `grep -q 'specks/step-artifacts' .gitignore` - returns success (line 33)
+- `grep -q 'specks-worktrees' .gitignore`: SUCCESS (line 30)
+- `grep -q 'specks/step-artifacts' .gitignore`: SUCCESS (line 33)
 
 **Checkpoints Verified:**
-- `.specks-worktrees/` entry exists in `.gitignore`: PASS
-- `.specks/step-artifacts/` entry exists in `.gitignore`: PASS
+- Checkpoint: `.specks-worktrees/` entry exists in `.gitignore`: PASS
+- Checkpoint: `.specks/step-artifacts/` entry exists in `.gitignore`: PASS
 
 **Key Decisions/Notes:**
-- The `.specks-worktrees/` directory will house isolated git worktrees for each speck implementation
-- The `.specks/step-artifacts/` directory is for optional local debugging artifacts that should not be committed
-- Both entries follow the existing pattern in `.gitignore` for specks-related directories (alongside `.specks/runs/`)
-- This is the foundational step for the worktree integration feature (Phase 1.0)
+- This was a verification-only step: both required gitignore entries were already present in the repository
+- The entries were previously added in commit 36b6762 ("feat(specks): add worktree and step-artifacts entries to gitignore")
+- No changes were required; checkpoints verified successfully
 
 ---
 

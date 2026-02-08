@@ -152,6 +152,35 @@ pub enum SpecksError {
     /// E027: Interaction failed (non-TTY, timeout, etc.)
     #[error("E027: Interaction failed: {reason}")]
     InteractionFailed { reason: String },
+
+    // === Worktree errors (E028-E034) ===
+    /// E028: Worktree already exists for this speck
+    #[error("E028: Worktree already exists for this speck")]
+    WorktreeAlreadyExists,
+
+    /// E029: Git version insufficient (need 2.15+)
+    #[error("E029: Git version insufficient (need 2.15+ for worktree support)")]
+    GitVersionInsufficient,
+
+    /// E030: Not in a git repository
+    #[error("E030: Not in a git repository")]
+    NotAGitRepository,
+
+    /// E031: Base branch not found
+    #[error("E031: Base branch not found: {branch}")]
+    BaseBranchNotFound { branch: String },
+
+    /// E032: Speck has no execution steps
+    #[error("E032: Speck has no execution steps")]
+    SpeckHasNoSteps,
+
+    /// E033: Worktree creation failed
+    #[error("E033: Worktree creation failed: {reason}")]
+    WorktreeCreationFailed { reason: String },
+
+    /// E034: Worktree cleanup failed
+    #[error("E034: Worktree cleanup failed: {reason}")]
+    WorktreeCleanupFailed { reason: String },
 }
 
 impl SpecksError {
@@ -188,6 +217,13 @@ impl SpecksError {
             SpecksError::SkillsNotFound { .. } => "E025",
             SpecksError::RequiredAgentsMissing { .. } => "E026",
             SpecksError::InteractionFailed { .. } => "E027",
+            SpecksError::WorktreeAlreadyExists => "E028",
+            SpecksError::GitVersionInsufficient => "E029",
+            SpecksError::NotAGitRepository => "E030",
+            SpecksError::BaseBranchNotFound { .. } => "E031",
+            SpecksError::SpeckHasNoSteps => "E032",
+            SpecksError::WorktreeCreationFailed { .. } => "E033",
+            SpecksError::WorktreeCleanupFailed { .. } => "E034",
         }
     }
 
@@ -255,6 +291,14 @@ impl SpecksError {
             SpecksError::RequiredAgentsMissing { .. } => 8, // Required agents missing
 
             SpecksError::InteractionFailed { .. } => 1, // Interaction errors
+
+            SpecksError::WorktreeAlreadyExists => 3, // Worktree already exists (exit code 3 per T02)
+            SpecksError::GitVersionInsufficient => 4, // Git version insufficient (exit code 4 per T02)
+            SpecksError::NotAGitRepository => 5, // Not a git repository (exit code 5 per T02)
+            SpecksError::BaseBranchNotFound { .. } => 6, // Base branch not found (exit code 6 per T02)
+            SpecksError::SpeckHasNoSteps => 8, // Speck has no steps (exit code 8 per T02)
+            SpecksError::WorktreeCreationFailed { .. } => 1, // Worktree creation failed
+            SpecksError::WorktreeCleanupFailed { .. } => 1, // Worktree cleanup failed
         }
     }
 }
