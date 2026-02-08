@@ -20,7 +20,7 @@ You MUST spawn subagents via the Task tool. This skill exists solely to orchestr
 ## Orchestration Loop
 
 ```
-  setup-agent (one-shot)
+  planner-setup-agent (one-shot)
        │
        ▼
   ┌─────────────────────────────────────┐
@@ -54,7 +54,7 @@ You MUST spawn subagents via the Task tool. This skill exists solely to orchestr
 
 ```
 Task(
-  subagent_type: "specks:setup-agent",
+  subagent_type: "specks:planner-setup-agent",
   prompt: '{"mode": "<new|revise|resume>", "idea": "<idea or null>", "speck_path": "<path or null>", "resume_session_id": "<id or null>"}',
   description: "Initialize planning session"
 )
