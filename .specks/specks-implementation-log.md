@@ -6,6 +6,62 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-7.md] Step 1: Update implementer skill to fix beads workflow | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-7.md` - Step 1 specification (lines 297-333)
+- [D01] Beads sync runs once at session initialization
+- [D04] Bead mapping stored in session metadata
+- Spec S02: Updated Session Metadata
+- Spec S03: Step Preparation Changes
+- Spec S04: Committer Invocation Changes
+- Spec S05: Updated Beads Reference
+- (#spec-implementer-changes, #spec-beads-reference)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update session metadata schema to include `root_bead` and `bead_mapping` | Done |
+| Remove `--step` flag from beads sync references (lines ~174, ~354) | Done |
+| Remove per-step beads sync in section 4a | Done |
+| Update section 4a to read bead ID from `metadata.bead_mapping[step_anchor]` | Done |
+| Update section 4h committer invocation to use metadata bead ID | Done |
+| Update Reference: Beads Integration section to reflect sync-at-start pattern | Done |
+| Add error handling for missing bead ID (should not happen but defensive) | Done |
+
+**Files Modified:**
+- `skills/implementer/SKILL.md` - Removed per-step beads sync, added bead_mapping usage from session metadata
+
+**Key Changes:**
+1. **Session Metadata**: Added `root_bead` and `bead_mapping` fields to metadata.json schema (lines 164-168)
+2. **Step Preparation (4a)**: Removed per-step `specks beads sync --step` call, replaced with reading bead ID from `metadata.bead_mapping[step_anchor]` (line 181)
+3. **Defensive Validation**: Added validation that bead_id exists in metadata, HALTs with clear error if missing (lines 182-183)
+4. **Committer Invocation (4h)**: Updated to pass bead_id from `metadata.bead_mapping[step_anchor]` instead of sync output (line 293)
+5. **Beads Reference Section**: Rewrote to document sync-at-session-start pattern via setup-agent (lines 361-365)
+6. **Verification**: Confirmed no `--step` flag references remain in the file
+
+**Test Results:**
+- Manual verification: `grep -q "bead_mapping\[step_anchor\]" skills/implementer/SKILL.md` - PASS
+- Manual verification: `! grep -q "\-\-step" skills/implementer/SKILL.md` - PASS (no --step flag found)
+
+**Checkpoints Verified:**
+- No `--step` flag references in implementer skill: PASS
+- `bead_mapping[step_anchor]` usage documented: PASS (lines 181, 293)
+- Defensive error handling added: PASS (lines 182-183)
+- Beads Reference section updated: PASS (lines 361-365)
+
+**Key Decisions/Notes:**
+- The implementer skill now relies entirely on setup-agent to populate bead_mapping in session metadata
+- Added defensive validation in step 4a to catch missing bead IDs early, though this should never happen if setup-agent succeeded
+- Removed all references to the non-existent `--step` flag for `specks beads sync`
+- The workflow is now cleaner: sync once at session start, read bead IDs from metadata per-step
+- This fixes the bug where committer-agent was receiving null bead IDs
+
+---
+
 ## [specks-7.md] Step 0: Update implementer-setup-agent to handle beads sync | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

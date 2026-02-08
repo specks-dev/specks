@@ -45,9 +45,9 @@ allowed-tools: Task, AskUserQuestion
        │              FOR EACH STEP in resolved_steps                │
        │  ┌───────────────────────────────────────────────────────┐  │
        │  │                                                       │  │
-       │  │  beads sync ──► architect-agent ──► coder-agent       │  │
-       │  │                                          │            │  │
-       │  │                           ┌──────────────┘            │  │
+       │  │  read bead_id ──► architect-agent ──► coder-agent     │  │
+       │  │  from metadata                            │           │  │
+       │  │                           ┌───────────────┘           │  │
        │  │                           ▼                           │  │
        │  │                    Drift Check                        │  │
        │  │                    (AskUserQuestion if moderate/major)│  │
@@ -160,9 +160,16 @@ Task(
      "last_updated_at": "<ISO timestamp>",
      "current_step": "<first step>",
      "steps_completed": [],
-     "steps_remaining": ["#step-X", "#step-Y", ...]
+     "steps_remaining": ["#step-X", "#step-Y", ...],
+     "root_bead": "<root-bead-id>",
+     "bead_mapping": {
+       "#step-0": "bd-xxx",
+       "#step-1": "bd-yyy"
+     }
    }
    ```
+
+   The `root_bead` and `bead_mapping` are provided by the setup-agent response.
 
 ### 4. For Each Step in `resolved_steps`
 
@@ -171,8 +178,8 @@ Initialize: `revision_feedback = null`, `reviewer_attempts = 0`, `auditor_attemp
 #### 4a. Step Preparation
 
 1. Create step directory: `.specks/runs/<session-id>/execution/step-N/`
-2. Sync bead: `specks beads sync <speck_path> --step #step-N`
-3. Store bead ID from sync output
+2. Read bead ID from `metadata.json`: `bead_id = metadata.bead_mapping[step_anchor]`
+3. **Validate bead ID**: If `bead_id` is missing or null, HALT with error: "Setup agent should have populated bead_id for step <step_anchor> but it is missing from metadata.bead_mapping"
 4. Update `metadata.json` with `current_step`
 
 #### 4b. Spawn Architect
@@ -271,6 +278,8 @@ Save response to `step-N/logger-output.json`.
 
 **CRITICAL**: Include `.specks/specks-implementation-log.md` in `files_to_stage`.
 
+The `bead_id` comes from `metadata.bead_mapping[step_anchor]` (read in step 4a).
+
 ```
 Task(
   subagent_type: "specks:committer-agent",
@@ -281,7 +290,7 @@ Task(
     "files_to_stage": [...files_created, ...files_modified, ".specks/specks-implementation-log.md"],
     "commit_policy": "auto|manual",
     "confirmed": false,
-    "bead_id": "<bead-id>",
+    "bead_id": "<bead-id from metadata.bead_mapping[step_anchor]>",
     "close_reason": "Step N complete: <summary>"
   }',
   description: "Commit changes and close bead"
@@ -349,10 +358,11 @@ From coder-agent output, evaluate `drift_assessment`:
 
 ## Reference: Beads Integration
 
-**Sync before step:**
-```bash
-specks beads sync <speck_path> --step #step-N
-```
+**Beads are synced at session start** by the setup-agent, which returns:
+- `root_bead`: The root bead ID for the entire speck
+- `bead_mapping`: A map from step anchors to bead IDs
+
+The implementer stores this mapping in `metadata.json` and reads bead IDs from there when needed.
 
 **Close after commit** (handled by committer-agent):
 ```bash
