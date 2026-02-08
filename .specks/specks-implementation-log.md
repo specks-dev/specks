@@ -6,6 +6,42 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-9.md] Step 2: Update getting-started.md | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 2 specification (#step-2, lines 176-202)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove lines 347-349 that reference `.specks/runs/*/\.halt` for monitor halt files | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `docs/getting-started.md` - Removed "Monitor Halted Execution" section that described obsolete halt file functionality
+
+**Test Results:**
+- Visual inspection: getting-started.md flows coherently (PASS)
+- `grep -c "runs" docs/getting-started.md`: Returns 0 (PASS)
+
+**Checkpoints Verified:**
+- `grep -c "runs" docs/getting-started.md` returns 0: PASS
+
+**Key Decisions/Notes:**
+- Removed the "Monitor Halted Execution" section that described checking `.specks/runs/*/\.halt` for drift detection
+- The section recommended three options after halt detection, but this functionality no longer exists in the current architecture
+- The implementer now uses worktrees, and the coder agent self-halts on drift rather than using halt files
+- The documentation now accurately reflects the current architecture without confusing references to obsolete features
+
+---
+
 ## [specks-9.md] Step 1: Update README.md | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
