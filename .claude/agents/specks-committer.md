@@ -1,1 +1,0 @@
-../../agents/specks-committer.md

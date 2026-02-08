@@ -1,1 +1,0 @@
-../../agents/specks-critic.md

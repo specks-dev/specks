@@ -1,1 +1,0 @@
-../../agents/specks-implementer.md

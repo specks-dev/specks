@@ -1,1 +1,0 @@
-../../agents/specks-logger.md

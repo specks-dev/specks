@@ -1,1 +1,0 @@
-../../agents/specks-interviewer.md
