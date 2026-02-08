@@ -368,6 +368,124 @@ impl BeadsCli {
 
         Ok(())
     }
+
+    /// Batch check existence of multiple bead IDs in a single subprocess call.
+    /// Uses: `bd list --id=<ids> --json --limit 0 --all`
+    /// Returns a set of IDs that exist.
+    pub fn list_by_ids(&self, ids: &[String]) -> Result<std::collections::HashSet<String>, SpecksError> {
+        use std::collections::HashSet;
+
+        if ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+
+        let ids_arg = ids.join(",");
+        let output = Command::new(&self.bd_path)
+            .args(["list", "--id", &ids_arg, "--json", "--limit", "0", "--all"])
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    SpecksError::BeadsNotInstalled
+                } else {
+                    SpecksError::BeadsCommand(format!("failed to run bd list: {}", e))
+                }
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SpecksError::BeadsCommand(format!(
+                "bd list failed: {}",
+                stderr
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let issues: Vec<Issue> = serde_json::from_str(&stdout).map_err(|e| {
+            SpecksError::BeadsCommand(format!("failed to parse bd list output: {}", e))
+        })?;
+
+        Ok(issues.into_iter().map(|i| i.id).collect())
+    }
+
+    /// Create a bead with inline dependencies (reduces subprocess calls).
+    /// Uses: `bd create --deps "dep1,dep2"`
+    pub fn create_with_deps(
+        &self,
+        title: &str,
+        description: Option<&str>,
+        parent: Option<&str>,
+        deps: &[String],
+        issue_type: Option<&str>,
+        priority: Option<i32>,
+    ) -> Result<Issue, SpecksError> {
+        let mut cmd = Command::new(&self.bd_path);
+        cmd.arg("create").arg("--json").arg(title);
+
+        if let Some(desc) = description {
+            cmd.arg("--description").arg(desc);
+        }
+        if let Some(p) = parent {
+            cmd.arg("--parent").arg(p);
+        }
+        if !deps.is_empty() {
+            cmd.arg("--deps").arg(deps.join(","));
+        }
+        if let Some(t) = issue_type {
+            cmd.arg("--type").arg(t);
+        }
+        if let Some(pri) = priority {
+            cmd.arg(format!("-p{}", pri));
+        }
+
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::BeadsNotInstalled
+            } else {
+                SpecksError::BeadsCommand(format!("failed to run bd create: {}", e))
+            }
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SpecksError::BeadsCommand(format!(
+                "bd create failed: {}",
+                stderr
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        serde_json::from_str(&stdout).map_err(|e| {
+            SpecksError::BeadsCommand(format!("failed to parse bd create output: {}", e))
+        })
+    }
+
+    /// Get all children of a parent bead in a single subprocess call.
+    /// Uses: `bd children <id> --json`
+    pub fn children(&self, parent_id: &str) -> Result<Vec<Issue>, SpecksError> {
+        let output = Command::new(&self.bd_path)
+            .args(["children", parent_id, "--json"])
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    SpecksError::BeadsNotInstalled
+                } else {
+                    SpecksError::BeadsCommand(format!("failed to run bd children: {}", e))
+                }
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SpecksError::BeadsCommand(format!(
+                "bd children failed: {}",
+                stderr
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        serde_json::from_str(&stdout).map_err(|e| {
+            SpecksError::BeadsCommand(format!("failed to parse bd children output: {}", e))
+        })
+    }
 }
 
 /// Validate bead ID format

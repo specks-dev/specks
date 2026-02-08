@@ -13,7 +13,7 @@
 | Target branch | main |
 | Tracking issue/PR | TBD |
 | Last updated | 2026-02-08 |
-| Beads Root | *(optional; written by `specks beads sync`)* |
+| Beads Root | `specks-dff` |
 
 ---
 
@@ -918,6 +918,8 @@ specks worktree cleanup --merged
 
 #### Step 0: Add Worktree Directory to Gitignore {#step-0}
 
+**Bead:** `specks-dff.1`
+
 **Commit:** `chore: ignore specks worktrees and step artifacts`
 
 **References:** [D01] Worktrees replace session directories, (#context)
@@ -926,15 +928,15 @@ specks worktree cleanup --merged
 - Modified `.gitignore`
 
 **Tasks:**
-- [ ] Add `.specks-worktrees/` entry to `.gitignore`
-- [ ] Add `.specks/step-artifacts/` entry to `.gitignore` (optional local debug artifacts; see [Q04])
+- [x] Add `.specks-worktrees/` entry to `.gitignore`
+- [x] Add `.specks/step-artifacts/` entry to `.gitignore` (optional local debug artifacts; see [Q04])
 
 **Tests:**
 - [ ] *(optional)* Add a lightweight regression test if we already have a pattern for gitignore validation
 
 **Checkpoint:**
-- [ ] `grep -q 'specks-worktrees' .gitignore` returns success
-- [ ] `grep -q 'specks/step-artifacts' .gitignore` returns success
+- [x] `grep -q 'specks-worktrees' .gitignore` returns success
+- [x] `grep -q 'specks/step-artifacts' .gitignore` returns success
 
 **Rollback:**
 - Revert gitignore change
@@ -946,6 +948,8 @@ specks worktree cleanup --merged
 #### Step 1: Implement Session State Module {#step-1}
 
 **Depends on:** #step-0
+
+**Bead:** `specks-dff.2`
 
 **Commit:** `feat(core): add session state management for worktrees`
 
@@ -983,6 +987,8 @@ specks worktree cleanup --merged
 #### Step 2: Implement Worktree Core Module {#step-2}
 
 **Depends on:** #step-1
+
+**Bead:** `specks-dff.3`
 
 **Commit:** `feat(core): add worktree creation and management`
 
@@ -1045,6 +1051,8 @@ specks worktree cleanup --merged
 
 **Depends on:** #step-2
 
+**Bead:** `specks-dff.4`
+
 **Commit:** `feat(cli): add specks worktree commands`
 
 **References:** [D07] Manual cleanup, Table T01, (#cli-commands)
@@ -1092,6 +1100,8 @@ specks worktree cleanup --merged
 **Depends on:** #step-2, #step-3
 
 *Why Step 3?* The setup-agent calls `specks worktree create` via Bash, so CLI commands must exist before agents can use them.
+
+**Bead:** `specks-dff.5`
 
 **Commit:** `feat(agents): add worktree_path to agent input contracts`
 
@@ -1150,6 +1160,8 @@ specks worktree cleanup --merged
 
 **Depends on:** #step-3, #step-4
 
+**Bead:** `specks-dff.6`
+
 **Commit:** `feat(skills): integrate worktrees into implementer workflow`
 
 **References:** [D01] Worktrees replace sessions, [D04] Log in worktree, [D05] Always auto PR, Spec S03, Diagram Diag01, (#worktree-lifecycle, #pr-creation-details)
@@ -1192,6 +1204,8 @@ specks worktree cleanup --merged
 #### Step 6: Integration Testing and Documentation {#step-6}
 
 **Depends on:** #step-5
+
+**Bead:** `specks-dff.7`
 
 **Commit:** `docs: add worktree workflow documentation`
 

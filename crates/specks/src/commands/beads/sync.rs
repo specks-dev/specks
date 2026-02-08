@@ -1,6 +1,6 @@
 //! Implementation of the `specks beads sync` command (Spec S06)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -218,8 +218,40 @@ fn sync_speck_to_beads(
         .unwrap_or_else(|| "Untitled Speck".to_string());
     let speck_path = path.to_string_lossy();
 
+    // Phase 1: Collect all known bead IDs from speck for batch existence check
+    let mut known_ids: Vec<String> = Vec::new();
+    if let Some(ref root_id) = speck.metadata.beads_root_id {
+        known_ids.push(root_id.clone());
+    }
+    for step in &speck.steps {
+        if let Some(ref bead_id) = step.bead_id {
+            known_ids.push(bead_id.clone());
+        }
+        if ctx.substeps_mode == "children" {
+            for substep in &step.substeps {
+                if let Some(ref bead_id) = substep.bead_id {
+                    known_ids.push(bead_id.clone());
+                }
+            }
+        }
+    }
+
+    // Phase 2: Single batch query to check which beads exist (major performance win)
+    let existing_ids = if ctx.dry_run || known_ids.is_empty() {
+        HashSet::new()
+    } else {
+        ctx.beads.list_by_ids(&known_ids).unwrap_or_default()
+    };
+
     // Step 1: Ensure root bead exists
-    let root_id = ensure_root_bead(speck, &phase_title, &speck_path, ctx, &mut updated_content)?;
+    let root_id = ensure_root_bead(
+        speck,
+        &phase_title,
+        &speck_path,
+        ctx,
+        &existing_ids,
+        &mut updated_content,
+    )?;
 
     // Build a map of step anchors to bead IDs (existing)
     let mut anchor_to_bead: HashMap<String, String> = HashMap::new();
@@ -233,6 +265,7 @@ fn sync_speck_to_beads(
             ctx.beads,
             ctx.dry_run,
             ctx.quiet,
+            &existing_ids,
             &mut updated_content,
         )?;
 
@@ -249,6 +282,7 @@ fn sync_speck_to_beads(
                     ctx.beads,
                     ctx.dry_run,
                     ctx.quiet,
+                    &existing_ids,
                     &mut updated_content,
                 )?;
 
@@ -259,38 +293,54 @@ fn sync_speck_to_beads(
     }
 
     // Step 3: Create dependency edges
+    // Optimization: if bead already existed (in existing_ids) and we're not pruning,
+    // skip dependency sync entirely - deps were set when bead was first created.
     for step in &speck.steps {
         if let Some(bead_id) = anchor_to_bead.get(&step.anchor) {
-            let added = sync_dependencies(
-                bead_id,
-                &step.depends_on,
-                &anchor_to_bead,
-                ctx.beads,
-                ctx.prune_deps,
-                ctx.dry_run,
-            )?;
-            deps_added += added;
+            // Skip if bead already existed and not pruning (deps already set)
+            let bead_existed = step
+                .bead_id
+                .as_ref()
+                .is_some_and(|id| existing_ids.contains(id));
+            if !bead_existed || ctx.prune_deps {
+                let added = sync_dependencies(
+                    bead_id,
+                    &step.depends_on,
+                    &anchor_to_bead,
+                    ctx.beads,
+                    ctx.prune_deps,
+                    ctx.dry_run,
+                )?;
+                deps_added += added;
+            }
         }
 
         // Handle substep dependencies
         if ctx.substeps_mode == "children" {
             for substep in &step.substeps {
                 if let Some(bead_id) = anchor_to_bead.get(&substep.anchor) {
-                    // Substeps inherit parent deps if no explicit deps
-                    let deps = if substep.depends_on.is_empty() {
-                        &step.depends_on
-                    } else {
-                        &substep.depends_on
-                    };
-                    let added = sync_dependencies(
-                        bead_id,
-                        deps,
-                        &anchor_to_bead,
-                        ctx.beads,
-                        ctx.prune_deps,
-                        ctx.dry_run,
-                    )?;
-                    deps_added += added;
+                    // Skip if bead already existed and not pruning
+                    let bead_existed = substep
+                        .bead_id
+                        .as_ref()
+                        .is_some_and(|id| existing_ids.contains(id));
+                    if !bead_existed || ctx.prune_deps {
+                        // Substeps inherit parent deps if no explicit deps
+                        let deps = if substep.depends_on.is_empty() {
+                            &step.depends_on
+                        } else {
+                            &substep.depends_on
+                        };
+                        let added = sync_dependencies(
+                            bead_id,
+                            deps,
+                            &anchor_to_bead,
+                            ctx.beads,
+                            ctx.prune_deps,
+                            ctx.dry_run,
+                        )?;
+                        deps_added += added;
+                    }
                 }
             }
         }
@@ -315,12 +365,13 @@ fn ensure_root_bead(
     phase_title: &str,
     speck_path: &str,
     ctx: &SyncContext<'_>,
+    existing_ids: &HashSet<String>,
     content: &mut String,
 ) -> Result<String, SpecksError> {
     // Check if we already have a root ID
     if let Some(ref root_id) = speck.metadata.beads_root_id {
-        // Verify it exists
-        if ctx.beads.bead_exists(root_id) {
+        // Use pre-fetched existence check (no subprocess call)
+        if existing_ids.contains(root_id) {
             return Ok(root_id.clone());
         }
         // Root bead was deleted, need to recreate
@@ -355,6 +406,7 @@ fn ensure_root_bead(
 }
 
 /// Ensure step bead exists and return its ID
+#[allow(clippy::too_many_arguments)]
 fn ensure_step_bead(
     step: &specks_core::Step,
     root_id: &str,
@@ -362,12 +414,13 @@ fn ensure_step_bead(
     beads: &BeadsCli,
     dry_run: bool,
     quiet: bool,
+    existing_ids: &HashSet<String>,
     content: &mut String,
 ) -> Result<String, SpecksError> {
     // Check if step already has a bead ID
     if let Some(ref bead_id) = step.bead_id {
-        // Verify it exists
-        if beads.bead_exists(bead_id) {
+        // Use pre-fetched existence check (no subprocess call)
+        if existing_ids.contains(bead_id) {
             return Ok(bead_id.clone());
         }
         // Bead was deleted, need to recreate
@@ -390,19 +443,20 @@ fn ensure_step_bead(
     if dry_run {
         // Generate a fake ID for dry run
         let fake_id = format!("bd-dryrun-{}", step.anchor);
-        write_bead_to_step(content, &step.anchor, step.line, &fake_id);
+        write_bead_to_step(content, &step.anchor, &fake_id);
         return Ok(fake_id);
     }
 
     let issue = beads.create(&title, Some(&description), Some(root_id), None, None)?;
 
     // Write Bead ID to step in content
-    write_bead_to_step(content, &step.anchor, step.line, &issue.id);
+    write_bead_to_step(content, &step.anchor, &issue.id);
 
     Ok(issue.id)
 }
 
 /// Ensure substep bead exists and return its ID
+#[allow(clippy::too_many_arguments)]
 fn ensure_substep_bead(
     substep: &specks_core::Substep,
     parent_bead_id: &str,
@@ -410,12 +464,13 @@ fn ensure_substep_bead(
     beads: &BeadsCli,
     dry_run: bool,
     quiet: bool,
+    existing_ids: &HashSet<String>,
     content: &mut String,
 ) -> Result<String, SpecksError> {
     // Check if substep already has a bead ID
     if let Some(ref bead_id) = substep.bead_id {
-        // Verify it exists
-        if beads.bead_exists(bead_id) {
+        // Use pre-fetched existence check (no subprocess call)
+        if existing_ids.contains(bead_id) {
             return Ok(bead_id.clone());
         }
         // Bead was deleted, need to recreate
@@ -437,14 +492,14 @@ fn ensure_substep_bead(
 
     if dry_run {
         let fake_id = format!("bd-dryrun-{}", substep.anchor);
-        write_bead_to_step(content, &substep.anchor, substep.line, &fake_id);
+        write_bead_to_step(content, &substep.anchor, &fake_id);
         return Ok(fake_id);
     }
 
     let issue = beads.create(&title, Some(&description), Some(parent_bead_id), None, None)?;
 
     // Write Bead ID to substep in content
-    write_bead_to_step(content, &substep.anchor, substep.line, &issue.id);
+    write_bead_to_step(content, &substep.anchor, &issue.id);
 
     Ok(issue.id)
 }
@@ -541,7 +596,10 @@ fn write_beads_root_to_content(content: &mut String, bead_id: &str) {
 }
 
 /// Write Bead ID to a step in content
-fn write_bead_to_step(content: &mut String, anchor: &str, step_line: usize, bead_id: &str) {
+///
+/// Uses anchor-based matching only (not line numbers) to avoid issues with
+/// stale line numbers after content modifications.
+fn write_bead_to_step(content: &mut String, anchor: &str, bead_id: &str) {
     let lines: Vec<&str> = content.lines().collect();
     let mut new_lines: Vec<String> = Vec::new();
     let bead_line = format!("**Bead:** `{}`", bead_id);
@@ -552,50 +610,47 @@ fn write_bead_to_step(content: &mut String, anchor: &str, step_line: usize, bead
         let line = lines[i];
         new_lines.push(line.to_string());
 
-        // Check if this line contains the step anchor we're looking for
-        if line.contains(&format!("{{#{}}}", anchor)) || (i + 1 == step_line) {
-            // Look at next lines to find where to insert/update Bead line
+        // Only match on anchor - line numbers become stale after edits
+        if line.contains(&format!("{{#{}}}", anchor)) {
+            // Look ahead to find where to insert/update Bead line
             // Placement: after **Depends on:** if present, before **Commit:**
             let mut found_bead = false;
-            let mut insert_before_commit = None;
+            let mut insert_before = None;
 
-            for (j, next_line) in lines
-                .iter()
-                .enumerate()
-                .take(std::cmp::min(i + 20, lines.len()))
-                .skip(i + 1)
-            {
+            for j in (i + 1)..std::cmp::min(i + 20, lines.len()) {
+                let next_line = lines[j];
+
                 // Check if bead line already exists
                 if bead_pattern.is_match(next_line) {
-                    // Replace it
+                    // Copy intermediate lines first, then replace the bead
+                    for line in lines.iter().skip(i + 1).take(j - i - 1) {
+                        new_lines.push(line.to_string());
+                    }
                     new_lines.push(bead_line.clone());
                     found_bead = true;
                     i = j;
                     break;
                 }
 
-                // Check for **Commit:**
-                if next_line.starts_with("**Commit:**") {
-                    insert_before_commit = Some(j);
-                    break;
-                }
-
-                // Check for next step/section header
-                if next_line.starts_with("####") || next_line.starts_with("---") {
-                    insert_before_commit = Some(j);
+                // Check for **Commit:** or next step/section header
+                if next_line.starts_with("**Commit:**")
+                    || next_line.starts_with("####")
+                    || next_line.starts_with("---")
+                {
+                    insert_before = Some(j);
                     break;
                 }
             }
 
             if !found_bead {
-                if let Some(pos) = insert_before_commit {
+                if let Some(pos) = insert_before {
                     // Copy lines up to insert position
-                    for next_line in lines.iter().take(pos).skip(i + 1) {
-                        new_lines.push(next_line.to_string());
+                    for line in lines.iter().skip(i + 1).take(pos - i - 1) {
+                        new_lines.push(line.to_string());
                     }
                     // Insert bead line
                     new_lines.push(bead_line.clone());
-                    new_lines.push(String::new()); // Blank line before Commit
+                    new_lines.push(String::new()); // Blank line before next section
                     i = pos - 1;
                 }
             }

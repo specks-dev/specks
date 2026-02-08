@@ -230,6 +230,34 @@ cmd_sync() {
   :
 }
 
+cmd_list() {
+  need_jq
+  init_state
+  local filter_ids=""
+  local json_output=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) filter_ids="$2"; shift 2 ;;
+      --json) json_output="true"; shift ;;
+      --limit) shift 2 ;;  # Ignored in fake
+      --all) shift ;;      # Ignored in fake
+      *) shift ;;
+    esac
+  done
+
+  if [[ -n "$filter_ids" ]]; then
+    # Filter by comma-separated IDs
+    # Convert comma-separated to JSON array
+    local ids_array
+    ids_array=$(echo "$filter_ids" | tr ',' '\n' | jq -R . | jq -s .)
+    # Filter issues by these IDs and return as array
+    jq -c --argjson ids "$ids_array" '[to_entries[] | select(.key as $k | $ids | index($k)) | .value]' "$ISSUES_JSON"
+  else
+    # Return all issues as array
+    jq -c '[.[] | .]' "$ISSUES_JSON"
+  fi
+}
+
 cmd_version() {
   echo "bd-fake 1.0.0 (mock for specks testing)"
 }
@@ -240,6 +268,7 @@ shift || true
 case "$SUBCMD" in
   create)   cmd_create "$@" ;;
   show)     cmd_show "$@" ;;
+  list)     cmd_list "$@" ;;
   dep)
     SUB="$1"
     shift || true
@@ -257,7 +286,7 @@ case "$SUBCMD" in
   --version) cmd_version ;;
   -v)       cmd_version ;;
   *)
-    echo "bd-fake: unknown command $SUBCMD (create|show|dep|init|close|ready|sync)" >&2
+    echo "bd-fake: unknown command $SUBCMD (create|show|list|dep|init|close|ready|sync)" >&2
     exit 1
     ;;
 esac
