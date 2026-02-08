@@ -106,12 +106,38 @@ Before starting, scan for active sessions on the same speck:
 }
 ```
 
+## Prerequisites Check
+
+**Before any other work, verify specks is initialized:**
+
+Check that `.specks/specks-skeleton.md` exists:
+
+```bash
+test -f .specks/specks-skeleton.md && echo "initialized" || echo "not initialized"
+```
+
+If the skeleton file does not exist, **auto-initialize** by running:
+
+```bash
+specks init
+```
+
+This creates the required `.specks/` directory with skeleton, config, and implementation log files.
+
+If `specks init` fails (e.g., specks CLI not installed), halt with:
+```
+Failed to initialize specks. Ensure the specks CLI is installed and in PATH.
+```
+
+Do NOT proceed without initialization. The skeleton file is required for author and critic agents to function correctly.
+
 ## Orchestration Flow
 
 ### Phase 1: Setup
 
-1. Parse input to determine mode (new/revise/resume)
-2. Scan for active session conflicts (D06)
+1. Check prerequisites (skeleton file exists)
+2. Parse input to determine mode (new/revise/resume)
+3. Scan for active session conflicts (D06)
 3. Generate session ID
 4. Create session directory: `.specks/runs/<session-id>/planning/`
 5. Write initial `metadata.json` with `status: "in_progress"`

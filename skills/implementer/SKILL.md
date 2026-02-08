@@ -35,7 +35,28 @@ Default commit policy is `manual` (stage files, user commits).
 
 ## Prerequisites Check
 
-**Before any other work, verify beads availability:**
+**Before any other work, verify specks is initialized:**
+
+Check that `.specks/specks-skeleton.md` exists:
+
+```bash
+test -f .specks/specks-skeleton.md && echo "initialized" || echo "not initialized"
+```
+
+If the skeleton file does not exist, **auto-initialize** by running:
+
+```bash
+specks init
+```
+
+This creates the required `.specks/` directory with skeleton, config, and implementation log files.
+
+If `specks init` fails (e.g., specks CLI not installed), halt with:
+```
+Failed to initialize specks. Ensure the specks CLI is installed and in PATH.
+```
+
+**Then verify beads availability:**
 
 ```bash
 specks beads status
@@ -46,7 +67,7 @@ If beads is unavailable, halt immediately:
 Beads not installed or not initialized. Run `bd init` first.
 ```
 
-Do NOT proceed without beads. This is a hard requirement.
+Do NOT proceed without both prerequisites. They are hard requirements.
 
 ## Session Management
 

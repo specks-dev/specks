@@ -189,7 +189,7 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
         println!();
         println!("To use specks with Claude Code:");
         println!("  claude --plugin-dir /path/to/specks");
-        println!("  Then use /specks:plan and /specks:execute");
+        println!("  Then use /specks:planner and /specks:implementer");
     }
 
     Ok(0)

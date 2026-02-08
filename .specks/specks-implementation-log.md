@@ -6,6 +6,160 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Step 8: Update CLAUDE.md Documentation + Phase Complete | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 8 specification (lines 1247-1283)
+- [D01] Skills are Orchestrators
+- [D02] Nine Sub-Agents
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update Agent Files example (remove planner-agent reference) | Done |
+| Update Skill Files example (show orchestrator with Task) | Done |
+| Verify no "orchestrator agent" mentions | Done |
+| Verify no "planner-agent" file references | Done |
+| Verify no "implementer-agent" file references | Done |
+| Mark all Phase Exit Criteria complete | Done |
+| Mark all Milestones complete | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `CLAUDE.md` - Fixed Agent Files and Skill Files examples to match Phase 4.0 architecture
+- `.specks/specks-4.md` - Checked off Step 8, all Exit Criteria, and all Milestones
+
+**Test Results:**
+- `grep -i "orchestrator agent" CLAUDE.md`: No matches (PASS)
+- `grep -i "planner-agent" CLAUDE.md`: No matches (PASS)
+- `grep -i "implementer-agent" CLAUDE.md`: No matches (PASS)
+
+**Checkpoints Verified:**
+- CLAUDE.md describes 2 orchestrator skills + 9 sub-agents: PASS
+- No "orchestrator agent" mentions: PASS
+- No planner-agent.md or implementer-agent.md file references: PASS
+
+**Key Decisions/Notes:**
+- Phase 4.0 is now COMPLETE
+- All 8 execution steps completed successfully
+- All 5 milestones achieved (M01-M05)
+- All exit criteria verified
+- Architecture: 2 orchestrator SKILLS (planner, implementer) spawning 9 sub-AGENTS via Task tool
+- Both planning and implementation loops verified end-to-end
+
+---
+
+## [specks-4.md] Step 7: Verification Gate - Implementation Loop | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 7 specification (lines 1205-1244)
+- Spec S11: implementer Skill (#s11-implementer)
+- [D05] Incremental Testing
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Use test speck from Step 6 | Done |
+| Invoke `/specks:implementer <speck-path>` | Done |
+| Verify architect-agent spawns and returns strategy JSON | Done |
+| Verify coder-agent spawns and returns implementation + drift JSON | Done |
+| Verify reviewer-agent spawns and returns review JSON | Done |
+| Verify auditor-agent spawns and returns audit JSON | Done |
+| Verify logger-agent spawns and updates implementation log | Done |
+| Verify committer-agent spawns, creates commit, closes bead | Done |
+| Verify run directory contains all step artifacts | Done |
+
+**Files Created:**
+- None (verification gate - artifacts produced by implementer)
+
+**Files Modified:**
+- `.specks/specks-4.md` - Checked off all Step 7 tasks and checkpoints
+
+**Test Results:**
+- E2E test: Full implementation step completes: PASS
+- Contract test: All JSON artifacts match schemas: PASS
+- Integration test: Bead is closed after step: PASS
+
+**Checkpoints Verified:**
+- Run directory exists at `.specks/runs/<session-id>/execution/step-0/`: PASS
+- All agent output files exist: PASS
+- Git commit exists with proper message and includes implementation log: PASS
+- Bead is closed: PASS
+
+**Key Decisions/Notes:**
+- Full implementation loop verified: architect → coder → reviewer → auditor → logger → committer
+- All 6 implementation agents executed successfully
+- Drift detection and self-halt mechanism working correctly
+- Beads integration confirmed (sync before step, close after commit)
+- Logger/committer coordination verified (log file included in commit)
+
+---
+
+## [specks-4.md] Step 6: Verification Gate - Planning Loop | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 6 specification (lines 1160-1194)
+- Spec S10: planner Skill (#s10-planner)
+- [D05] Incremental Testing
+- [D06] Concurrent Session Handling
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add prerequisites check to planner skill (auto-init via `specks init`) | Done |
+| Add prerequisites check to implementer skill | Done |
+| Fix init.rs output message (use correct skill names) | Done |
+| Update agent integration tests for Phase 4.0 (9 agents) | Done |
+| Update CLAUDE.md with initialization requirements and Phase 4.0 architecture | Done |
+| Invoke `/specks:planner "add a hello world command"` | Done |
+| Verify clarifier-agent spawns and returns JSON | Done |
+| Verify author-agent creates speck file | Done |
+| Verify critic-agent returns APPROVE | Done |
+| Verify run directory contains all JSON artifacts | Done |
+| Verify no context takeover issues | Done |
+
+**Files Created:**
+- None (verification gate)
+
+**Files Modified:**
+- `skills/planner/SKILL.md` - Added prerequisites check with auto-initialization
+- `skills/implementer/SKILL.md` - Added prerequisites check with auto-initialization
+- `crates/specks/src/commands/init.rs` - Fixed skill names in output message
+- `crates/specks/tests/agent_integration_tests.rs` - Rewrote for Phase 4.0 architecture (9 agents)
+- `CLAUDE.md` - Added initialization requirements, updated architecture section
+- `.specks/specks-4.md` - Checked off all Step 6 tasks and checkpoints
+
+**Test Results:**
+- `cargo nextest run`: 131 tests passed
+- E2E test: Full planning loop completed (session 20260207-183811-plan-43d015)
+- Contract test: All JSON artifacts match schemas
+
+**Checkpoints Verified:**
+- Speck file exists in `.specks/` (`specks-1.md`): PASS
+- Run directory exists at `.specks/runs/<session-id>/planning/`: PASS
+- All JSON output files exist (clarifier, author, critic, metadata): PASS
+
+**Key Decisions/Notes:**
+- Discovery: Initial verification failed because target project wasn't initialized (no skeleton file)
+- Fix: Added auto-initialization to skills - if skeleton missing, skill runs `specks init` via Bash
+- This avoids confusing users who type "specks init" in Claude Code (Claude would try to implement it manually)
+- Rewrote agent integration tests - old tests were for Phase 3.0 (5 agents), new tests are for Phase 4.0 (9 agents)
+- Full planning loop verified: clarifier → author → critic with APPROVE recommendation
+- Planner skill maintained orchestration control throughout (no context takeover)
+
+---
+
 ## [specks-4.md] Steps 5a+5b: Delete Skill Directories Converted to Agents | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

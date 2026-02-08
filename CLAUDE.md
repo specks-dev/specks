@@ -66,24 +66,24 @@ Steps declare dependencies with:
 
 ### Agent Files
 
-Agent definitions live in `agents/` directory as markdown with YAML frontmatter:
+Sub-agent definitions live in `agents/` directory as markdown with YAML frontmatter:
 ```markdown
 ---
-name: planner-agent
-description: Orchestrator agent for planning loop
-tools: Skill, Read, Grep, Glob, Write, Bash
-model: opus
+name: clarifier-agent
+description: Analyze ideas and generate clarifying questions
+tools: Read, Grep, Glob
 ---
 ```
 
 ### Skill Files
 
-Skills live in `skills/<name>/SKILL.md` with YAML frontmatter:
+Orchestrator skills live in `skills/<name>/SKILL.md` with YAML frontmatter:
 ```markdown
 ---
-name: clarifier
-description: Analyze ideas and generate clarifying questions
-allowed-tools: Read, Grep, Glob
+name: planner
+description: Orchestrates the planning workflow - spawns sub-agents via Task
+disable-model-invocation: true
+allowed-tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash
 ---
 ```
 
@@ -116,6 +116,18 @@ specks beads close bd-xxx      # Close a bead
 
 ### Claude Code Skills (Planning and Execution)
 
+**IMPORTANT: Initialize first!** Before using the planner or implementer, run:
+```bash
+specks init
+```
+
+This creates the `.specks/` directory with required files:
+- `specks-skeleton.md` - Template for speck structure
+- `config.toml` - Configuration settings
+- `specks-implementation-log.md` - Progress tracking
+- `runs/` - Session artifacts (gitignored)
+
+Then use the skills:
 ```
 /specks:planner "add user authentication"    # Create a new speck
 /specks:planner .specks/specks-auth.md       # Revise existing speck
@@ -149,40 +161,37 @@ Specks is a Claude Code plugin. Planning and execution are invoked via skills, n
 | `/specks:planner` | Create or revise a speck through agent collaboration |
 | `/specks:implementer` | Execute a speck through agent orchestration |
 
-### Agents (2)
+### Orchestrator Skills (2)
 
-Two orchestrator agents run the loops. Maximum ONE agent context active at any time.
-
-| Agent | Role |
-|-------|------|
-| **planner-agent** | Orchestrator for planning loop. Invokes sub-task skills sequentially. |
-| **implementer-agent** | Orchestrator for implementation loop. Invokes sub-task skills sequentially. |
-
-### Skills (12)
-
-Skills run inline for focused, single-purpose tasks.
-
-**Entry wrappers (2):**
+Two orchestrator skills contain the main workflow logic and spawn sub-agents via Task tool:
 
 | Skill | Role |
 |-------|------|
-| **planner** | Entry point. Spawns planner-agent via Task. |
-| **implementer** | Entry point. Spawns implementer-agent via Task. |
+| **planner** | Orchestrates planning loop: clarifier → author → critic |
+| **implementer** | Orchestrates implementation loop: architect → coder → reviewer → auditor → logger → committer |
 
-**Sub-tasks (10):**
+### Sub-Agents (9)
 
-| Skill | Role |
-|-------|------|
-| **architect** | Creates implementation strategies for steps. |
-| **auditor** | Checks code quality, security, error handling. |
-| **author** | Creates and revises speck documents. |
-| **clarifier** | Analyzes ideas, returns clarifying questions. |
-| **coder** | Executes architect strategies with drift detection. |
-| **committer** | Stages files, commits changes, closes beads. |
-| **critic** | Reviews speck for quality and implementability. |
-| **interviewer** | Single point of user interaction via AskUserQuestion. |
-| **logger** | Updates implementation log with completed work. |
-| **reviewer** | Verifies completed step matches plan. |
+Sub-agents are invoked via Task tool and return JSON results. Each has specific tools and contracts.
+
+**Planning agents (invoked by planner):**
+
+| Agent | Role | Tools |
+|-------|------|-------|
+| **clarifier-agent** | Analyzes ideas, generates clarifying questions | Read, Grep, Glob |
+| **author-agent** | Creates and revises speck documents | Read, Grep, Glob, Write, Edit |
+| **critic-agent** | Reviews speck quality and skeleton compliance | Read, Grep, Glob |
+
+**Implementation agents (invoked by implementer):**
+
+| Agent | Role | Tools |
+|-------|------|-------|
+| **architect-agent** | Creates implementation strategies, defines expected_touch_set | Read, Grep, Glob |
+| **coder-agent** | Executes strategies with drift detection, self-halts on drift | Read, Grep, Glob, Write, Edit, Bash |
+| **reviewer-agent** | Verifies completed step matches plan | Read, Grep, Glob |
+| **auditor-agent** | Checks code quality, security, error handling | Read, Grep, Glob |
+| **logger-agent** | Updates implementation log with completed work | Read, Grep, Glob, Edit |
+| **committer-agent** | Stages files, commits changes, closes beads | Read, Grep, Glob, Bash |
 
 ### Development Workflow
 
