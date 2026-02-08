@@ -6,6 +6,52 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-5.md] Step 3: Validate All Agents | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-5.md` - Step 3 specification (lines 310-343)
+- [D01] Model Assignment Strategy
+- Table T01: Agent Configuration Matrix
+- (#agent-assignments, #success-criteria)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Verify all 11 agents have `model:` field | Done |
+| Verify write agents have `acceptEdits`: author, coder, logger, committer, planner-setup | Done |
+| Verify read-only agents have `dontAsk`: clarifier, critic, architect, reviewer, auditor, implementer-setup | Done |
+| Verify setup agents use haiku: planner-setup, implementer-setup | Done |
+| Verify opus agents are correct: author, architect | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- None (validation step only)
+
+**Test Results:**
+- `grep "^model:" agents/*.md | wc -l` equals 11: PASS
+- `grep -l "acceptEdits" agents/*.md | wc -l` equals 5: PASS
+- `grep -l "dontAsk" agents/*.md | wc -l` equals 6: PASS
+
+**Checkpoints Verified:**
+- All 11 agents have model field: PASS
+- Permission distribution matches Table T01 (5 acceptEdits, 6 dontAsk): PASS
+- Model distribution: 2 haiku, 7 sonnet, 2 opus: PASS
+
+**Key Decisions/Notes:**
+- Validation step confirmed all agents match Table T01 configuration matrix
+- acceptEdits agents (5): author, coder, logger, committer, planner-setup
+- dontAsk agents (6): clarifier, critic, architect, reviewer, auditor, implementer-setup
+- haiku agents (2): planner-setup, implementer-setup
+- opus agents (2): author, architect
+- sonnet agents (7): clarifier, critic, coder, reviewer, auditor, logger, committer
+
+---
+
 ## [specks-5.md] Step 2: Update Implementation Agents | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
