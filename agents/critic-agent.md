@@ -1,6 +1,8 @@
 ---
 name: critic-agent
 description: Review speck quality and implementability. Skeleton compliance is HARD GATE. Invoked by planner skill after author creates/revises speck.
+model: sonnet
+permissionMode: dontAsk
 tools: Read, Grep, Glob
 ---
 

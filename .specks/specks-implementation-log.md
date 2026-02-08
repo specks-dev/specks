@@ -6,6 +6,52 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-5.md] Step 1: Update Planning Agents | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-5.md` - Step 1 specification (lines 228-262)
+- [D01] Model Assignment Strategy
+- [D02] Aggressive Write Permissions
+- [D03] Read-Only Agent Permissions
+- Table T01: Agent Configuration Matrix
+- Spec S01: Enhanced Frontmatter Schema
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update clarifier-agent.md: add `model: sonnet`, add `permissionMode: dontAsk` | Done |
+| Update author-agent.md: add `model: opus`, add `permissionMode: acceptEdits` | Done |
+| Update critic-agent.md: add `model: sonnet`, add `permissionMode: dontAsk` | Done |
+| Update planner-setup-agent.md: add `model: haiku`, add `permissionMode: acceptEdits` | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `agents/clarifier-agent.md` - Added model: sonnet, permissionMode: dontAsk
+- `agents/author-agent.md` - Added model: opus, permissionMode: acceptEdits
+- `agents/critic-agent.md` - Added model: sonnet, permissionMode: dontAsk
+- `agents/planner-setup-agent.md` - Added model: haiku, permissionMode: acceptEdits
+
+**Test Results:**
+- YAML frontmatter parses correctly for all 4 files: PASS
+- grep for model field returns all 4 files: PASS
+
+**Checkpoints Verified:**
+- All 4 planning agents have model field: PASS
+- YAML frontmatter is valid in all 4 files: PASS
+
+**Key Decisions/Notes:**
+- Used `permissionMode:` (single string) instead of `permissions:` (list) per Step 0 discovery
+- clarifier and critic get dontAsk (read-only analysis agents)
+- author gets acceptEdits (has Write/Edit tools)
+- planner-setup gets acceptEdits (has Write/Bash tools)
+
+---
+
 ## [specks-5.md] Step 0: Verify Claude Code Documentation | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

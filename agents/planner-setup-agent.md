@@ -1,6 +1,8 @@
 ---
 name: planner-setup-agent
 description: Initialize planning session - check prerequisites, detect conflicts, create session directory. Invoked once at start of planner workflow.
+model: haiku
+permissionMode: acceptEdits
 tools: Read, Grep, Glob, Write, Bash
 ---
 

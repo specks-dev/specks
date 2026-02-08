@@ -1,6 +1,8 @@
 ---
 name: author-agent
 description: Create and revise speck documents following skeleton format. Invoked by planner skill after clarifying questions are answered.
+model: opus
+permissionMode: acceptEdits
 tools: Bash, Read, Grep, Glob, Write, Edit
 ---
 
