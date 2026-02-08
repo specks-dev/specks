@@ -24,6 +24,7 @@ You receive a JSON payload:
 
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": "string",
   "step_anchor": "string",
   "revision_feedback": "string | null"
@@ -32,9 +33,19 @@ You receive a JSON payload:
 
 | Field | Description |
 |-------|-------------|
-| `speck_path` | Path to the speck file (e.g., `.specks/specks-5.md`) |
+| `worktree_path` | Absolute path to the worktree directory where implementation is happening |
+| `speck_path` | Path to the speck file relative to repo root (e.g., `.specks/specks-5.md`) |
 | `step_anchor` | Anchor of the step to implement (e.g., `#step-2`) |
 | `revision_feedback` | Feedback from reviewer/auditor if this is a retry (null on first attempt) |
+
+**IMPORTANT: File Path Handling**
+
+All file operations must use absolute paths prefixed with `worktree_path`:
+- When reading files: `{worktree_path}/{relative_path}`
+- When analyzing code: `{worktree_path}/src/api/client.rs`
+- When listing in expected_touch_set: use relative paths (e.g., `src/api/client.rs`), not absolute
+
+**CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
 ## Output Contract
 
@@ -97,6 +108,7 @@ If drift exceeds thresholds, implementation halts. Therefore:
 **Input:**
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-5.md",
   "step_anchor": "#step-2",
   "revision_feedback": null
@@ -104,11 +116,11 @@ If drift exceeds thresholds, implementation halts. Therefore:
 ```
 
 **Process:**
-1. Read `.specks/specks-5.md` and locate `#step-2`
+1. Read `{worktree_path}/.specks/specks-5.md` and locate `#step-2`
 2. Identify tasks: "Add retry logic to API client"
 3. Find referenced decisions: `[D03] Use exponential backoff`
-4. Search codebase: `Grep "api.*client"` to find existing code
-5. Read `src/api/client.rs` to understand current structure
+4. Search codebase in worktree: `Grep "api.*client" {worktree_path}`
+5. Read `{worktree_path}/src/api/client.rs` to understand current structure
 6. Determine files to modify and create strategy
 
 **Output:**
@@ -141,6 +153,7 @@ When `revision_feedback` is present, it means the previous implementation attemp
 
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-5.md",
   "step_anchor": "#step-2",
   "revision_feedback": "Drift detected: modified src/api/errors.rs which was not in expected_touch_set"

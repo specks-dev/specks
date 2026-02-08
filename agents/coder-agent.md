@@ -20,6 +20,7 @@ You receive a JSON payload:
 
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-N.md",
   "step_anchor": "#step-N",
   "architect_strategy": {
@@ -34,13 +35,27 @@ You receive a JSON payload:
 
 | Field | Description |
 |-------|-------------|
-| `speck_path` | Path to the speck file |
+| `worktree_path` | Absolute path to the worktree directory where implementation is happening |
+| `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the step being implemented |
 | `architect_strategy` | The strategy from architect-agent |
 | `architect_strategy.expected_touch_set` | Files that should be modified (for drift detection) |
 | `architect_strategy.implementation_steps` | Ordered steps to execute |
 | `architect_strategy.test_plan` | How to verify the implementation |
 | `session_id` | Session ID for run directory artifacts |
+
+**IMPORTANT: File Path Handling**
+
+All file operations must use absolute paths prefixed with `worktree_path`:
+- When reading files: `{worktree_path}/{relative_path}`
+- When writing files: `{worktree_path}/{relative_path}`
+- When editing files: `{worktree_path}/{relative_path}`
+
+Git operations must use `git -C {worktree_path}`:
+- `git -C {worktree_path} status`
+- `git -C {worktree_path} add <file>`
+
+**CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
 ## Output Contract
 
@@ -129,8 +144,10 @@ The orchestrator will then ask the user whether to:
 After implementation, run tests as specified in the architect's `test_plan`:
 
 ```bash
-cargo nextest run
+cd {worktree_path} && cargo nextest run
 ```
+
+Note: Test commands typically don't support `-C` flags, so `cd {worktree_path} && <test_cmd>` is the correct pattern.
 
 - Exit code 0 = tests passed, set `tests_passed: true`
 - Exit code non-zero = tests failed, set `tests_passed: false`
@@ -155,6 +172,7 @@ cargo nextest run
 **Input:**
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-5.md",
   "step_anchor": "#step-2",
   "architect_strategy": {
@@ -171,11 +189,11 @@ cargo nextest run
 ```
 
 **Process:**
-1. Read speck to understand full context
-2. Execute step 1: Create RetryConfig in config.rs
-3. Execute step 2: Add retry wrapper in client.rs
+1. Read speck from worktree: `{worktree_path}/.specks/specks-5.md`
+2. Execute step 1: Create RetryConfig in `{worktree_path}/src/api/config.rs`
+3. Execute step 2: Add retry wrapper in `{worktree_path}/src/api/client.rs`
 4. Assess drift: both files in expected_touch_set = green
-5. Run tests: `cargo nextest run api::`
+5. Run tests: `cd {worktree_path} && cargo nextest run api::`
 6. Return result
 
 **Output (success, no drift):**

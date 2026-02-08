@@ -20,6 +20,7 @@ You receive a JSON payload:
 
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": "string",
   "step_anchor": "string",
   "files_to_audit": ["string"],
@@ -29,10 +30,19 @@ You receive a JSON payload:
 
 | Field | Description |
 |-------|-------------|
-| `speck_path` | Path to the speck file |
+| `worktree_path` | Absolute path to the worktree directory where implementation happened |
+| `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the step that was implemented |
-| `files_to_audit` | List of files created or modified to audit |
+| `files_to_audit` | List of files created or modified to audit (relative paths) |
 | `drift_assessment` | Drift analysis from coder (for context) |
+
+**IMPORTANT: File Path Handling**
+
+All file reads must use absolute paths prefixed with `worktree_path`:
+- When reading files: `{worktree_path}/{relative_path}`
+- When searching code: `Grep "pattern" {worktree_path}/{relative_path}`
+
+**CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
 ## Output Contract
 
@@ -140,6 +150,7 @@ Return structured JSON:
 **Input:**
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-5.md",
   "step_anchor": "#step-2",
   "files_to_audit": ["src/api/config.rs", "src/api/client.rs"],
@@ -152,11 +163,11 @@ Return structured JSON:
 ```
 
 **Process:**
-1. Read `src/api/config.rs` completely
+1. Read `{worktree_path}/src/api/config.rs` completely
 2. Check structure: Is RetryConfig properly organized?
 3. Check error handling: Are timeouts handled?
 4. Check security: Are defaults safe?
-5. Read `src/api/client.rs` completely
+5. Read `{worktree_path}/src/api/client.rs` completely
 6. Check retry logic for error handling
 7. Compile findings
 

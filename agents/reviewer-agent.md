@@ -20,6 +20,7 @@ You receive a JSON payload:
 
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": "string",
   "step_anchor": "string",
   "coder_output": {
@@ -33,12 +34,22 @@ You receive a JSON payload:
 
 | Field | Description |
 |-------|-------------|
-| `speck_path` | Path to the speck file |
+| `worktree_path` | Absolute path to the worktree directory where implementation happened |
+| `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the step that was implemented |
-| `coder_output.files_created` | New files created by coder |
-| `coder_output.files_modified` | Existing files modified by coder |
+| `coder_output.files_created` | New files created by coder (relative paths) |
+| `coder_output.files_modified` | Existing files modified by coder (relative paths) |
 | `coder_output.tests_passed` | Whether tests passed |
 | `coder_output.drift_assessment` | Drift analysis from coder |
+
+**IMPORTANT: File Path Handling**
+
+All file verification must use absolute paths prefixed with `worktree_path`:
+- When reading speck: `{worktree_path}/{speck_path}`
+- When verifying files exist: `{worktree_path}/{relative_path}`
+- When checking file contents: `Grep "pattern" {worktree_path}/{relative_path}`
+
+**CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
 ## Output Contract
 
@@ -109,6 +120,7 @@ Return structured JSON:
 **Input:**
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-5.md",
   "step_anchor": "#step-2",
   "coder_output": {
@@ -126,11 +138,11 @@ Return structured JSON:
 ```
 
 **Process:**
-1. Read `.specks/specks-5.md` and locate `#step-2`
+1. Read `{worktree_path}/.specks/specks-5.md` and locate `#step-2`
 2. List all tasks: "Create RetryConfig", "Add retry wrapper", "Add tests"
 3. Compare against coder output: config.rs created, client.rs modified
-4. Verify RetryConfig exists: `Grep "struct RetryConfig" src/api/config.rs`
-5. Verify tests exist: `Grep "#[test]" src/api/client.rs`
+4. Verify RetryConfig exists: `Grep "struct RetryConfig" {worktree_path}/src/api/config.rs`
+5. Verify tests exist: `Grep "#[test]" {worktree_path}/src/api/client.rs`
 6. Check drift: none
 7. All complete, recommend APPROVE
 

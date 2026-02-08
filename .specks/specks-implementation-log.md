@@ -6,6 +6,103 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-8.md] Step 4: Update Agent Input Contracts | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-8.md` - Step 4 specification (lines 1099-1156)
+- [D03] Path prefixing over directory changes
+- [D10] Step completion semantics (commit + bead close)
+- [Q02] Beads sync location (resolved - runs in worktree)
+- Spec S02 - Worktree path in agent inputs
+- Spec S03 - PR creation details
+- Spec S04 - Committer agent operation modes (commit/publish)
+- Spec S05 - Speck slug derivation
+- Spec S06 - Setup agent output with worktree
+- Section: Agent Input Contract Changes (#agent-input-changes)
+- Section: Committer Agent Publish Mode (#committer-publish-mode)
+- Section: Updated Setup Agent Output (#setup-agent-output)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update implementer-setup-agent with worktree creation | Done |
+| Setup agent creates worktree via Bash (`specks worktree create`) | Done |
+| Setup agent runs beads sync in worktree | Done |
+| Setup agent commits bead annotations as first commit | Done |
+| Setup agent returns output per Spec S06 | Done |
+| Add worktree_path to all 7 implementation agent input contracts | Done |
+| Document path prefixing requirement (absolute paths) | Done |
+| Document git commands must use `git -C {worktree_path}` | Done |
+| Add explicit "no persistent cd" rule | Done |
+| Update architect-agent input contract | Done |
+| Update coder-agent input contract | Done |
+| Update reviewer-agent input contract | Done |
+| Update auditor-agent input contract | Done |
+| Update logger-agent input contract | Done |
+| Update committer-agent with operation field (commit/publish) | Done |
+| Implement commit mode per Spec S04 | Done |
+| Implement publish mode per Spec S04 | Done |
+| Publish mode: check gh auth status | Done |
+| Publish mode: generate pr-body.md from step_summaries | Done |
+| Publish mode: push branch with git -C | Done |
+| Publish mode: create PR via gh with --body-file | Done |
+| Committer failure semantics per D10 (needs_reconcile) | Done |
+| Logger writes to {worktree_path}/.specks/specks-implementation-log.md | Done |
+
+**Files Created:**
+- None (all modifications to existing agent markdown files)
+
+**Files Modified:**
+- `agents/implementer-setup-agent.md` - Added worktree creation via Bash, beads sync in worktree, bead annotation commit, Spec S06 output contract
+- `agents/architect-agent.md` - Added worktree_path to input contract, path prefixing requirements, no-persistent-cd rule
+- `agents/coder-agent.md` - Added worktree_path to input contract, path prefixing requirements, no-persistent-cd rule
+- `agents/reviewer-agent.md` - Added worktree_path to input contract, path prefixing requirements, no-persistent-cd rule
+- `agents/auditor-agent.md` - Added worktree_path to input contract, path prefixing requirements, no-persistent-cd rule
+- `agents/logger-agent.md` - Added worktree_path to input contract, writes to worktree log location
+- `agents/committer-agent.md` - Added worktree_path, operation field (commit/publish), dual-mode operation per Spec S04, needs_reconcile semantics per D10
+
+**Test Results:**
+- Manual review: All 7 implementation agents have worktree_path in input contract
+- Manual review: All agents document path prefixing requirement
+- Checkpoint: `grep -l "worktree_path" agents/*-agent.md | wc -l` - 7 agents (expected)
+- Checkpoint: `grep -l "Never rely on persistent" agents/*-agent.md | wc -l` - 7 agents (expected)
+
+**Checkpoints Verified:**
+- [x] All 7 implementation agents updated (setup, architect, coder, reviewer, auditor, logger, committer)
+- [x] Each agent has worktree_path field in input contract
+- [x] Each agent documents path prefixing requirement (use absolute paths)
+- [x] Each agent documents git -C usage pattern
+- [x] Each agent has explicit "no persistent cd" rule
+- [x] Setup agent creates worktree via Bash tool
+- [x] Setup agent syncs beads in worktree (resolves Q02)
+- [x] Setup agent commits bead annotations
+- [x] Committer agent has dual-mode operation (commit/publish)
+- [x] Committer commit mode closes beads atomically
+- [x] Committer publish mode pushes branch and creates PR
+- [x] Committer handles partial failures per D10 (needs_reconcile)
+- [x] Logger writes to worktree log location
+
+**Key Decisions/Notes:**
+- **Worktree creation**: Setup agent (with Bash access) calls `specks worktree create` via CLI. Implementer skill itself does NOT have Bash access, so worktree creation must happen in setup agent.
+- **Beads sync location (Q02 resolution)**: Beads sync runs **inside the worktree** (`cd {worktree_path} && specks beads sync ...`) so speck bead annotations are committed on the PR branch, not the user's base branch. This is critical for the "worktree as session" model.
+- **First commit**: Setup agent commits bead annotations as the first commit on the branch (`chore: sync beads for implementation`) before any implementation steps begin.
+- **Path prefixing strategy**: All agents use absolute paths constructed as `{worktree_path}/{relative_path}`. No agent relies on persistent shell state between commands.
+- **Git -C pattern**: All git commands use `git -C {worktree_path} <command>` for worktree operations, avoiding directory changes entirely.
+- **Single-command cd exception**: Agents may use `cd {worktree_path} && <cmd>` as a single-command prefix when a tool lacks `-C` support (e.g., `gh pr create` may need git context), but this MUST NOT span multiple commands.
+- **Committer dual-mode**: Committer agent now supports two operations:
+  - `commit` mode: stage files, commit changes, close bead (per D10, set needs_reconcile on bead close failure)
+  - `publish` mode: push branch, create PR via `gh` with --body-file
+- **Publish mode safety**: Checks `gh auth status` before attempting PR creation to fail fast with clear error message
+- **PR body generation**: Publish mode generates `{worktree_path}/.specks/pr-body.md` from step_summaries array provided by implementer skill
+- **Needs_reconcile semantics (D10)**: If commit succeeds but bead close fails, committer returns `needs_reconcile: true` to signal partial failure requiring remediation (retry bead close) without re-running code changes
+- **Spec S04 compliance**: Committer output includes operation-specific fields (commit_hash for commit mode, pr_url/pr_number for publish mode)
+- **No-persistent-cd rule**: Explicitly documented in all 7 agent contracts to prevent reliance on shell state that doesn't persist between tool invocations in Claude Code
+
+---
+
 ## [specks-8.md] Step 3: Implement Worktree CLI Commands | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

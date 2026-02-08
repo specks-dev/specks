@@ -20,6 +20,7 @@ You receive a JSON payload:
 
 ```json
 {
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": "string",
   "step_anchor": "string",
   "summary": "string",
@@ -30,11 +31,26 @@ You receive a JSON payload:
 
 | Field | Description |
 |-------|-------------|
-| `speck_path` | Path to the speck file |
+| `worktree_path` | Absolute path to the worktree directory where implementation happened |
+| `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the completed step |
 | `summary` | Brief summary of what was implemented |
-| `files_changed` | List of files created or modified |
+| `files_changed` | List of files created or modified (relative paths) |
 | `commit_hash` | Commit hash if already committed (usually null at this point) |
+
+**IMPORTANT: File Path Handling**
+
+The implementation log lives in the worktree at:
+```
+{worktree_path}/.specks/specks-implementation-log.md
+```
+
+All file operations must use absolute paths prefixed with `worktree_path`:
+- When reading speck: `{worktree_path}/{speck_path}`
+- When reading log: `{worktree_path}/.specks/specks-implementation-log.md`
+- When editing log: `{worktree_path}/.specks/specks-implementation-log.md`
+
+**CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
 ## Output Contract
 
@@ -54,11 +70,11 @@ Return structured JSON:
 
 ## Workflow
 
-1. **Read the speck file**: Open the speck at `speck_path` and locate `step_anchor` to get the step title
+1. **Read the speck file**: Open the speck at `{worktree_path}/{speck_path}` and locate `step_anchor` to get the step title
 
 2. **Read the plan file**: Understand what tasks were completed, what files were created/modified, what tests were run, what checkpoints were verified
 
-3. **Read log header**: Read the first 15-20 lines of `.specks/specks-implementation-log.md` to see the header structure and first existing entry
+3. **Read log header**: Read the first 15-20 lines of `{worktree_path}/.specks/specks-implementation-log.md` to see the header structure and first existing entry
 
 4. **Generate the entry**: Create a detailed completion summary using the format below
 
@@ -154,8 +170,8 @@ This approach:
 ## Quality Gates
 
 Before returning success:
-- [ ] Read the speck file to get step title and context
-- [ ] Read first 20 lines of log file to see existing structure
+- [ ] Read the speck file from worktree: `{worktree_path}/{speck_path}`
+- [ ] Read first 20 lines of log file: `{worktree_path}/.specks/specks-implementation-log.md`
 - [ ] Generated a complete, detailed entry
 - [ ] Header uses pipe-separated format: `## [plan.md] Step: Title | STATUS | DATE`
 - [ ] Used Edit tool to prepend the entry
@@ -184,7 +200,7 @@ logger → adds log entry  ← YOU ARE HERE
 committer → stages files (including log) + commits
 ```
 
-**Important**: The orchestrator adds `.specks/specks-implementation-log.md` to the committer's `files_to_stage` list. This ensures the log entry is committed atomically with the code changes.
+**Important**: The orchestrator adds `{worktree_path}/.specks/specks-implementation-log.md` to the committer's `files_to_stage` list. This ensures the log entry is committed atomically with the code changes.
 
 ## Error Handling
 
@@ -193,7 +209,7 @@ If log file cannot be updated:
 ```json
 {
   "success": false,
-  "log_file": ".specks/specks-implementation-log.md",
+  "log_file": "{worktree_path}/.specks/specks-implementation-log.md",
   "entry_added": {
     "step": "",
     "timestamp": "",
