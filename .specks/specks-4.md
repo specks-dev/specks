@@ -950,18 +950,18 @@ After each agent conversion:
 - `agents/auditor-agent.md` - with full specification from Spec S07
 
 **Tasks:**
-- [ ] Create `agents/reviewer-agent.md` with frontmatter: `name: reviewer-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
-- [ ] Include input/output JSON schemas from Spec S06
-- [ ] Include APPROVE/REVISE/ESCALATE decision criteria
-- [ ] Create `agents/auditor-agent.md` with frontmatter: `name: auditor-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
-- [ ] Include input/output JSON schemas from Spec S07
-- [ ] Include APPROVE/FIX_REQUIRED/MAJOR_REVISION criteria
+- [x] Create `agents/reviewer-agent.md` with frontmatter: `name: reviewer-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
+- [x] Include input/output JSON schemas from Spec S06
+- [x] Include APPROVE/REVISE/ESCALATE decision criteria
+- [x] Create `agents/auditor-agent.md` with frontmatter: `name: auditor-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
+- [x] Include input/output JSON schemas from Spec S07
+- [x] Include APPROVE/FIX_REQUIRED/MAJOR_REVISION criteria
 
 **Tests:**
-- [ ] Smoke test: Each agent file has valid YAML frontmatter
+- [x] Smoke test: Each agent file has valid YAML frontmatter
 
 **Checkpoint:**
-- [ ] `ls agents/reviewer-agent.md agents/auditor-agent.md` both exist
+- [x] `ls agents/reviewer-agent.md agents/auditor-agent.md` both exist
 
 **Rollback:**
 - `rm agents/reviewer-agent.md agents/auditor-agent.md`

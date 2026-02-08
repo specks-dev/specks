@@ -6,6 +6,48 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Step 2.2: Create Reviewer and Auditor Agents | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 2.2 specification (lines 942-969)
+- Spec S06: reviewer-agent (#s06-reviewer)
+- Spec S07: auditor-agent (#s07-auditor)
+- [D02] Nine Sub-Agents with Specific Tool Sets
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/reviewer-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S06 | Done |
+| Include APPROVE/REVISE/ESCALATE decision criteria | Done |
+| Create `agents/auditor-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S07 | Done |
+| Include APPROVE/FIX_REQUIRED/MAJOR_REVISION criteria | Done |
+
+**Files Created:**
+- `agents/reviewer-agent.md` - Verifies step completion matches plan (tools: Read, Grep, Glob)
+- `agents/auditor-agent.md` - Checks code quality, security, error handling (tools: Read, Grep, Glob)
+
+**Files Modified:**
+- `.specks/specks-4.md` - Checked off all Step 2.2 task and checkpoint boxes
+
+**Test Results:**
+- Smoke test: Both agent files have valid YAML frontmatter
+
+**Checkpoints Verified:**
+- `ls agents/reviewer-agent.md agents/auditor-agent.md` both exist: PASS
+
+**Key Decisions/Notes:**
+- Reviewer uses APPROVE/REVISE/ESCALATE: APPROVE for complete work, REVISE for fixable issues, ESCALATE for conceptual problems
+- Auditor uses APPROVE/FIX_REQUIRED/MAJOR_REVISION: assesses structure, error handling, and security categories
+- Both agents are read-only (Read, Grep, Glob only) - they analyze but don't modify code
+- Severity levels for auditor: critical (security/data loss), major (quality issues), minor (improvements)
+
+---
+
 ## [specks-4.md] Step 2.1: Create Architect and Coder Agents | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07
