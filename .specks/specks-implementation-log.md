@@ -6,6 +6,60 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Step 1: Create Planning Sub-Agents | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 1 specification (lines 864-900)
+- Spec S01: clarifier-agent (#s01-clarifier)
+- Spec S02: author-agent (#s02-author)
+- Spec S03: critic-agent (#s03-critic)
+- [D02] Nine Sub-Agents with Specific Tool Sets
+- [D04] JSON Input/Output Contracts
+- `agents/archived/director.md` - Agent file format reference
+- `.specks/specks-skeleton.md` - Skeleton format reference
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/clarifier-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S01 | Done |
+| Include behavior notes (3-5 questions max, critic feedback handling) | Done |
+| Create `agents/author-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S02 | Done |
+| Include skeleton compliance requirements | Done |
+| Create `agents/critic-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S03 | Done |
+| Include hard gate requirements (skeleton compliance) | Done |
+
+**Files Created:**
+- `agents/clarifier-agent.md` - Analyzes ideas and generates clarifying questions (tools: Read, Grep, Glob)
+- `agents/author-agent.md` - Creates and revises speck documents following skeleton format (tools: Read, Grep, Glob, Write, Edit)
+- `agents/critic-agent.md` - Reviews speck quality with skeleton compliance as hard gate (tools: Read, Grep, Glob)
+
+**Files Modified:**
+- `.specks/specks-4.md` - Checked off all Step 1 task and checkpoint boxes
+
+**Test Results:**
+- Smoke test: All 3 agent files have valid YAML frontmatter (parseable with `---` delimiters)
+- Contract test: All JSON schemas match architecture report Specs S01-S03 exactly
+
+**Checkpoints Verified:**
+- `ls agents/*.md` shows clarifier-agent.md, author-agent.md, critic-agent.md: PASS
+- Each file has `---` delimited frontmatter with name and tools fields: PASS
+- Task spawn test (clarifier-agent returns JSON response): PASS
+
+**Key Decisions/Notes:**
+- Agent files follow the format established by archived agents (YAML frontmatter with name, description, tools)
+- Each agent includes complete input/output JSON contracts from the architecture report
+- Clarifier limits to 3-5 questions max, handles critic feedback for revision loops
+- Author emphasizes skeleton compliance as mandatory (must read skeleton before writing)
+- Critic uses skeleton compliance as hard gate - non-compliant = REJECT recommendation
+
+---
+
 ## [specks-4.md] Step 0: Delete Test and Obsolete Files, Verify Prerequisites | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

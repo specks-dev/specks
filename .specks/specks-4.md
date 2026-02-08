@@ -875,24 +875,24 @@ After each agent conversion:
 - `agents/critic-agent.md` - with full specification from Spec S03
 
 **Tasks:**
-- [ ] Create `agents/clarifier-agent.md` with frontmatter: `name: clarifier-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
-- [ ] Include input/output JSON schemas from Spec S01
-- [ ] Include behavior notes (3-5 questions max, critic feedback handling)
-- [ ] Create `agents/author-agent.md` with frontmatter: `name: author-agent`, `description: <purpose>`, `tools: Read, Grep, Glob, Write, Edit`
-- [ ] Include input/output JSON schemas from Spec S02
-- [ ] Include skeleton compliance requirements
-- [ ] Create `agents/critic-agent.md` with frontmatter: `name: critic-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
-- [ ] Include input/output JSON schemas from Spec S03
-- [ ] Include hard gate requirements (skeleton compliance)
+- [x] Create `agents/clarifier-agent.md` with frontmatter: `name: clarifier-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
+- [x] Include input/output JSON schemas from Spec S01
+- [x] Include behavior notes (3-5 questions max, critic feedback handling)
+- [x] Create `agents/author-agent.md` with frontmatter: `name: author-agent`, `description: <purpose>`, `tools: Read, Grep, Glob, Write, Edit`
+- [x] Include input/output JSON schemas from Spec S02
+- [x] Include skeleton compliance requirements
+- [x] Create `agents/critic-agent.md` with frontmatter: `name: critic-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
+- [x] Include input/output JSON schemas from Spec S03
+- [x] Include hard gate requirements (skeleton compliance)
 
 **Tests:**
-- [ ] Smoke test: Each agent file has valid YAML frontmatter (parseable)
-- [ ] Contract test: JSON schemas match architecture report exactly
+- [x] Smoke test: Each agent file has valid YAML frontmatter (parseable)
+- [x] Contract test: JSON schemas match architecture report exactly
 
 **Checkpoint:**
-- [ ] `ls agents/*.md` shows clarifier-agent.md, author-agent.md, critic-agent.md
-- [ ] Each file has `---` delimited frontmatter with name and tools fields
-- [ ] Task spawn test: Invoke `Task(subagent_type: "specks:clarifier-agent", prompt: '{"idea": "test", "speck_path": null, "critic_feedback": null}', description: "test spawn")` and verify JSON response returns
+- [x] `ls agents/*.md` shows clarifier-agent.md, author-agent.md, critic-agent.md
+- [x] Each file has `---` delimited frontmatter with name and tools fields
+- [x] Task spawn test: Invoke `Task(subagent_type: "specks:clarifier-agent", prompt: '{"idea": "test", "speck_path": null, "critic_feedback": null}', description: "test spawn")` and verify JSON response returns
 
 **Rollback:**
 - `rm agents/clarifier-agent.md agents/author-agent.md agents/critic-agent.md`
