@@ -6,6 +6,67 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Steps 5a+5b: Delete Skill Directories Converted to Agents | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 5a specification (lines 1097-1125)
+- `.specks/specks-4.md` - Step 5b specification (lines 1128-1156)
+- [D03] No Interviewer
+- Table T02: Skill directories to delete
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Delete `skills/interviewer/` directory | Done |
+| Delete `skills/clarifier/` directory | Done |
+| Delete `skills/author/` directory | Done |
+| Delete `skills/critic/` directory | Done |
+| Delete `skills/architect/` directory | Done |
+| Delete `skills/coder/` directory | Done |
+| Delete `skills/reviewer/` directory | Done |
+| Delete `skills/auditor/` directory | Done |
+| Delete `skills/logger/` directory | Done |
+| Delete `skills/committer/` directory | Done |
+
+**Files Created:**
+- None
+
+**Files Deleted:**
+- `skills/interviewer/` - Eliminated (AskUserQuestion used directly per D03)
+- `skills/clarifier/` - Converted to `agents/clarifier-agent.md`
+- `skills/author/` - Converted to `agents/author-agent.md`
+- `skills/critic/` - Converted to `agents/critic-agent.md`
+- `skills/architect/` - Converted to `agents/architect-agent.md`
+- `skills/coder/` - Converted to `agents/coder-agent.md`
+- `skills/reviewer/` - Converted to `agents/reviewer-agent.md`
+- `skills/auditor/` - Converted to `agents/auditor-agent.md`
+- `skills/logger/` - Converted to `agents/logger-agent.md`
+- `skills/committer/` - Converted to `agents/committer-agent.md`
+
+**Files Modified:**
+- `.specks/specks-4.md` - Checked off all Step 5a and 5b tasks and checkpoints
+
+**Test Results:**
+- Integration test: `ls skills/` shows only `planner/` and `implementer/`: PASS
+
+**Checkpoints Verified:**
+- Step 5a: `ls skills/interviewer/` returns "No such file or directory": PASS
+- Step 5a: `ls skills/clarifier/` returns "No such file or directory": PASS
+- Step 5a: `ls skills/author/` returns "No such file or directory": PASS
+- Step 5a: `ls skills/critic/` returns "No such file or directory": PASS
+- Step 5b: `ls skills/` shows only `planner/` and `implementer/`: PASS
+
+**Key Decisions/Notes:**
+- Combined Steps 5a and 5b into single log entry since they are related cleanup tasks
+- 10 skill directories deleted total (4 planning + 6 implementation)
+- Skills directory now contains only the 2 orchestrator skills: planner/ and implementer/
+- All deleted skills have corresponding agents in agents/ directory
+
+---
+
 ## [specks-4.md] Step 4: Update Implementer Skill with Orchestration Logic | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

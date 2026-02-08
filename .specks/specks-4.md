@@ -1107,16 +1107,16 @@ After completing Steps 2.1-2.3, you will have:
 - Deleted: `skills/clarifier/`, `skills/author/`, `skills/critic/` (converted to agents)
 
 **Tasks:**
-- [ ] Delete `skills/interviewer/` directory
-- [ ] Delete `skills/clarifier/` directory
-- [ ] Delete `skills/author/` directory
-- [ ] Delete `skills/critic/` directory
+- [x] Delete `skills/interviewer/` directory
+- [x] Delete `skills/clarifier/` directory
+- [x] Delete `skills/author/` directory
+- [x] Delete `skills/critic/` directory
 
 **Checkpoint:**
-- [ ] `ls skills/interviewer/` returns "No such file or directory"
-- [ ] `ls skills/clarifier/` returns "No such file or directory"
-- [ ] `ls skills/author/` returns "No such file or directory"
-- [ ] `ls skills/critic/` returns "No such file or directory"
+- [x] `ls skills/interviewer/` returns "No such file or directory"
+- [x] `ls skills/clarifier/` returns "No such file or directory"
+- [x] `ls skills/author/` returns "No such file or directory"
+- [x] `ls skills/critic/` returns "No such file or directory"
 
 **Rollback:**
 - `git checkout HEAD -- skills/interviewer/ skills/clarifier/ skills/author/ skills/critic/`
@@ -1137,18 +1137,18 @@ After completing Steps 2.1-2.3, you will have:
 - Deleted: `skills/architect/`, `skills/coder/`, `skills/reviewer/`, `skills/auditor/`, `skills/logger/`, `skills/committer/` (converted to agents)
 
 **Tasks:**
-- [ ] Delete `skills/architect/` directory
-- [ ] Delete `skills/coder/` directory
-- [ ] Delete `skills/reviewer/` directory
-- [ ] Delete `skills/auditor/` directory
-- [ ] Delete `skills/logger/` directory
-- [ ] Delete `skills/committer/` directory
+- [x] Delete `skills/architect/` directory
+- [x] Delete `skills/coder/` directory
+- [x] Delete `skills/reviewer/` directory
+- [x] Delete `skills/auditor/` directory
+- [x] Delete `skills/logger/` directory
+- [x] Delete `skills/committer/` directory
 
 **Tests:**
-- [ ] Integration test: Only planner/ and implementer/ skill directories remain
+- [x] Integration test: Only planner/ and implementer/ skill directories remain
 
 **Checkpoint:**
-- [ ] `ls skills/` shows only `planner/` and `implementer/`
+- [x] `ls skills/` shows only `planner/` and `implementer/`
 
 **Rollback:**
 - `git checkout HEAD -- skills/architect/ skills/coder/ skills/reviewer/ skills/auditor/ skills/logger/ skills/committer/`
