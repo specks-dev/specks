@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 
-use crate::commands::BeadsCommands;
+use crate::commands::{BeadsCommands, WorktreeCommands};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -96,6 +96,15 @@ pub enum Commands {
         long_about = "Beads integration for two-way sync between specks and work tracking.\n\nRequires:\n  - Beads CLI (bd) installed and in PATH\n  - Beads initialized (bd init creates .beads/)\n  - Network connectivity\n\nSubcommands:\n  sync   Create beads from speck steps, write IDs back\n  link   Manually link a step to an existing bead\n  status Show execution status (complete/ready/blocked)\n  pull   Update speck checkboxes from bead completion\n\nTypical workflow:\n  1. specks beads sync specks-1.md    # Create beads\n  2. bd close <bead-id>               # Complete work\n  3. specks beads pull specks-1.md    # Update checkboxes"
     )]
     Beads(BeadsCommands),
+
+    /// Worktree commands for isolated implementation environments
+    ///
+    /// Create, list, and clean up git worktrees for speck implementations.
+    #[command(
+        subcommand,
+        long_about = "Worktree commands for isolated implementation environments.\n\nProvides git worktree integration for speck implementations:\n  - Each speck gets its own branch and worktree\n  - Isolated working directory prevents conflicts\n  - Clean up merged worktrees after PR completion\n\nSubcommands:\n  create  Create worktree and branch for a speck\n  list    Show all active worktrees\n  cleanup Remove worktrees for merged branches\n\nTypical workflow:\n  1. specks worktree create .specks/specks-auth.md\n  2. (implement in worktree, create PR, merge)\n  3. specks worktree cleanup --merged"
+    )]
+    Worktree(WorktreeCommands),
 
     /// Show version information
     ///

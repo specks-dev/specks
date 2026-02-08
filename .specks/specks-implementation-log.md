@@ -6,6 +6,75 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-8.md] Step 3: Implement Worktree CLI Commands | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-8.md` - Step 3 specification (lines 1050-1096)
+- [D07] Manual cleanup in Phase 1
+- [D08] Filesystem-safe worktree directory names
+- Table T01 - New CLI commands
+- Table T02 - Worktree command exit codes
+- Section: CLI Commands (#cli-commands)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add worktree subcommand to CLI | Done |
+| Add sub-subcommands: create, list, cleanup | Done |
+| Implement `specks worktree create <speck>` | Done |
+| Parse speck path argument | Done |
+| Support --base flag (default: main) | Done |
+| Call core::create_worktree | Done |
+| Output created worktree path | Done |
+| Implement `specks worktree list` | Done |
+| Call core::list_worktrees | Done |
+| Format table output (branch, path, status, progress) | Done |
+| Implement `specks worktree cleanup --merged` | Done |
+| Require --merged flag for safety | Done |
+| Support --dry-run flag | Done |
+| Call core::cleanup_worktrees | Done |
+| Report removed worktrees | Done |
+
+**Files Created:**
+- `crates/specks/src/commands/worktree.rs` - CLI command handlers for worktree create, list, cleanup with WorktreeCommands enum
+
+**Files Modified:**
+- `crates/specks/src/cli.rs` - Added Worktree variant to Commands enum
+- `crates/specks/src/commands/mod.rs` - Exported worktree module
+- `crates/specks/src/main.rs` - Wired up Commands::Worktree handler
+
+**Test Results:**
+- Integration test: `test_create_worktree_succeeds` - PASS (creates worktree, directory exists, branch created)
+- Integration test: `test_list_worktrees` - PASS (lists created worktrees)
+- Integration test: `test_cleanup_dry_run` - PASS (detects merged but doesn't remove)
+- Integration test: `test_cleanup_removes_merged` - PASS (removes merged worktree and branch)
+- Integration test: `test_create_handles_already_exists` - PASS (returns error exit code 3)
+- Integration test: `test_create_handles_no_execution_steps` - PASS (returns error exit code 8)
+- Build: `cargo build -p specks` - SUCCESS (no warnings)
+- All specks crate tests: `cargo nextest run -p specks` - 59 tests PASS
+
+**Checkpoints Verified:**
+- [x] `cargo build -p specks` succeeds with no warnings
+- [x] `specks worktree --help` shows create, list, cleanup subcommands
+- [x] All 6 integration tests pass (full create/list/cleanup lifecycle)
+- [x] All 59 specks crate tests pass
+- [x] Exit codes match Table T02 specification
+- [x] Commands follow beads subcommand pattern (consistent with existing CLI structure)
+
+**Key Decisions/Notes:**
+- **CLI structure**: Followed beads subcommand pattern for consistency (Commands::Worktree with WorktreeCommands enum)
+- **Exit codes**: All exit codes per Table T02 (0=success, 1=general error, 2=invalid args, 3=already exists, 4=git version, 5=not git repo, 6=branch not found, 7=speck not found, 8=no steps)
+- **Safety flags**: cleanup command requires --merged flag to prevent accidental deletion
+- **Dry run support**: cleanup supports --dry-run for preview without changes
+- **Test coverage**: 6 integration tests covering full lifecycle (create → list → cleanup with merge)
+- **Output formatting**: list command shows table with branch, path, status, and progress (current_step/total_steps)
+- **Table T01 compliance**: All three commands (create, list, cleanup) implemented with specified arguments
+
+---
+
 ## [specks-8.md] Step 2: Implement Worktree Core Module | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

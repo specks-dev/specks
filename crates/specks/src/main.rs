@@ -8,7 +8,7 @@ mod splash;
 use std::process::ExitCode;
 
 use cli::Commands;
-use commands::BeadsCommands;
+use commands::{BeadsCommands, WorktreeCommands};
 
 fn main() -> ExitCode {
     let cli = cli::parse();
@@ -55,6 +55,15 @@ fn main() -> ExitCode {
             }
             BeadsCommands::Close { bead_id, reason } => {
                 commands::run_close(bead_id, reason, cli.json, cli.quiet)
+            }
+        },
+        Some(Commands::Worktree(worktree_cmd)) => match worktree_cmd {
+            WorktreeCommands::Create { speck, base } => {
+                commands::run_worktree_create(speck, base, cli.json, cli.quiet)
+            }
+            WorktreeCommands::List => commands::run_worktree_list(cli.json, cli.quiet),
+            WorktreeCommands::Cleanup { merged, dry_run } => {
+                commands::run_worktree_cleanup(merged, dry_run, cli.json, cli.quiet)
             }
         },
         Some(Commands::Version { verbose }) => commands::run_version(verbose, cli.json, cli.quiet),
