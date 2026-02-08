@@ -35,10 +35,10 @@ allowed-tools: Task, AskUserQuestion
        │
        ├── status: "needs_clarification" ──► AskUserQuestion ──► re-call setup-agent
        │
-       └── status: "ready"
+       └── status: "ready" (Spec S06: worktree_path, branch_name, base_branch)
               │
               ▼
-       Create session: ID, directory, metadata.json
+       Create worktree session: session.json in {worktree_path}/.specks/
               │
               ▼
        ┌─────────────────────────────────────────────────────────────┐
@@ -46,7 +46,7 @@ allowed-tools: Task, AskUserQuestion
        │  ┌───────────────────────────────────────────────────────┐  │
        │  │                                                       │  │
        │  │  read bead_id ──► architect-agent ──► coder-agent     │  │
-       │  │  from metadata                            │           │  │
+       │  │  from session      (with worktree)   (with worktree)  │  │
        │  │                           ┌───────────────┘           │  │
        │  │                           ▼                           │  │
        │  │                    Drift Check                        │  │
@@ -60,6 +60,7 @@ allowed-tools: Task, AskUserQuestion
        │  │  ┌─────────────────────────────────────────────┐      │  │
        │  │  │         REVIEW LOOP (max 3 retries)         │      │  │
        │  │  │  reviewer-agent ──► REVISE? ──► coder-agent │      │  │
+       │  │  │   (with worktree)                           │      │  │
        │  │  │         │                                   │      │  │
        │  │  │         ▼                                   │      │  │
        │  │  │      APPROVE                                │      │  │
@@ -69,13 +70,16 @@ allowed-tools: Task, AskUserQuestion
        │  │  ┌─────────────────────────────────────────────┐      │  │
        │  │  │         AUDIT LOOP (max 2 retries)          │      │  │
        │  │  │  auditor-agent ──► FIX? ──► coder-agent     │      │  │
+       │  │  │   (with worktree)                           │      │  │
        │  │  │         │                                   │      │  │
        │  │  │         ▼                                   │      │  │
        │  │  │      APPROVE                                │      │  │
        │  │  └─────────────────────────────────────────────┘      │  │
        │  │           │                                           │  │
        │  │           ▼                                           │  │
-       │  │  logger-agent ──► committer-agent ──► beads close     │  │
+       │  │  logger-agent ──► committer-agent (commit mode)       │  │
+       │  │  (with worktree)   ├─► commit + close bead            │  │
+       │  │                    └─► collect step summary           │  │
        │  │                                                       │  │
        │  └───────────────────────────────────────────────────────┘  │
        │                           │                                 │
@@ -84,10 +88,17 @@ allowed-tools: Task, AskUserQuestion
        └─────────────────────────────────────────────────────────────┘
               │
               ▼
-       Update metadata: status = "completed"
+       committer-agent (publish mode)
+              ├─► push branch
+              ├─► create PR with step_summaries
+              └─► return PR URL
+              │
+              ▼
+       Update session.json: status = "completed"
 ```
 
-**Each step follows this pipeline: architect → coder → reviewer → auditor → logger → committer**
+**Each step follows this pipeline: architect → coder → reviewer → auditor → logger → committer (commit mode)**
+**After all steps: committer (publish mode) creates PR**
 
 ---
 
@@ -136,7 +147,13 @@ Task(
 - Repeat until `status: "ready"`
 
 **If `status: "ready"`:**
-- Extract `resolved_steps` from setup response
+- Extract from setup response per Spec S06:
+  - `resolved_steps`: Steps to execute
+  - `worktree_path`: Absolute path to worktree
+  - `branch_name`: Implementation branch name
+  - `base_branch`: Base branch for PR
+  - `root_bead`: Root bead ID
+  - `bead_mapping`: Step-to-bead mapping
 - If `resolved_steps` is empty: report "All steps already complete." and halt
 - Proceed to create session
 
@@ -147,14 +164,14 @@ Task(
    date +%Y%m%d-%H%M%S && head -c 3 /dev/urandom | xxd -p
    ```
 
-2. Create session directory: `.specks/runs/<session-id>/execution/`
-
-3. Write `metadata.json`:
+2. Write `{worktree_path}/.specks/session.json`:
    ```json
    {
      "session_id": "<session-id>",
      "speck_path": "<path>",
-     "commit_policy": "manual",
+     "worktree_path": "<worktree_path from setup>",
+     "branch_name": "<branch_name from setup>",
+     "base_branch": "<base_branch from setup>",
      "status": "in_progress",
      "created_at": "<ISO timestamp>",
      "last_updated_at": "<ISO timestamp>",
@@ -169,30 +186,30 @@ Task(
    }
    ```
 
-   The `root_bead` and `bead_mapping` are provided by the setup-agent response.
+   All fields from `worktree_path` onwards are provided by the setup-agent response per Spec S06.
 
 ### 4. For Each Step in `resolved_steps`
 
-Initialize: `revision_feedback = null`, `reviewer_attempts = 0`, `auditor_attempts = 0`
+Initialize: `revision_feedback = null`, `reviewer_attempts = 0`, `auditor_attempts = 0`, `step_summaries = []`
 
 #### 4a. Step Preparation
 
-1. Create step directory: `.specks/runs/<session-id>/execution/step-N/`
-2. Read bead ID from `metadata.json`: `bead_id = metadata.bead_mapping[step_anchor]`
-3. **Validate bead ID**: If `bead_id` is missing or null, HALT with error: "Setup agent should have populated bead_id for step <step_anchor> but it is missing from metadata.bead_mapping"
-4. Update `metadata.json` with `current_step`
+1. Create step artifact directory: `{worktree_path}/.specks/step-artifacts/step-N/`
+2. Read bead ID from `session.json`: `bead_id = session.bead_mapping[step_anchor]`
+3. **Validate bead ID**: If `bead_id` is missing or null, HALT with error: "Setup agent should have populated bead_id for step <step_anchor> but it is missing from session.bead_mapping"
+4. Update `{worktree_path}/.specks/session.json` with `current_step`
 
 #### 4b. Spawn Architect
 
 ```
 Task(
   subagent_type: "specks:architect-agent",
-  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "revision_feedback": <revision_feedback or null>}',
+  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "revision_feedback": <revision_feedback or null>, "worktree_path": "<worktree_path>"}',
   description: "Create implementation strategy for step N"
 )
 ```
 
-Save response to `step-N/architect-output.json`.
+Save response to `{worktree_path}/.specks/step-artifacts/step-N/architect-output.json`.
 
 If critical risks in response, use AskUserQuestion to confirm proceeding.
 
@@ -201,12 +218,12 @@ If critical risks in response, use AskUserQuestion to confirm proceeding.
 ```
 Task(
   subagent_type: "specks:coder-agent",
-  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "architect_strategy": {...}, "session_id": "<session-id>"}',
+  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "architect_strategy": {...}, "worktree_path": "<worktree_path>"}',
   description: "Execute implementation for step N"
 )
 ```
 
-Save response to `step-N/coder-output.json`.
+Save response to `{worktree_path}/.specks/step-artifacts/step-N/coder-output.json`.
 
 #### 4d. Drift Check
 
@@ -227,12 +244,12 @@ Evaluate `drift_assessment.drift_severity` from coder output:
 ```
 Task(
   subagent_type: "specks:reviewer-agent",
-  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "coder_output": {...}}',
+  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "coder_output": {...}, "worktree_path": "<worktree_path>"}',
   description: "Verify step completion"
 )
 ```
 
-Save response to `step-N/reviewer-output.json`.
+Save response to `{worktree_path}/.specks/step-artifacts/step-N/reviewer-output.json`.
 
 | Recommendation | Action |
 |----------------|--------|
@@ -247,12 +264,12 @@ If `reviewer_attempts >= 3` and still REVISE: escalate to user.
 ```
 Task(
   subagent_type: "specks:auditor-agent",
-  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "files_to_audit": [...], "drift_assessment": {...}}',
+  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "files_to_audit": [...], "drift_assessment": {...}, "worktree_path": "<worktree_path>"}',
   description: "Check code quality"
 )
 ```
 
-Save response to `step-N/auditor-output.json`.
+Save response to `{worktree_path}/.specks/step-artifacts/step-N/auditor-output.json`.
 
 | Recommendation | Action |
 |----------------|--------|
@@ -267,68 +284,75 @@ If `auditor_attempts >= 2` and still FIX_REQUIRED: escalate to user.
 ```
 Task(
   subagent_type: "specks:logger-agent",
-  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "summary": "<brief description>", "files_changed": [...], "commit_hash": null}',
+  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "summary": "<brief description>", "files_changed": [...], "commit_hash": null, "worktree_path": "<worktree_path>"}',
   description: "Update implementation log"
 )
 ```
 
-Save response to `step-N/logger-output.json`.
+Save response to `{worktree_path}/.specks/step-artifacts/step-N/logger-output.json`.
 
-#### 4h. Spawn Committer
+#### 4h. Spawn Committer (commit mode)
 
-**CRITICAL**: Include `.specks/specks-implementation-log.md` in `files_to_stage`.
+**CRITICAL**: Include implementation log in `files_to_stage`. The log path is relative to worktree: `.specks/specks-implementation-log.md`.
 
-The `bead_id` comes from `metadata.bead_mapping[step_anchor]` (read in step 4a).
+The `bead_id` comes from `session.bead_mapping[step_anchor]` (read in step 4a).
 
 ```
 Task(
   subagent_type: "specks:committer-agent",
   prompt: '{
+    "operation": "commit",
     "speck_path": "<path>",
     "step_anchor": "#step-N",
     "proposed_message": "feat(<scope>): <description>",
     "files_to_stage": [...files_created, ...files_modified, ".specks/specks-implementation-log.md"],
-    "commit_policy": "auto|manual",
-    "confirmed": false,
-    "bead_id": "<bead-id from metadata.bead_mapping[step_anchor]>",
-    "close_reason": "Step N complete: <summary>"
+    "bead_id": "<bead-id from session.bead_mapping[step_anchor]>",
+    "close_reason": "Step N complete: <summary>",
+    "worktree_path": "<worktree_path>"
   }',
   description: "Commit changes and close bead"
 )
 ```
 
-Save response to `step-N/committer-output.json`.
+Save response to `{worktree_path}/.specks/step-artifacts/step-N/committer-output.json`.
 
-If `commit_policy` is `manual`:
-```
-AskUserQuestion(
-  questions: [{
-    question: "Files staged for step N. Review and commit when ready.",
-    header: "Commit",
-    options: [
-      { label: "Done", description: "I have committed the changes" },
-      { label: "Abort", description: "Cancel this step" }
-    ],
-    multiSelect: false
-  }]
-)
-```
+Extract commit summary and add to `step_summaries` array for later PR creation.
 
 #### 4i. Step Completion
 
-1. Update `metadata.json`: move step from `steps_remaining` to `steps_completed`
+1. Update `{worktree_path}/.specks/session.json`: move step from `steps_remaining` to `steps_completed`
 2. Update `current_step` to next step (or null if done)
-3. If more steps remain: **GO TO 4a** for next step
-4. If all steps complete: proceed to Session Completion
+3. Update `last_updated_at` timestamp
+4. If more steps remain: **GO TO 4a** for next step
+5. If all steps complete: proceed to Session Completion
 
 ### 5. Session Completion
 
-1. Update `metadata.json` with `status: "completed"`
-2. Report summary:
+1. Update `{worktree_path}/.specks/session.json` with `status: "completed"`
+
+2. Spawn committer in publish mode to create PR:
+
+```
+Task(
+  subagent_type: "specks:committer-agent",
+  prompt: '{
+    "operation": "publish",
+    "speck_path": "<path>",
+    "branch_name": "<branch_name from session>",
+    "base_branch": "<base_branch from session>",
+    "step_summaries": [...step_summaries collected during 4h],
+    "worktree_path": "<worktree_path>"
+  }',
+  description: "Create pull request"
+)
+```
+
+3. Report summary:
    - Session ID
    - Speck path
    - Steps completed
-   - Commit hashes (if auto policy)
+   - Commit hashes
+   - PR URL (from committer publish response)
    - Any warnings
 
 ---
@@ -362,32 +386,37 @@ From coder-agent output, evaluate `drift_assessment`:
 - `root_bead`: The root bead ID for the entire speck
 - `bead_mapping`: A map from step anchors to bead IDs
 
-The implementer stores this mapping in `metadata.json` and reads bead IDs from there when needed.
+The implementer stores this mapping in `{worktree_path}/.specks/session.json` and reads bead IDs from there when needed.
 
-**Close after commit** (handled by committer-agent):
+**Close after commit** (handled by committer-agent in commit mode):
 ```bash
 specks beads close <bead_id> --reason "<reason>"
 ```
 
 ---
 
-## Reference: Session Directory Structure
+## Reference: Worktree Structure
 
 ```
-.specks/runs/<session-id>/execution/
-├── metadata.json
-├── error.json (if failed)
-├── step-0/
-│   ├── architect-output.json
-│   ├── coder-output.json
-│   ├── reviewer-output.json
-│   ├── auditor-output.json
-│   ├── logger-output.json
-│   └── committer-output.json
-├── step-1/
-│   └── ...
-└── step-N/
-    └── ...
+{worktree_path}/
+├── .specks/
+│   ├── session.json           # Session metadata and status
+│   ├── specks-implementation-log.md  # Updated by logger-agent
+│   └── step-artifacts/        # Per-step agent outputs
+│       ├── step-0/
+│       │   ├── architect-output.json
+│       │   ├── coder-output.json
+│       │   ├── reviewer-output.json
+│       │   ├── auditor-output.json
+│       │   ├── logger-output.json
+│       │   └── committer-output.json
+│       ├── step-1/
+│       │   └── ...
+│       └── step-N/
+│           └── ...
+├── src/                       # Implementation files
+├── tests/                     # Test files
+└── ...
 ```
 
 ---
@@ -396,7 +425,7 @@ specks beads close <bead_id> --reason "<reason>"
 
 If Task tool fails or returns unparseable JSON:
 
-1. Write to `<session>/error.json`:
+1. Write to `{worktree_path}/.specks/error.json`:
    ```json
    {
      "agent": "<agent-name>",
@@ -407,12 +436,12 @@ If Task tool fails or returns unparseable JSON:
    }
    ```
 
-2. Update `metadata.json` with `status: "failed"` and `failed_at_step`
+2. Update `{worktree_path}/.specks/session.json` with `status: "failed"` and `failed_at_step`
 
 3. Halt with:
    ```
    Agent [name] failed at step #step-N: [reason]
-   See .specks/runs/<session-id>/error.json for details.
+   See {worktree_path}/.specks/error.json for details.
    ```
 
 Do NOT retry automatically - user must intervene.
@@ -425,12 +454,13 @@ Do NOT retry automatically - user must intervene.
 - Session ID
 - Speck path
 - Steps completed
-- Commit hashes (if auto policy)
+- Commit hashes
+- PR URL
 - Any warnings from auditor
 
 **On failure:**
 - Session ID
 - Step where failure occurred
 - Error details
-- Path to error.json
+- Path to error.json in worktree
 - Partial progress (steps completed before failure)

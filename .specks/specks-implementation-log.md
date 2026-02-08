@@ -6,6 +6,60 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-8.md] Step 5: Update Implementer Skill | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-8.md` - Step 5 specification (#step-5, lines 1159-1202)
+- [D01] Worktrees replace session directories
+- [D04] Implementation log lives in worktree
+- [D05] Always auto-create PR
+- Spec S03 - PR creation details
+- Spec S04 - Committer agent operation modes
+- Diagram Diag01 - Worktree lifecycle (#worktree-lifecycle)
+- Section: PR Creation Details (#pr-creation-details)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Refactor session model from .specks/runs/ to worktree-based session.json | Done |
+| Add worktree_path to all agent invocations | Done |
+| Add PR creation via committer-agent publish mode (Spec S04) | Done |
+| Remove commit_policy and Done/Abort prompts | Done |
+| Fix mode→operation field per reviewer feedback | Done |
+| Update session.json status management | Done |
+| Remove references to .specks/runs/ session directories | Done |
+
+**Files Modified:**
+- `skills/implementer/SKILL.md` - Refactored for worktree model: replaced .specks/runs/ with worktree-based session.json, added worktree_path to all agent invocations, added PR creation via committer-agent publish mode (Spec S04), removed commit_policy and Done/Abort prompts, fixed mode→operation field per reviewer feedback
+
+**Test Results:**
+- Checkpoint verification: `grep -c ".specks/runs" skills/implementer/SKILL.md` returns 0 (verified: no legacy session directory references)
+- Checkpoint verification: `grep -c "worktree" skills/implementer/SKILL.md` shows worktree integration throughout file
+- Manual review: Confirmed all agent Task invocations include worktree_path
+- Manual review: Confirmed PR creation workflow uses committer-agent in publish mode per Spec S04
+- Manual review: Confirmed session.json status transitions (pending → in_progress → completed/failed)
+
+**Checkpoints Verified:**
+- No references to `.specks/runs/` session directories: PASS
+- Worktree integration present throughout skill: PASS
+- All agent invocations include worktree_path: PASS
+- PR creation via committer-agent publish mode: PASS
+- Session.json status management implemented: PASS
+
+**Key Decisions/Notes:**
+- Replaced `.specks/runs/<session-id>/` directory model with `.specks-worktrees/<worktree_dir_name>/` using git worktrees for native branch isolation
+- Every agent now receives `worktree_path` for path prefixing (no reliance on persistent cd state)
+- PR creation is automatic after all steps complete (removed manual/auto toggle per [D05])
+- Committer-agent now supports dual modes: `operation: "commit"` (per-step) and `operation: "publish"` (final PR creation) per Spec S04
+- Fixed reviewer feedback: changed `mode` field to `operation` in committer-agent invocations for consistency with Spec S04
+- Implementation log now lives in worktree and is committed with each step per [D04]
+- Removed Done/Abort prompts - PR review is now the approval gate per worktree model philosophy
+
+---
+
 ## [specks-8.md] Step 4: Update Agent Input Contracts | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
