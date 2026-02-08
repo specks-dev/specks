@@ -6,6 +6,49 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Step 2.1: Create Architect and Coder Agents | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 2.1 specification (lines 910-938)
+- Spec S04: architect-agent (#s04-architect)
+- Spec S05: coder-agent (#s05-coder)
+- [D02] Nine Sub-Agents with Specific Tool Sets
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create `agents/architect-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S04 | Done |
+| Include expected_touch_set requirements | Done |
+| Create `agents/coder-agent.md` with frontmatter | Done |
+| Include input/output JSON schemas from Spec S05 | Done |
+| Include complete drift detection contract | Done |
+
+**Files Created:**
+- `agents/architect-agent.md` - Read-only analysis agent producing implementation strategies with expected_touch_set (tools: Read, Grep, Glob)
+- `agents/coder-agent.md` - Implementation agent with full drift detection system (tools: Read, Grep, Glob, Write, Edit, Bash)
+
+**Files Modified:**
+- `.specks/specks-4.md` - Checked off all Step 2.1 task and checkpoint boxes
+
+**Test Results:**
+- Smoke test: Both agent files have valid YAML frontmatter (parseable with `---` delimiters)
+- Contract test: Coder drift_assessment schema matches Spec S05 exactly
+
+**Checkpoints Verified:**
+- `ls agents/architect-agent.md agents/coder-agent.md` both exist: PASS
+
+**Key Decisions/Notes:**
+- Architect agent is strictly read-only, produces expected_touch_set critical for drift detection
+- Coder agent includes complete drift detection: Green/Yellow/Red file categories, budget limits (4 yellow max, 2 red max), severity levels (none/minor/moderate/major), and self-halt behavior at moderate or major drift
+- Drift budget system: Green=0 cost, Yellow=+1 (adjacent files), Red=+2 (unrelated files)
+- Self-halt triggers at: 3-4 yellow OR 1 red (moderate), 5+ yellow OR 2+ red (major)
+
+---
+
 ## [specks-4.md] Step 1: Create Planning Sub-Agents | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07

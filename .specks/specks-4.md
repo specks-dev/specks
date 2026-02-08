@@ -918,19 +918,19 @@ After each agent conversion:
 - `agents/coder-agent.md` - with full specification from Spec S05
 
 **Tasks:**
-- [ ] Create `agents/architect-agent.md` with frontmatter: `name: architect-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
-- [ ] Include input/output JSON schemas from Spec S04
-- [ ] Include expected_touch_set requirements
-- [ ] Create `agents/coder-agent.md` with frontmatter: `name: coder-agent`, `description: <purpose>`, `tools: Read, Grep, Glob, Write, Edit, Bash`
-- [ ] Include input/output JSON schemas from Spec S05
-- [ ] Include complete drift detection contract (proximity scoring, thresholds, self-halt)
+- [x] Create `agents/architect-agent.md` with frontmatter: `name: architect-agent`, `description: <purpose>`, `tools: Read, Grep, Glob`
+- [x] Include input/output JSON schemas from Spec S04
+- [x] Include expected_touch_set requirements
+- [x] Create `agents/coder-agent.md` with frontmatter: `name: coder-agent`, `description: <purpose>`, `tools: Read, Grep, Glob, Write, Edit, Bash`
+- [x] Include input/output JSON schemas from Spec S05
+- [x] Include complete drift detection contract (proximity scoring, thresholds, self-halt)
 
 **Tests:**
-- [ ] Smoke test: Each agent file has valid YAML frontmatter
-- [ ] Contract test: Coder drift_assessment schema matches spec exactly
+- [x] Smoke test: Each agent file has valid YAML frontmatter
+- [x] Contract test: Coder drift_assessment schema matches spec exactly
 
 **Checkpoint:**
-- [ ] `ls agents/architect-agent.md agents/coder-agent.md` both exist
+- [x] `ls agents/architect-agent.md agents/coder-agent.md` both exist
 
 **Rollback:**
 - `rm agents/architect-agent.md agents/coder-agent.md`
