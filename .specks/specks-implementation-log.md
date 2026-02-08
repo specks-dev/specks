@@ -6,6 +6,44 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-9.md] Step 4: Update implement-plan skill | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 4 specification (#step-4, lines 239-266)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove halt signal awareness section (lines 140-143) | Done |
+| Verify Integration section coherence | Done |
+
+**Files Created:**
+- None (modification only)
+
+**Files Modified:**
+- `.claude/skills/implement-plan/SKILL.md` - Removed obsolete halt signal awareness section that referenced `.specks/runs/{uuid}/.halt`
+
+**Test Results:**
+- Visual inspection: Integration section flows coherently without the removed halt signal reference
+- grep verification: `grep -c "runs" .claude/skills/implement-plan/SKILL.md` returns 0
+
+**Checkpoints Verified:**
+- No "runs" references in SKILL.md: PASS
+- Integration section remains coherent: PASS
+- Document structure intact: PASS
+
+**Key Decisions/Notes:**
+- Removed 4 lines total: blank line, "### Halt Signal Awareness" header, blank line, and paragraph describing halt signal at `.specks/runs/{uuid}/.halt`
+- The Integration section now cleanly lists the agent collaboration without referencing obsolete halt file monitoring
+- This completes the removal of all runs directory references from active documentation and skill files
+
+---
+
 ## [specks-9.md] Step 3: Update execute-plan.md | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
