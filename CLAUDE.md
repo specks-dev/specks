@@ -112,6 +112,11 @@ specks status specks-1.md      # Show progress
 specks beads sync specks-1.md  # Sync steps to beads
 specks beads status            # Show bead completion status
 specks beads close bd-xxx      # Close a bead
+
+# Worktree commands (for isolated implementation environments)
+specks worktree create <speck>      # Create isolated worktree for implementation
+specks worktree list                # List active worktrees
+specks worktree cleanup --merged    # Remove worktrees for merged PRs
 ```
 
 ### Claude Code Skills (Planning and Execution)
@@ -125,7 +130,6 @@ This creates the `.specks/` directory with required files:
 - `specks-skeleton.md` - Template for speck structure
 - `config.toml` - Configuration settings
 - `specks-implementation-log.md` - Progress tracking
-- `runs/` - Session artifacts (gitignored)
 
 Then use the skills:
 ```
@@ -203,3 +207,92 @@ claude --plugin-dir .
 ```
 
 This loads the repo as a plugin. All skills and agents are available immediately.
+
+## Worktree Workflow
+
+The implementer skill uses git worktrees to isolate implementation work in separate directories with dedicated branches. This provides:
+
+- **Isolation**: Each speck implementation gets its own branch and working directory
+- **Parallel work**: Multiple specks can be implemented concurrently
+- **Clean history**: One commit per step, matching bead granularity
+- **PR-based review**: Implementation is complete when the PR is merged
+
+### How It Works
+
+When you run `/specks:implementer .specks/specks-N.md`:
+
+1. **Worktree created**: A new git worktree is created at `.specks-worktrees/specks__<name>-<timestamp>/`
+2. **Branch created**: A new branch `specks/<name>-<timestamp>` is created from main
+3. **Beads synced**: Bead annotations are synced and committed to the worktree
+4. **Steps executed**: Each step is implemented and committed separately
+5. **PR created**: After all steps complete, a PR is automatically created to main
+
+### Cleanup After PR Merge
+
+After your PR is merged, clean up the worktree:
+
+```bash
+# Fetch latest main to ensure merge is detected
+git fetch origin main
+
+# Remove worktrees for merged PRs (dry run first)
+specks worktree cleanup --merged --dry-run
+
+# Actually remove them
+specks worktree cleanup --merged
+```
+
+The cleanup command:
+- Uses git-native worktree removal (`git worktree remove`)
+- Prunes stale worktree metadata (`git worktree prune`)
+- Deletes the local branch
+
+### Troubleshooting
+
+#### "Worktree already exists"
+
+If you see this error, it means a worktree for this speck already exists:
+
+```bash
+# List all worktrees to see what exists
+specks worktree list
+
+# If the worktree is stale, remove it manually
+rm -rf .specks-worktrees/specks__<name>-<timestamp>
+git worktree prune
+```
+
+#### "Branch not merged" after PR merge
+
+This can happen with squash or rebase merges, where the original commits are not ancestors of main:
+
+```bash
+# Update your local main branch
+git fetch origin main
+git checkout main
+git pull origin main
+
+# Try cleanup again
+specks worktree cleanup --merged
+```
+
+If cleanup still fails, you may need to remove the worktree manually:
+
+```bash
+# Remove the worktree
+git worktree remove .specks-worktrees/specks__<name>-<timestamp>
+
+# Prune stale entries
+git worktree prune
+
+# Delete the branch manually
+git branch -d specks/<name>-<timestamp>
+```
+
+#### Session in "needs_reconcile" state
+
+This happens when a step commit succeeds but the bead close fails. The worktree is left in a consistent state, but beads tracking is out of sync. To fix:
+
+1. Check the implementation log in the worktree for the bead ID
+2. Close the bead manually: `specks beads close bd-xxx`
+3. If continuing implementation, the next step should proceed normally

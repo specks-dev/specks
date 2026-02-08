@@ -6,6 +6,57 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-8.md] Step 6: Integration Testing and Documentation | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-8.md` - Step 6 specification (#step-6, lines 1204-1241)
+- [D07] Manual cleanup decision
+- Success criteria (#success-criteria)
+- Full worktree lifecycle flow (#worktree-lifecycle)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update CLAUDE.md with new worktree workflow | Done |
+| Document `specks worktree` commands | Done |
+| Document cleanup procedure after PR merge | Done |
+| Add troubleshooting section for common issues | Done |
+| Write integration test for full workflow | Done |
+
+**Files Created:**
+- `crates/specks/tests/worktree_integration_tests.rs` - Comprehensive integration tests covering create, list, merge detection, and cleanup operations
+
+**Files Modified:**
+- `CLAUDE.md` - Added worktree workflow documentation including commands, cleanup procedures, and troubleshooting guide
+
+**Test Results:**
+- `cargo nextest run`: All 152 tests pass (100% success rate)
+- Integration test coverage:
+  - `test_worktree_create_and_list`: Creates worktree, verifies directory and branch exist, lists worktrees
+  - `test_worktree_cleanup_merged`: Tests cleanup of merged worktrees using git merge-base ancestor detection
+  - `test_worktree_cleanup_dry_run`: Verifies dry-run mode doesn't actually remove worktrees
+  - `test_worktree_cleanup_with_no_merged_worktrees`: Confirms no-op behavior when nothing to clean
+
+**Checkpoints Verified:**
+- `cargo nextest run`: PASS (152 tests passing)
+- Documentation review: PASS (CLAUDE.md includes comprehensive worktree workflow section)
+- Integration tests validate full lifecycle: PASS (create → list → merge → cleanup)
+- Commands documented: PASS (`specks worktree create/list/cleanup` with examples)
+- Cleanup procedure documented: PASS (includes `--merged` flag requirement and dry-run workflow)
+- Troubleshooting section added: PASS (covers common issues like orphaned worktrees, failed PR creation)
+
+**Key Decisions/Notes:**
+- Integration tests use git-native worktree operations to ensure realistic testing environment
+- Tests verify both successful paths and error handling (cleanup with no merged worktrees)
+- Documentation emphasizes manual cleanup workflow per [D07] Phase 1 decision
+- Cleanup tests validate git-only merge detection per [D09] decision (using `git merge-base --is-ancestor`)
+- All 4 integration tests pass, validating the complete worktree lifecycle from creation through cleanup
+
+---
+
 ## [specks-8.md] Step 5: Update Implementer Skill | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
