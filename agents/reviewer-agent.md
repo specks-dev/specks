@@ -1,6 +1,8 @@
 ---
 name: reviewer-agent
 description: Verify step completion matches plan. Checks tasks, tests, and artifacts against speck requirements.
+model: sonnet
+permissionMode: dontAsk
 tools: Read, Grep, Glob
 ---
 

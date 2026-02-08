@@ -1,6 +1,8 @@
 ---
 name: coder-agent
 description: Executes architect strategies with drift detection. Implements speck steps and self-halts if changes exceed expected scope.
+model: sonnet
+permissionMode: acceptEdits
 tools: Read, Grep, Glob, Write, Edit, Bash
 ---
 

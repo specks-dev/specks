@@ -1,6 +1,8 @@
 ---
 name: logger-agent
 description: Update implementation log with completed work. Prepends entries to track step completion.
+model: sonnet
+permissionMode: acceptEdits
 tools: Read, Grep, Glob, Edit
 ---
 

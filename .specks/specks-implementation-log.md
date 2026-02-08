@@ -6,6 +6,60 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-5.md] Step 2: Update Implementation Agents | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-5.md` - Step 2 specification (lines 266-305)
+- [D01] Model Assignment Strategy
+- [D02] Aggressive Write Permissions
+- [D03] Read-Only Agent Permissions
+- [D04] implementer-setup-agent Is Read-Only
+- Table T01: Agent Configuration Matrix
+- Spec S01: Enhanced Frontmatter Schema
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update architect-agent.md: add `model: opus`, add `permissionMode: dontAsk` | Done |
+| Update coder-agent.md: add `model: sonnet`, add `permissionMode: acceptEdits` | Done |
+| Update reviewer-agent.md: add `model: sonnet`, add `permissionMode: dontAsk` | Done |
+| Update auditor-agent.md: add `model: sonnet`, add `permissionMode: dontAsk` | Done |
+| Update logger-agent.md: add `model: sonnet`, add `permissionMode: acceptEdits` | Done |
+| Update committer-agent.md: add `model: sonnet`, add `permissionMode: acceptEdits` | Done |
+| Update implementer-setup-agent.md: add `model: haiku`, add `permissionMode: dontAsk` | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `agents/architect-agent.md` - Added model: opus, permissionMode: dontAsk
+- `agents/coder-agent.md` - Added model: sonnet, permissionMode: acceptEdits
+- `agents/reviewer-agent.md` - Added model: sonnet, permissionMode: dontAsk
+- `agents/auditor-agent.md` - Added model: sonnet, permissionMode: dontAsk
+- `agents/logger-agent.md` - Added model: sonnet, permissionMode: acceptEdits
+- `agents/committer-agent.md` - Added model: sonnet, permissionMode: acceptEdits
+- `agents/implementer-setup-agent.md` - Added model: haiku, permissionMode: dontAsk
+
+**Test Results:**
+- YAML frontmatter parses correctly for all 7 files: PASS
+- grep for model field returns all 7 files: PASS
+
+**Checkpoints Verified:**
+- All 7 implementation agents have model field: PASS
+- YAML frontmatter is valid in all 7 files: PASS
+
+**Key Decisions/Notes:**
+- Used `permissionMode:` (single string) instead of `permissions:` (list) per Step 0 discovery
+- architect gets opus (complex architecture reasoning) with dontAsk (read-only)
+- coder, logger, committer get acceptEdits (write-capable agents)
+- reviewer, auditor get dontAsk (read-only analysis agents)
+- implementer-setup gets haiku with dontAsk (simple prerequisite checker, read-only behavior)
+
+---
+
 ## [specks-5.md] Step 1: Update Planning Agents | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

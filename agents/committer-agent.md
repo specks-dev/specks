@@ -1,6 +1,8 @@
 ---
 name: committer-agent
 description: Stage files, commit changes, and close beads. Final step in the implementation workflow.
+model: sonnet
+permissionMode: acceptEdits
 tools: Read, Grep, Glob, Bash
 ---
 

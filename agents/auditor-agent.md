@@ -1,6 +1,8 @@
 ---
 name: auditor-agent
 description: Check code quality, security, and error handling. Reviews implementation for structural issues and best practices.
+model: sonnet
+permissionMode: dontAsk
 tools: Read, Grep, Glob
 ---
 
