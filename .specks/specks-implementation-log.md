@@ -6,6 +6,126 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-4.md] Step 0: Delete Test and Obsolete Files, Verify Prerequisites | COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4.md` - Step 0 specification (lines 813-861)
+- Table T01: Obsolete Agent Files
+- Table T02: Skill Directories to Delete
+- Table T03: Legacy Directories to Delete
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Verify beads availability | Done |
+| Create/verify `.specks/runs/` directory | Done (existed) |
+| Verify `.specks/runs/` in `.gitignore` | Done (line 27) |
+| Delete `agents/planner-agent.md` | Done |
+| Delete `agents/implementer-agent.md` | Done |
+| Delete `agents/test-counter-agent.md` | Done |
+| Delete `agents/test-decider-agent.md` | Done |
+| Delete `skills/test-counter/` | Done |
+| Delete `skills/test-decider/` | Done |
+| Delete `skills/test-loop-orchestrator/` | Done |
+| Delete `.claude/skills/` | DEFERRED (bootstrap) |
+| Delete `.claude/agents/` | DEFERRED (bootstrap) |
+
+**Files Deleted:**
+- `agents/planner-agent.md` - Obsolete orchestrator agent
+- `agents/implementer-agent.md` - Obsolete orchestrator agent
+- `agents/test-counter-agent.md` - Test file from experimentation
+- `agents/test-decider-agent.md` - Test file from experimentation
+- `skills/test-counter/` - Test skill directory
+- `skills/test-decider/` - Test skill directory
+- `skills/test-loop-orchestrator/` - Test skill directory
+
+**Files Modified:**
+- `.specks/specks-4.md` - Updated task checkboxes and marked deferred items
+
+**Checkpoints Verified:**
+- `specks beads status` succeeds: PASS
+- `.specks/runs/` directory exists: PASS
+- `.gitignore` contains `.specks/runs/`: PASS
+- `ls agents/` shows only `archived/`: PASS
+- `ls skills/test-*` returns no results: PASS
+- `.claude/skills/` deletion: DEFERRED
+- `.claude/agents/` deletion: DEFERRED
+
+**Key Decisions/Notes:**
+The `.claude/skills/` and `.claude/agents/` directories contain tools actively used to execute this plan (code-architect, code-planner agents; implement-plan, prepare-git-commit-message, update-plan-implementation-log skills). This is a bootstrap problem - these must remain until Phase 4 completes and the new Task-based orchestration is working. Cleanup deferred to post-Phase 4.
+
+---
+
+## [specks-4.md] Phase 4.0: Task-Based Orchestration Architecture | PLAN COMPLETE | 2026-02-07
+
+**Completed:** 2026-02-07
+
+**References Reviewed:**
+- `.specks/specks-4-architecture-report.md` - Comprehensive architecture analysis
+- `.specks/specks-skeleton.md` - Speck format reference
+- `agents/test-counter-agent.md`, `agents/test-decider-agent.md` - Test agents from experimentation
+- `skills/test-loop-orchestrator/SKILL.md` - Successful orchestration test
+- Claude Code documentation on skills, agents, and Task tool mechanics
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Create architecture report with correct Task-based model | Done |
+| Write specks-4.md plan following skeleton format | Done |
+| Code-architect review #1 - identify holes/pitfalls | Done |
+| Address all critical issues (H1-H4, P2, P4, P5, W2, W3, W5) | Done |
+| Add design decisions D06-D08 (concurrency, cleanup, error handling) | Done |
+| Split Step 5 into 5a/5b for proper dependencies | Done |
+| Convert Steps 6/7 to verification gates | Done |
+| Code-architect review #2 - verify all issues resolved | Done |
+
+**Files Created:**
+- `.specks/specks-4.md` - Phase 4 implementation plan (Task-based orchestration architecture)
+- `.specks/specks-4-architecture-report.md` - Comprehensive architecture analysis and specifications
+
+**Files Modified:**
+- None (planning phase only)
+
+**Design Decisions Documented:**
+- [D01] Skills are Orchestrators, Agents are Sub-tasks
+- [D02] Nine Sub-Agents with Specific Tool Sets
+- [D03] Interviewer Eliminated (AskUserQuestion used directly)
+- [D04] JSON Input/Output Contracts
+- [D05] Incremental Testing Strategy
+- [D06] Concurrent Session Handling via Optimistic Isolation
+- [D07] Run Directory Cleanup Policy (30-day retention)
+- [D08] Error Handling for Task and JSON Failures
+
+**Key Architecture Insight:**
+| Mechanism | Behavior | Result |
+|-----------|----------|--------|
+| Skill + Skill tool | Prompt injection | Takes over context, NO RETURN |
+| Agent + Task tool | Spawns subagent | Runs to completion, RETURNS result |
+| Subagent + Task tool | BLOCKED | Subagents CANNOT spawn other subagents |
+
+Therefore: Orchestrators MUST be skills. Sub-tasks MUST be agents.
+
+**Plan Structure:**
+- 9 execution steps (0-8) plus 3 substeps (2.1-2.3)
+- 9 agent specifications (S01-S09) with JSON schemas
+- 2 orchestrator skill specifications (S10-S11)
+- 5 milestones (M01-M05)
+- Proper dependency graph enabling parallel execution where safe
+
+**Code-Architect Assessment:** READY TO IMPLEMENT
+
+**Key Notes:**
+- Previous architecture (specks-3.md) was based on incorrect understanding of Skill tool mechanics
+- Test orchestrator (`/specks:test-loop-orchestrator`) confirmed Task tool returns results correctly
+- Lock-file approach replaced with optimistic isolation via metadata scanning (cleaner, no stale locks)
+- Logger/committer coordination ensures atomic commits with implementation log
+
+---
+
 ## [specks-3.md] Step 10.5.7: Update documentation | COMPLETE | 2026-02-07
 
 **Completed:** 2026-02-07
