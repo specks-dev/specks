@@ -9,6 +9,21 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-5
+date: 2026-02-10T01:30:00Z
+bead: specks-tyo.6
+---
+
+## #step-5: Added --reuse-existing flag to worktree create command. Flag enables idempotent worktree creation by returning existing worktree if one exists for the speck. JSON and text output indicate when worktree was reused.
+
+**Files changed:**
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/main.rs
+- crates/specks-core/src/worktree.rs
+
+---
+
+---
 step: #step-4
 date: 2026-02-09T19:10:00Z
 bead: specks-tyo.5

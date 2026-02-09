@@ -191,7 +191,13 @@ fn find_existing_worktree(config: &WorktreeConfig) -> Result<Option<Session>, Sp
         b_timestamp.cmp(&a_timestamp)
     });
 
-    Ok(matching.into_iter().next())
+    // Mark the session as reused before returning
+    if let Some(mut session) = matching.into_iter().next() {
+        session.reused = true;
+        Ok(Some(session))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Extract timestamp from worktree path for sorting
