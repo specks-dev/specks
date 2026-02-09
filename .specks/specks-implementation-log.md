@@ -6,6 +6,58 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-10.md] Step 0: Consolidate Reviewer-Agent | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 0 specification (#step-0, lines 439-473)
+- [D02] Merge auditor INTO reviewer (#d02-merge-auditor)
+- Spec S01: Consolidated Reviewer Input (#s01-reviewer-input)
+- Spec S02: Consolidated Reviewer Output (#s02-reviewer-output)
+- Table T01: Consolidated Reviewer Recommendations (#t01-reviewer-recs)
+- List L01: Explicit Audit Responsibilities (#l01-audit-checklist)
+- `agents/reviewer-agent.md` - Current reviewer implementation
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add audit_categories to output contract | Done |
+| Add severity field to issues array | Done |
+| Add file field to issues array | Done |
+| Add audit issue types (audit_structure, audit_error, audit_security) | Done |
+| Add auditing checklist section with all 8 explicit responsibilities | Done |
+| Update recommendation criteria to include audit conditions | Done |
+| Map FIX_REQUIRED to REVISE, MAJOR_REVISION to ESCALATE | Done |
+| Add Edit tool to frontmatter | Done |
+
+**Files Created:**
+None (modification only)
+
+**Files Modified:**
+- `agents/reviewer-agent.md` - Consolidated auditor responsibilities into reviewer: added audit_categories field, severity/file fields in issues array, 8-item auditing checklist (lint, formatting, duplication, idioms, performance, Big-O, error handling, security), audit category ratings (structure/error_handling/security with PASS/WARN/FAIL), expanded issue types to include audit_structure/audit_error/audit_security, updated recommendations to map FIX_REQUIRED→REVISE and MAJOR_REVISION→ESCALATE, added Edit tool
+
+**Test Results:**
+- YAML frontmatter validation: PASS (tools includes Read, Grep, Glob, Edit)
+- Smoke test: Agent file parses correctly
+
+**Checkpoints Verified:**
+- `Grep "audit_categories" agents/reviewer-agent.md`: PASS (found in output contract at line 65)
+- `Grep "Edit" agents/reviewer-agent.md`: PASS (found in frontmatter tools at line 6)
+- `Grep "Lint failures" agents/reviewer-agent.md`: PASS (found in audit checklist at line 124)
+- All 8 audit items documented: lint failures, formatting errors, code duplication, unidiomatic code, performance regressions, bad Big-O, error handling, security
+
+**Key Decisions/Notes:**
+- Consolidated auditor-agent responsibilities into reviewer-agent to reduce implementer loop from 6 agents to 4 agents per step
+- Combined retry budget will be 3 attempts total for all review+audit issues (single counter in implementer)
+- Reviewer now performs both plan-conformance checking AND quality/security auditing in a single pass
+- Edit tool added to reviewer but not currently used (reserved for future potential use)
+- Issue types extended to include audit categories: audit_structure, audit_error, audit_security
+- Recommendation mapping simplified: FIX_REQUIRED and MAJOR_REVISION from old auditor now mapped to REVISE and ESCALATE respectively
+
+---
+
 ## [specks-9.md] Step 5: Final Verification | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
