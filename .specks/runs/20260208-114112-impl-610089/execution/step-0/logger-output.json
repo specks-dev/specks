@@ -1,9 +1,0 @@
-{
-  "success": true,
-  "log_file": "/Users/kocienda/Mounts/u/src/specks/.specks/specks-implementation-log.md",
-  "entry_added": {
-    "step": "Step 0: Add Worktree Directory to Gitignore",
-    "timestamp": "2026-02-08",
-    "summary": "Added .specks-worktrees/ and .specks/step-artifacts/ entries to .gitignore for worktree isolation"
-  }
-}
