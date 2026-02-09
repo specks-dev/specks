@@ -199,21 +199,23 @@ After verifying plan conformance, perform these quality audits:
 
 | Check | What to Look For | How to Verify |
 |-------|------------------|---------------|
-| **Build** | Compilation errors, warnings | `cd {worktree_path} && cargo build 2>&1` |
-| **Tests** | Test failures, new tests run | `cd {worktree_path} && cargo test 2>&1` |
-| **Lint** | Clippy warnings, lint violations | `cd {worktree_path} && cargo clippy 2>&1` (if available) |
+| **Build** | Compilation errors, warnings | Run project's build command (detect from project files) |
+| **Tests** | Test failures, new tests run | Run project's test command |
+| **Lint** | Linter warnings, style violations | Run project's linter (if configured) |
 | **Correctness** | Off-by-one, null derefs, boundary conditions, logic errors | Read changed code |
-| **Error handling** | Unhandled errors, panics in prod paths, swallowed exceptions | Grep for `unwrap()`, `expect()`, `panic!` |
-| **Security** | Hardcoded secrets, injection patterns, unsafe without justification | Grep for patterns, read unsafe blocks |
+| **Error handling** | Unhandled errors, crashes in prod paths, swallowed exceptions | Grep for error-prone patterns |
+| **Security** | Hardcoded secrets, injection patterns, unsafe code | Grep for patterns, read security-sensitive code |
 | **API consistency** | Naming matches codebase, no breaking changes to public APIs | Compare to existing code |
 | **Dead code** | Unused imports, unreachable code, leftover commented code | Read changed files |
 | **Test quality** | Tests cover new functionality, assertions are meaningful | Read test files |
 | **Regressions** | Existing functionality broken, removed features, changed behavior | Run full test suite, review deletions |
 
+**Detecting project type:** Look for `Cargo.toml` (Rust), `package.json` (Node), `pyproject.toml`/`setup.py` (Python), `go.mod` (Go), `Makefile`, etc. Use the appropriate build/test/lint commands for the project.
+
 ## Audit Category Ratings
 
 ### Structure (PASS/WARN/FAIL)
-- **PASS**: Build succeeds, tests pass, no clippy warnings, code is idiomatic
+- **PASS**: Build succeeds, tests pass, no linter warnings, code is idiomatic
 - **WARN**: Minor warnings, some dead code, could be cleaner
 - **FAIL**: Build fails, tests fail, major anti-patterns
 
