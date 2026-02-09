@@ -35,6 +35,28 @@ You receive a JSON payload:
 | `speck_path` | Path to existing speck if revising (null for new ideas) |
 | `critic_feedback` | Previous critic feedback if in revision loop (null for first pass) |
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present (`analysis`, `questions`, `assumptions`)
+3. **Verify field types**: Each field must match the expected type
+4. **Validate analysis**: Must include `understood_intent` and `ambiguities` fields
+5. **Validate questions array**: Each question must have `question`, `options`, and `default` fields
+
+**If validation fails**: Return a minimal response indicating the error:
+```json
+{
+  "analysis": {
+    "understood_intent": "",
+    "ambiguities": ["JSON validation failed: <specific error>"]
+  },
+  "questions": [],
+  "assumptions": []
+}
+```
+
 ## Output Contract
 
 Return structured JSON:

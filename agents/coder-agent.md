@@ -57,6 +57,35 @@ Git operations must use `git -C {worktree_path}`:
 
 **CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present (`success`, `halted_for_drift`, `files_created`, `files_modified`, `tests_run`, `tests_passed`, `drift_assessment`)
+3. **Verify field types**: Each field must match the expected type
+4. **Validate drift_assessment**: This field is MANDATORY and must include all sub-fields (`drift_severity`, `expected_files`, `actual_changes`, `unexpected_changes`, `drift_budget`, `qualitative_assessment`)
+
+**If validation fails**: Return a minimal valid response:
+```json
+{
+  "success": false,
+  "halted_for_drift": false,
+  "files_created": [],
+  "files_modified": [],
+  "tests_run": false,
+  "tests_passed": false,
+  "drift_assessment": {
+    "drift_severity": "none",
+    "expected_files": [],
+    "actual_changes": [],
+    "unexpected_changes": [],
+    "drift_budget": {"yellow_used": 0, "yellow_max": 4, "red_used": 0, "red_max": 2},
+    "qualitative_assessment": "JSON validation failed: <specific error>"
+  }
+}
+```
+
 ## Output Contract
 
 Return structured JSON:

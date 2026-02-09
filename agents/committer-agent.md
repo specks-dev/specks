@@ -96,6 +96,54 @@ All git operations must use `git -C {worktree_path}`:
 
 **CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present for the given operation mode
+3. **Verify field types**: Each field must match the expected type (string, boolean, array, object, null)
+4. **Validate operation-specific fields**:
+   - **Commit mode**: Must include `operation`, `commit_message`, `files_staged`, `committed`, `commit_hash`, `bead_closed`, `bead_id`, `log_updated`, `log_entry_added`, `log_rotated`, `archived_path`, `needs_reconcile`, `aborted`, `reason`, `warnings`
+   - **Publish mode**: Must include `operation`, `success`, `pushed`, `pr_created`, `repo`, `pr_url`, `pr_number`, `error`
+
+**If validation fails**: Return an error response appropriate to the operation mode:
+
+**Commit mode error:**
+```json
+{
+  "operation": "commit",
+  "commit_message": "",
+  "files_staged": [],
+  "committed": false,
+  "commit_hash": null,
+  "bead_closed": false,
+  "bead_id": null,
+  "log_updated": false,
+  "log_entry_added": null,
+  "log_rotated": false,
+  "archived_path": null,
+  "needs_reconcile": false,
+  "aborted": true,
+  "reason": "JSON validation failed: <specific error>",
+  "warnings": []
+}
+```
+
+**Publish mode error:**
+```json
+{
+  "operation": "publish",
+  "success": false,
+  "pushed": false,
+  "pr_created": false,
+  "repo": null,
+  "pr_url": null,
+  "pr_number": null,
+  "error": "JSON validation failed: <specific error>"
+}
+```
+
 ## Output Contract
 
 The output depends on the operation mode:

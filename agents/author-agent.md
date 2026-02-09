@@ -40,6 +40,32 @@ You receive a JSON payload:
 | `clarifier_assumptions` | Assumptions made by clarifier agent |
 | `critic_feedback` | Previous critic feedback if in revision loop |
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present (`speck_path`, `created`, `sections_written`, `skeleton_compliance`, `validation_status`)
+3. **Verify field types**: Each field must match the expected type
+4. **Validate skeleton_compliance**: Must include all boolean fields (`read_skeleton`, `has_explicit_anchors`, `has_required_sections`, `steps_have_references`)
+5. **Validate validation_status**: Must be one of "valid", "warnings", or "errors"
+
+**If validation fails**: Return a minimal error response:
+```json
+{
+  "speck_path": "",
+  "created": false,
+  "sections_written": [],
+  "skeleton_compliance": {
+    "read_skeleton": false,
+    "has_explicit_anchors": false,
+    "has_required_sections": false,
+    "steps_have_references": false
+  },
+  "validation_status": "errors"
+}
+```
+
 ## Output Contract
 
 Return structured JSON:
