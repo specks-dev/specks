@@ -241,3 +241,39 @@ pub struct StepInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bead_id: Option<String>,
 }
+
+/// Data payload for log rotate command (Spec S01)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Will be used in step-1 implementation
+pub struct RotateData {
+    /// Whether rotation occurred
+    pub rotated: bool,
+    /// Path to archived file if rotated
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_path: Option<String>,
+    /// Original line count
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_lines: Option<usize>,
+    /// Original byte count
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_bytes: Option<usize>,
+    /// Reason for rotation (Table T01)
+    pub reason: String,
+}
+
+/// Data payload for log prepend command (Spec S02)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)] // Will be used in step-2 implementation
+pub struct PrependData {
+    /// Whether entry was added
+    pub entry_added: bool,
+    /// Step anchor
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+    /// Speck path
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speck: Option<String>,
+    /// Timestamp of entry
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}

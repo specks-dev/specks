@@ -7,6 +7,28 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-0
+date: 2026-02-09T23:27:34Z
+bead: specks-7t7.1
+speck: .specks/specks-13.md
+---
+
+## [specks-13.md] Step 0: Add log subcommand skeleton with CLI structure, routing, and placeholder implementations | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T23:27:34Z
+
+**Summary:** Add log subcommand skeleton with CLI structure, routing, and placeholder implementations
+
+**Files Changed:**
+- crates/specks/src/commands/log.rs
+- crates/specks/src/output.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/mod.rs
+- crates/specks/src/main.rs
+
+**Bead:** specks-7t7.1
+
+---
 step: #step-5
 date: 2026-02-09T21:56:00Z
 bead: specks-s5s.6
