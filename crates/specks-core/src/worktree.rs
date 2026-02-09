@@ -460,6 +460,34 @@ pub fn list_worktrees(repo_root: &Path) -> Result<Vec<Session>, SpecksError> {
     Ok(sessions)
 }
 
+/// Validate that a worktree path follows the expected pattern
+///
+/// Valid worktree paths must:
+/// - Start with `.specks-worktrees/specks__`
+/// - Be a relative path (not absolute)
+///
+/// This function does NOT check if the directory exists on disk.
+/// It only validates the path pattern.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// use specks_core::is_valid_worktree_path;
+///
+/// assert!(is_valid_worktree_path(Path::new(".specks-worktrees/specks__auth-20260208-143022")));
+/// assert!(!is_valid_worktree_path(Path::new(".specks-worktrees/foo")));
+/// assert!(!is_valid_worktree_path(Path::new("../worktrees/specks__auth")));
+/// assert!(!is_valid_worktree_path(Path::new("/abs/path/specks__auth")));
+/// ```
+pub fn is_valid_worktree_path(path: &Path) -> bool {
+    // Convert to string for pattern matching
+    let path_str = path.to_string_lossy();
+
+    // Must start with .specks-worktrees/specks__
+    path_str.starts_with(".specks-worktrees/specks__")
+}
+
 /// Clean up worktrees for merged branches
 ///
 /// Checks each worktree branch for merged status per D09 (git-only).
@@ -557,5 +585,42 @@ mod tests {
         // Validate year is reasonable
         let year: i32 = parts[0][..4].parse().expect("Year should be valid");
         assert!((2020..=2100).contains(&year));
+    }
+
+    #[test]
+    fn test_is_valid_worktree_path_valid() {
+        assert!(is_valid_worktree_path(Path::new(
+            ".specks-worktrees/specks__auth-20260208-143022"
+        )));
+        assert!(is_valid_worktree_path(Path::new(
+            ".specks-worktrees/specks__13-20250209-152734"
+        )));
+        assert!(is_valid_worktree_path(Path::new(
+            ".specks-worktrees/specks__feature-name"
+        )));
+    }
+
+    #[test]
+    fn test_is_valid_worktree_path_invalid() {
+        // Wrong prefix
+        assert!(!is_valid_worktree_path(Path::new(
+            ".specks-worktrees/foo"
+        )));
+        assert!(!is_valid_worktree_path(Path::new("worktrees/specks__auth")));
+
+        // Absolute paths
+        assert!(!is_valid_worktree_path(Path::new(
+            "/abs/path/specks__auth"
+        )));
+
+        // Relative but wrong location
+        assert!(!is_valid_worktree_path(Path::new(
+            "../worktrees/specks__auth"
+        )));
+
+        // Missing specks__ prefix
+        assert!(!is_valid_worktree_path(Path::new(
+            ".specks-worktrees/auth-20260208"
+        )));
     }
 }

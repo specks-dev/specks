@@ -228,10 +228,9 @@ fn check_worktrees() -> HealthCheck {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            // Check if path follows the pattern .specks-worktrees/specks__*
-            let path_str = path.to_string_lossy();
-            if !path_str.starts_with(".specks-worktrees/specks__") {
-                invalid_paths.push(path_str.to_string());
+            // Check if path follows the expected pattern
+            if !specks_core::is_valid_worktree_path(&path) {
+                invalid_paths.push(path.to_string_lossy().to_string());
             } else {
                 valid_count += 1;
             }

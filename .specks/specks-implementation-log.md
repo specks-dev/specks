@@ -9,6 +9,21 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-7
+date: 2026-02-09T23:40:00Z
+bead: specks-7t7.8
+---
+
+## #step-7: Extract worktree path validation into shared is_valid_worktree_path function in specks-core and refactor doctor to use it
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/lib.rs
+- crates/specks/src/commands/doctor.rs
+
+---
+
+---
 step: #step-6
 date: 2026-02-09T00:00:00Z
 bead: specks-7t7.7
