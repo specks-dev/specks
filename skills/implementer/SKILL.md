@@ -241,11 +241,38 @@ Task(
 
 Save response to `{worktree_path}/.specks/step-artifacts/step-N/reviewer-output.json`.
 
+**Reviewer Output Structure:**
+
+```json
+{
+  "plan_conformance": {
+    "tasks": [{"task": "string", "status": "PASS|FAIL", "verified_by": "string"}],
+    "checkpoints": [{"command": "string", "status": "PASS|FAIL", "output": "string"}],
+    "decisions": [{"decision": "string", "status": "PASS|FAIL", "verified_by": "string"}]
+  },
+  "tests_match_plan": true,
+  "artifacts_produced": true,
+  "issues": [{"type": "string", "description": "string", "severity": "string", "file": "string"}],
+  "audit_categories": {"structure": "PASS|WARN|FAIL", "error_handling": "PASS|WARN|FAIL", "security": "PASS|WARN|FAIL"},
+  "recommendation": "APPROVE|REVISE|ESCALATE"
+}
+```
+
+**Handle by recommendation:**
+
 | Recommendation | Action |
 |----------------|--------|
 | `APPROVE` | Proceed to committer |
-| `REVISE` | Re-spawn coder with `feedback=reviewer.issues`, increment `reviewer_attempts` |
-| `ESCALATE` | AskUserQuestion to get user decision |
+| `REVISE` | Re-spawn coder with `feedback` containing `plan_conformance` failures and `issues`, increment `reviewer_attempts` |
+| `ESCALATE` | AskUserQuestion showing failed conformance checks and issues to get user decision |
+
+**When REVISE:** Pass the reviewer's `plan_conformance` (items with `status: "FAIL"`) and `issues` array to the coder so it knows exactly what to fix.
+
+**When ESCALATE:** Present the user with:
+- Failed tasks from `plan_conformance.tasks`
+- Failed checkpoints from `plan_conformance.checkpoints`
+- Decision violations from `plan_conformance.decisions`
+- Critical issues from `issues`
 
 If `reviewer_attempts >= 3` and still REVISE: escalate to user.
 
