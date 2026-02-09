@@ -150,7 +150,7 @@ fn check_log_size() -> HealthCheck {
                 status: "fail".to_string(),
                 message: format!("Failed to read implementation log: {}", e),
                 details: None,
-            }
+            };
         }
     };
 
@@ -218,7 +218,7 @@ fn check_worktrees() -> HealthCheck {
                 status: "fail".to_string(),
                 message: format!("Failed to read worktrees directory: {}", e),
                 details: None,
-            }
+            };
         }
     };
 
@@ -266,7 +266,7 @@ fn check_worktrees() -> HealthCheck {
 
 /// Check for broken anchor references
 fn check_broken_refs() -> HealthCheck {
-    use specks_core::{parse_speck, validate_speck, Severity};
+    use specks_core::{Severity, parse_speck, validate_speck};
 
     let specks_dir = Path::new(".specks");
     if !specks_dir.exists() {
@@ -287,7 +287,7 @@ fn check_broken_refs() -> HealthCheck {
                 status: "fail".to_string(),
                 message: format!("Failed to read specks directory: {}", e),
                 details: None,
-            }
+            };
         }
     };
 
@@ -312,11 +312,8 @@ fn check_broken_refs() -> HealthCheck {
                                 // Look for broken reference errors (E010)
                                 for issue in &result.issues {
                                     if issue.code == "E010" && issue.severity == Severity::Error {
-                                        broken_refs.push(format!(
-                                            "{}: {}",
-                                            filename,
-                                            issue.message
-                                        ));
+                                        broken_refs
+                                            .push(format!("{}: {}", filename, issue.message));
                                     }
                                 }
                             }

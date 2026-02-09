@@ -603,15 +603,11 @@ mod tests {
     #[test]
     fn test_is_valid_worktree_path_invalid() {
         // Wrong prefix
-        assert!(!is_valid_worktree_path(Path::new(
-            ".specks-worktrees/foo"
-        )));
+        assert!(!is_valid_worktree_path(Path::new(".specks-worktrees/foo")));
         assert!(!is_valid_worktree_path(Path::new("worktrees/specks__auth")));
 
         // Absolute paths
-        assert!(!is_valid_worktree_path(Path::new(
-            "/abs/path/specks__auth"
-        )));
+        assert!(!is_valid_worktree_path(Path::new("/abs/path/specks__auth")));
 
         // Relative but wrong location
         assert!(!is_valid_worktree_path(Path::new(

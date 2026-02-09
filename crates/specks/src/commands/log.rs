@@ -118,11 +118,7 @@ fn is_leap_year(year: i32) -> bool {
 }
 
 fn days_in_year(year: i32) -> i64 {
-    if is_leap_year(year) {
-        366
-    } else {
-        365
-    }
+    if is_leap_year(year) { 366 } else { 365 }
 }
 
 fn year_to_days(year: i32) -> i64 {
@@ -170,9 +166,7 @@ pub fn run_log_rotate(force: bool, json_output: bool, quiet: bool) -> Result<i32
     let byte_count = content.len();
 
     // Determine if rotation is needed
-    let should_rotate = force
-        || line_count > LOG_LINE_THRESHOLD
-        || byte_count > LOG_BYTE_THRESHOLD;
+    let should_rotate = force || line_count > LOG_LINE_THRESHOLD || byte_count > LOG_BYTE_THRESHOLD;
 
     if !should_rotate {
         let data = RotateData {
@@ -187,7 +181,10 @@ pub fn run_log_rotate(force: bool, json_output: bool, quiet: bool) -> Result<i32
             let response = JsonResponse::ok("log rotate", data);
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
         } else if !quiet {
-            println!("Log below thresholds ({} lines, {} bytes) - no rotation needed", line_count, byte_count);
+            println!(
+                "Log below thresholds ({} lines, {} bytes) - no rotation needed",
+                line_count, byte_count
+            );
         }
         return Ok(0);
     }
@@ -786,13 +783,7 @@ pub fn run_log_prepend(
     let timestamp = generate_iso8601_timestamp()?;
 
     // Generate YAML entry
-    let entry = generate_yaml_entry(
-        &step,
-        &speck,
-        &summary,
-        bead.as_deref(),
-        &timestamp,
-    );
+    let entry = generate_yaml_entry(&step, &speck, &summary, bead.as_deref(), &timestamp);
 
     // Find insertion point
     let insertion_point = find_insertion_point(&content);
@@ -807,8 +798,7 @@ pub fn run_log_prepend(
     let temp_path = log_path.with_extension("md.tmp");
     fs::write(&temp_path, &new_content)
         .map_err(|e| format!("Failed to write temp log file: {}", e))?;
-    fs::rename(&temp_path, log_path)
-        .map_err(|e| format!("Failed to update log file: {}", e))?;
+    fs::rename(&temp_path, log_path).map_err(|e| format!("Failed to update log file: {}", e))?;
 
     // Build response data
     let data = PrependData {

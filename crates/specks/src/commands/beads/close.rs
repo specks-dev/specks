@@ -2,8 +2,8 @@
 
 use specks_core::{BeadsCli, Config, find_project_root};
 
-use crate::output::{JsonIssue, JsonResponse, BeadsCloseData};
-use crate::commands::log::{LOG_LINE_THRESHOLD, LOG_BYTE_THRESHOLD};
+use crate::commands::log::{LOG_BYTE_THRESHOLD, LOG_LINE_THRESHOLD};
+use crate::output::{BeadsCloseData, JsonIssue, JsonResponse};
 
 /// Run the beads close command
 pub fn run_close(
@@ -260,11 +260,7 @@ fn is_leap_year(year: i32) -> bool {
 }
 
 fn days_in_year(year: i32) -> i64 {
-    if is_leap_year(year) {
-        366
-    } else {
-        365
-    }
+    if is_leap_year(year) { 366 } else { 365 }
 }
 
 fn year_to_days(year: i32) -> i64 {
@@ -341,7 +337,10 @@ mod tests {
 
         let (rotated, archived_path) = result.unwrap();
         assert!(!rotated, "Log should not have been rotated");
-        assert!(archived_path.is_none(), "No archived path should be present");
+        assert!(
+            archived_path.is_none(),
+            "No archived path should be present"
+        );
 
         // Verify log is unchanged
         let new_content = fs::read_to_string(&log_path).unwrap();
