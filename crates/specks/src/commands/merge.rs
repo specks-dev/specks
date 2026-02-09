@@ -165,6 +165,101 @@ fn get_pr_for_branch(branch: &str) -> Result<PrInfo, String> {
     Ok(pr_info)
 }
 
+/// Infrastructure file patterns from Table T01
+/// These files are auto-committed in main before merging PRs
+// Will be used in Step 3 & 4 for merge workflow
+#[allow(dead_code)]
+const INFRASTRUCTURE_PATTERNS: &[&str] = &[
+    "agents/",
+    ".claude/skills/",
+    ".specks/specks-skeleton.md",
+    ".specks/config.toml",
+    ".specks/specks-implementation-log.md",
+    ".beads/",
+    "CLAUDE.md",
+];
+
+/// Check if a file path matches infrastructure patterns
+///
+/// Returns true if the file is considered infrastructure (auto-committable in main).
+/// Returns false for speck content files like `.specks/specks-123.md` (except skeleton and implementation-log).
+///
+/// # Arguments
+/// * `path` - File path to check (relative to repo root)
+// Will be used in Step 3 & 4 for merge workflow
+#[allow(dead_code)]
+fn is_infrastructure_file(path: &str) -> bool {
+    // Special handling for .specks/ directory
+    if path.starts_with(".specks/") {
+        // Only skeleton and implementation-log are infrastructure
+        return path == ".specks/specks-skeleton.md"
+            || path == ".specks/config.toml"
+            || path == ".specks/specks-implementation-log.md";
+    }
+
+    // Check against infrastructure patterns
+    for pattern in INFRASTRUCTURE_PATTERNS {
+        if pattern.ends_with('/') {
+            // Directory pattern - check prefix
+            if path.starts_with(pattern) {
+                return true;
+            }
+        } else {
+            // Exact match pattern
+            if path == *pattern {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Categorize uncommitted files from git status
+///
+/// Runs `git status --porcelain -u` and separates files into infrastructure vs other.
+/// Infrastructure files can be auto-committed in main before merging.
+/// Uses `-u` (--untracked-files=all) to show individual files instead of directories.
+///
+/// # Returns
+/// * `Ok((infrastructure, other))` - Two lists of file paths
+/// * `Err(String)` - Error message if git status fails
+// Will be used in Step 3 & 4 for merge workflow
+#[allow(dead_code)]
+fn categorize_uncommitted() -> Result<(Vec<String>, Vec<String>), String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain", "-u"])
+        .output()
+        .map_err(|e| format!("Failed to execute git status: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git status failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut infrastructure = Vec::new();
+    let mut other = Vec::new();
+
+    for line in stdout.lines() {
+        if line.len() < 4 {
+            continue; // Skip malformed lines
+        }
+
+        // git status --porcelain format: "XY filename"
+        // XY is a two-letter status code, then a space, then the filename
+        let file_path = &line[3..];
+
+        if is_infrastructure_file(file_path) {
+            infrastructure.push(file_path.to_string());
+        } else {
+            other.push(file_path.to_string());
+        }
+    }
+
+    Ok((infrastructure, other))
+}
+
 /// Run the merge command
 ///
 /// Implements the full merge workflow with pre-merge validations,
@@ -546,6 +641,178 @@ mod tests {
         // Should skip corrupt session and find the valid one
         let result = find_worktree_for_speck(".specks/specks-test.md");
         assert!(result.is_ok());
+
+        // Cleanup
+        std::env::set_current_dir(original_dir).unwrap();
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    // Tests for is_infrastructure_file() covering all patterns in Table T01
+    #[test]
+    fn test_is_infrastructure_file_agents() {
+        assert!(is_infrastructure_file("agents/coder-agent.md"));
+        assert!(is_infrastructure_file("agents/architect-agent.md"));
+        assert!(is_infrastructure_file("agents/subdir/some-agent.md"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_skills() {
+        assert!(is_infrastructure_file(".claude/skills/planner/SKILL.md"));
+        assert!(is_infrastructure_file(".claude/skills/implementer/SKILL.md"));
+        assert!(is_infrastructure_file(".claude/skills/foo/bar/baz.txt"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_specks_skeleton() {
+        assert!(is_infrastructure_file(".specks/specks-skeleton.md"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_config_toml() {
+        assert!(is_infrastructure_file(".specks/config.toml"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_implementation_log() {
+        assert!(is_infrastructure_file(
+            ".specks/specks-implementation-log.md"
+        ));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_beads() {
+        assert!(is_infrastructure_file(".beads/beads.json"));
+        assert!(is_infrastructure_file(".beads/metadata/bd-123.json"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_claude_md() {
+        assert!(is_infrastructure_file("CLAUDE.md"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_speck_content_not_infrastructure() {
+        // Speck content files should NOT be infrastructure
+        assert!(!is_infrastructure_file(".specks/specks-1.md"));
+        assert!(!is_infrastructure_file(".specks/specks-123.md"));
+        assert!(!is_infrastructure_file(".specks/specks-auth.md"));
+        assert!(!is_infrastructure_file(".specks/specks-feature-name.md"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_other_files_not_infrastructure() {
+        // Regular source files should NOT be infrastructure
+        assert!(!is_infrastructure_file("src/main.rs"));
+        assert!(!is_infrastructure_file("crates/specks/src/lib.rs"));
+        assert!(!is_infrastructure_file("README.md"));
+        assert!(!is_infrastructure_file("Cargo.toml"));
+        assert!(!is_infrastructure_file("tests/integration_test.rs"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_edge_cases() {
+        // Files that might look like infrastructure but aren't
+        assert!(!is_infrastructure_file("agents-copy/file.md"));
+        assert!(!is_infrastructure_file("my-agents/file.md"));
+        assert!(!is_infrastructure_file(".specks-backup/specks-skeleton.md"));
+        assert!(!is_infrastructure_file("docs/CLAUDE.md"));
+    }
+
+    #[test]
+    fn test_categorize_uncommitted_integration() {
+        use std::process::Command;
+
+        // Create a temporary test git repository
+        let temp_dir = std::env::temp_dir().join(format!(
+            "specks-test-categorize-{}",
+            std::process::id()
+        ));
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Cleanup if exists from previous run
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        // Create directory structure
+        fs::create_dir_all(&temp_dir).unwrap();
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        // Initialize git repo
+        Command::new("git")
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit to have a HEAD
+        fs::write("README.md", "Test repo").unwrap();
+        Command::new("git")
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create mixed uncommitted files
+        // Infrastructure files
+        fs::create_dir_all("agents").unwrap();
+        fs::write("agents/test-agent.md", "# Agent").unwrap();
+
+        fs::create_dir_all(".claude/skills/test").unwrap();
+        fs::write(".claude/skills/test/SKILL.md", "# Skill").unwrap();
+
+        fs::create_dir_all(".specks").unwrap();
+        fs::write(".specks/specks-skeleton.md", "# Skeleton").unwrap();
+        fs::write(".specks/config.toml", "# Config").unwrap();
+        fs::write(".specks/specks-implementation-log.md", "# Log").unwrap();
+
+        fs::create_dir_all(".beads").unwrap();
+        fs::write(".beads/beads.json", "{}").unwrap();
+
+        fs::write("CLAUDE.md", "# Claude").unwrap();
+
+        // Non-infrastructure files
+        fs::create_dir_all("src").unwrap();
+        fs::write("src/main.rs", "fn main() {}").unwrap();
+
+        fs::write(".specks/specks-123.md", "# Speck 123").unwrap();
+
+        fs::write("Cargo.toml", "[package]").unwrap();
+
+        // Run categorization
+        let result = categorize_uncommitted();
+        assert!(result.is_ok());
+
+        let (infrastructure, other) = result.unwrap();
+
+        // Verify infrastructure files
+        assert!(infrastructure.contains(&"agents/test-agent.md".to_string()));
+        assert!(infrastructure.contains(&".claude/skills/test/SKILL.md".to_string()));
+        assert!(infrastructure.contains(&".specks/specks-skeleton.md".to_string()));
+        assert!(infrastructure.contains(&".specks/config.toml".to_string()));
+        assert!(infrastructure.contains(&".specks/specks-implementation-log.md".to_string()));
+        assert!(infrastructure.contains(&".beads/beads.json".to_string()));
+        assert!(infrastructure.contains(&"CLAUDE.md".to_string()));
+
+        // Verify non-infrastructure files
+        assert!(other.contains(&"src/main.rs".to_string()));
+        assert!(other.contains(&".specks/specks-123.md".to_string()));
+        assert!(other.contains(&"Cargo.toml".to_string()));
+
+        // Verify counts
+        assert_eq!(infrastructure.len(), 7);
+        assert_eq!(other.len(), 3);
 
         // Cleanup
         std::env::set_current_dir(original_dir).unwrap();

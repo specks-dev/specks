@@ -7,6 +7,24 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-2
+date: 2026-02-09T14:43:15Z
+bead: specks-s5s.3
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 2: Implement infrastructure pattern matching and file categorization | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:43:15Z
+
+**Summary:** Implement file categorization: INFRASTRUCTURE_PATTERNS constant, is_infrastructure_file(), and categorize_uncommitted() using git status. Added 11 unit tests and 1 integration test.
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+
+**Bead:** specks-s5s.3
+
+---
 step: #step-1
 date: 2026-02-09T14:08:22Z
 bead: specks-s5s.2
