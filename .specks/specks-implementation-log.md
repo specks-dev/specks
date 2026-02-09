@@ -7,6 +7,27 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-0
+date: 2026-02-09T14:03:04Z
+bead: specks-s5s.1
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 0: Add merge command skeleton | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:03:04Z
+
+**Summary:** Add merge command skeleton with CLI flags (--dry-run, --force), MergeData struct for JSON output, and command routing
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/mod.rs
+- crates/specks/src/main.rs
+
+**Bead:** specks-s5s.1
+
+---
 step: #step-3
 date: 2026-02-08T19:25:00Z
 bead: specks-0yy.4

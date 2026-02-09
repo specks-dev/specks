@@ -111,6 +111,25 @@ pub enum Commands {
     )]
     Worktree(WorktreeCommands),
 
+    /// Merge a speck's PR and clean up worktree
+    ///
+    /// Automates the post-implementation merge workflow.
+    #[command(
+        long_about = "Merge a speck's PR and clean up worktree.\n\nAutomates:\n  1. Find worktree for speck\n  2. Check main is synced with origin\n  3. Find PR for worktree branch\n  4. Verify PR checks have passed\n  5. Check for uncommitted changes in main\n  6. Auto-commit infrastructure files (agents/, .claude/skills/, etc.)\n  7. Push main to origin\n  8. Merge PR via squash\n  9. Pull main to get squashed commit\n  10. Clean up worktree and branch\n\nInfrastructure files:\n  - agents/*.md\n  - .claude/skills/**\n  - .specks/specks-skeleton.md\n  - .specks/config.toml\n  - .specks/specks-implementation-log.md\n  - .beads/*\n  - CLAUDE.md\n\nUse --dry-run to preview operations without side effects.\nUse --force to proceed with non-infrastructure uncommitted files (not recommended)."
+    )]
+    Merge {
+        /// Speck file path (e.g., .specks/specks-12.md)
+        speck: String,
+
+        /// Show what would happen without executing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Proceed even with non-infrastructure uncommitted files
+        #[arg(long)]
+        force: bool,
+    },
+
     /// Show version information
     ///
     /// Display package version and optionally build metadata.
@@ -309,5 +328,86 @@ mod tests {
             long_about.to_string().contains("without side effects"),
             "init help should explain --check has no side effects"
         );
+    }
+
+    #[test]
+    fn test_merge_command() {
+        let cli = Cli::try_parse_from(["specks", "merge", ".specks/specks-1.md"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Merge {
+                speck,
+                dry_run,
+                force,
+            }) => {
+                assert_eq!(speck, ".specks/specks-1.md");
+                assert!(!dry_run);
+                assert!(!force);
+            }
+            _ => panic!("Expected Merge command"),
+        }
+    }
+
+    #[test]
+    fn test_merge_command_with_dry_run() {
+        let cli =
+            Cli::try_parse_from(["specks", "merge", ".specks/specks-1.md", "--dry-run"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Merge {
+                speck,
+                dry_run,
+                force,
+            }) => {
+                assert_eq!(speck, ".specks/specks-1.md");
+                assert!(dry_run);
+                assert!(!force);
+            }
+            _ => panic!("Expected Merge command"),
+        }
+    }
+
+    #[test]
+    fn test_merge_command_with_force() {
+        let cli =
+            Cli::try_parse_from(["specks", "merge", ".specks/specks-1.md", "--force"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Merge {
+                speck,
+                dry_run,
+                force,
+            }) => {
+                assert_eq!(speck, ".specks/specks-1.md");
+                assert!(!dry_run);
+                assert!(force);
+            }
+            _ => panic!("Expected Merge command"),
+        }
+    }
+
+    #[test]
+    fn test_merge_command_with_both_flags() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "merge",
+            ".specks/specks-1.md",
+            "--dry-run",
+            "--force",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::Merge {
+                speck,
+                dry_run,
+                force,
+            }) => {
+                assert_eq!(speck, ".specks/specks-1.md");
+                assert!(dry_run);
+                assert!(force);
+            }
+            _ => panic!("Expected Merge command"),
+        }
     }
 }
