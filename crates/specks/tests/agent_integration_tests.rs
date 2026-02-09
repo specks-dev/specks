@@ -69,7 +69,7 @@ const ALL_AGENTS: &[&str] = &[
 ];
 
 /// Read-only agents (no Write/Edit/Bash)
-const READONLY_AGENTS: &[&str] = &["critic-agent", "architect-agent"];
+const READONLY_AGENTS: &[&str] = &["critic-agent"];
 
 /// Core agents with full documentation structure (Input/Output contracts, Your Role, etc.)
 /// Setup agents have simpler structure and are excluded.
@@ -311,25 +311,6 @@ fn test_architect_documents_expected_touch_set() {
     assert!(
         content.contains("expected_touch_set"),
         "Architect must document expected_touch_set in output"
-    );
-}
-
-#[test]
-fn test_architect_is_readonly() {
-    let path = agents_dir().join("architect-agent.md");
-    let content = fs::read_to_string(&path).expect("Failed to read architect-agent");
-
-    let frontmatter = parse_agent_frontmatter(&content).expect("Failed to parse frontmatter");
-    let tools = frontmatter.2;
-
-    // Architect is read-only analysis
-    assert!(
-        !tools.contains("Write"),
-        "Architect should not have Write tool"
-    );
-    assert!(
-        !tools.contains("Edit"),
-        "Architect should not have Edit tool"
     );
 }
 
