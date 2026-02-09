@@ -950,6 +950,7 @@ pub fn run_merge(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use specks_core::session::{Session, SessionStatus};
     use std::fs;
 
@@ -995,6 +996,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_worktree_missing_directory() {
         // Create a temporary directory that definitely won't have worktrees
         let temp_dir =
@@ -1016,6 +1018,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_worktree_no_matching_speck() {
         // Create a temporary test environment
         let temp_dir =
@@ -1060,6 +1063,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_worktree_success() {
         // Create a temporary test environment
         let temp_dir =
@@ -1109,6 +1113,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_worktree_path_normalization() {
         // Create a temporary test environment
         let temp_dir =
@@ -1158,6 +1163,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_worktree_corrupt_session() {
         // Create a temporary test environment
         let temp_dir =
@@ -1281,6 +1287,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_categorize_uncommitted_integration() {
         use std::process::Command;
 
@@ -1517,6 +1524,7 @@ mod tests {
     // Integration tests
 
     #[test]
+    #[serial]
     fn test_run_merge_abort_on_non_infrastructure_files_without_force() {
         use std::process::Command;
 
@@ -1582,6 +1590,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_run_merge_force_proceeds_with_non_infrastructure() {
         use std::process::Command;
 
