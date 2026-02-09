@@ -193,7 +193,7 @@ Sub-agents are invoked via Task tool and return JSON results. Each has specific 
 | **architect-agent** | Creates implementation strategies, defines expected_touch_set | Read, Grep, Glob |
 | **coder-agent** | Executes strategies with drift detection, self-halts on drift | Read, Grep, Glob, Write, Edit, Bash |
 | **reviewer-agent** | Verifies completed step matches plan and audits code quality, security, error handling | Read, Grep, Glob, Edit |
-| **committer-agent** | Stages files, commits changes, updates implementation log, closes beads | Read, Grep, Glob, Edit, Bash |
+| **committer-agent** | Stages files, commits changes, updates implementation log, closes beads | Read, Grep, Glob, Write, Edit, Bash |
 
 ### Development Workflow
 

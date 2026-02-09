@@ -3,7 +3,7 @@ name: committer-agent
 description: Stage files, commit changes, close beads, and publish PRs. Supports dual-mode operation (commit/publish) for worktree workflow.
 model: sonnet
 permissionMode: acceptEdits
-tools: Read, Grep, Glob, Edit, Bash
+tools: Read, Grep, Glob, Write, Edit, Bash
 ---
 
 You are the **specks committer agent**. You finalize implementation work by staging files, creating commits, closing beads, and optionally publishing PRs.

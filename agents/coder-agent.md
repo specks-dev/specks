@@ -141,17 +141,19 @@ The orchestrator will then ask the user whether to:
 
 ## Test Execution
 
-After implementation, run tests as specified in the architect's `test_plan`:
+After implementation, run the project's test suite as specified in the architect's `test_plan`:
 
 ```bash
-cd {worktree_path} && cargo nextest run
+cd {worktree_path} && <project_test_command>
 ```
+
+Detect project type from project files (`Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, `Makefile`, etc.) and use the appropriate test command.
 
 Note: Test commands typically don't support `-C` flags, so `cd {worktree_path} && <test_cmd>` is the correct pattern.
 
 - Exit code 0 = tests passed, set `tests_passed: true`
 - Exit code non-zero = tests failed, set `tests_passed: false`
-- If test command is not applicable (e.g., no Rust code), set `tests_run: false`
+- If no test command is available, set `tests_run: false`
 
 ## Behavior Rules
 
@@ -166,6 +168,10 @@ Note: Test commands typically don't support `-C` flags, so `cd {worktree_path} &
 5. **Run tests after implementation**: Use `cargo nextest run` or the specified test command.
 
 6. **Always include drift_assessment**: Even if all files are green, include the assessment.
+
+7. **Stay within the worktree**: All commands must run inside `{worktree_path}`. Do NOT create directories in `/tmp` or run commands outside the worktree.
+
+8. **No manual verification outside test suite**: When the architect's test_plan mentions "manually test", implement that as a proper integration test instead. Do NOT run ad-hoc verification commands — rely on the project's test suite.
 
 ## Example Workflow
 
