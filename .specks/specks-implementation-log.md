@@ -6,6 +6,53 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-9.md] Step 5: Final Verification | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 5 specification (#step-5, lines 269-295)
+- [D01] Remove runs directory references completely
+- [D02] Preserve historical specks unchanged
+- (#success-criteria)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Run comprehensive grep verification | Done |
+| Confirm runs references only in historical specks | Done |
+| Expand scope: remove runs from init.rs help text | Done |
+| Expand scope: remove runs from cli.rs help text | Done |
+| Expand scope: slim down planner-setup-agent.md | Done |
+| Run specks validate | Done |
+
+**Files Created:**
+- None (verification step with expanded cleanup)
+
+**Files Modified:**
+- `crates/specks/src/commands/init.rs` - Removed mention of "runs/" from help text and output messages
+- `crates/specks/src/cli.rs` - Updated long_about descriptions to remove "runs/" references and focus on worktree workflow
+- `agents/planner-setup-agent.md` - Removed obsolete session management references, simplified to focus on init verification and mode detection
+
+**Test Results:**
+- `grep -r "\.specks/runs" . --include="*.md" --include="*.rs" --include="*.toml" | grep -v "specks-[1-8].md" | grep -v "specks-9.md" | grep -v "implementation-log"`: Returns empty (no non-historical references)
+- `specks validate .specks/specks-9.md`: PASS (validation successful)
+
+**Checkpoints Verified:**
+- Runs references only in historical specks (specks-1 through specks-8): PASS
+- No runs references in active codebase: PASS
+- CLI help text accurate and worktree-focused: PASS
+- Agent definitions reflect current architecture: PASS
+
+**Key Decisions/Notes:**
+- During verification, discovered additional runs references in init.rs and cli.rs help text that were not caught in earlier steps
+- Expanded scope to clean these up for consistency
+- planner-setup-agent.md had obsolete session management complexity that was simplified to match current stateless planner design
+- All changes maintain backward compatibility while improving documentation accuracy
+
+---
+
 ## [specks-9.md] Step 4: Update implement-plan skill | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

@@ -35,10 +35,10 @@ pub struct Cli {
 pub enum Commands {
     /// Initialize a specks project in current directory
     ///
-    /// Creates .specks/ directory with skeleton template, config, and runs directory.
+    /// Creates .specks/ directory with skeleton template and config.
     /// Run this once in your project root to start using specks.
     #[command(
-        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/runs/               Agent run artifacts (gitignored)"
+        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Progress tracking"
     )]
     Init {
         /// Overwrite existing .specks directory
