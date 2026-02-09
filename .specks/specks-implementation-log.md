@@ -6,6 +6,55 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-10.md] Step 3: Update CLAUDE.md Documentation | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 3 specification (#step-3, lines 557-592)
+- Table T02: Implementation Agent Changes (#t02-agent-changes)
+- Table T03: Tool Set Merges (#t03-tool-changes)
+- `CLAUDE.md` - Project documentation for Claude Code
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update "Sub-Agents (9)" to "Sub-Agents (7)" in section header | Done |
+| Remove auditor-agent row from implementation agents table | Done |
+| Remove logger-agent row from implementation agents table | Done |
+| Update reviewer-agent description to include audit responsibilities | Done |
+| Update committer-agent description to include logging responsibilities | Done |
+| Update reviewer-agent tools to include Edit | Done |
+| Update committer-agent tools to include Edit | Done |
+| Update implementer orchestration description (6 agents -> 4 agents) | Done |
+
+**Files Created:**
+- None (documentation update only)
+
+**Files Modified:**
+- `CLAUDE.md` - Updated agent count from 9 to 7 sub-agents, removed auditor-agent and logger-agent rows, updated reviewer-agent description to "Verifies completed step matches plan and audits code quality, security, error handling", updated committer-agent description to "Stages files, commits changes, updates implementation log, closes beads", added Edit tool to both reviewer and committer tools
+- `crates/specks/tests/agent_integration_tests.rs` - Removed reviewer-agent from READONLY_AGENTS constant (since it now has Edit tool)
+
+**Test Results:**
+- Integration test: CLAUDE.md is valid markdown - PASS
+- Unit test: Test constants updated to reflect tool changes - PASS
+
+**Checkpoints Verified:**
+- `Grep "Sub-Agents (7)" CLAUDE.md` finds updated count: PASS
+- `Grep "auditor-agent" CLAUDE.md` returns no results: PASS
+- `Grep "logger-agent" CLAUDE.md` returns no results: PASS
+- `Grep "reviewer-agent.*audit" CLAUDE.md` finds updated description: PASS
+- `Grep "committer-agent.*log" CLAUDE.md` finds updated description: PASS
+
+**Key Decisions/Notes:**
+- Both CLAUDE.md and test constants were updated to reflect the new 4-agent architecture
+- The reviewer-agent was removed from READONLY_AGENTS test list because it gained the Edit tool for potential future use
+- Documentation now accurately reflects the consolidated implementer loop with 7 total sub-agents (3 planning + 4 implementation)
+- All references to auditor-agent and logger-agent have been removed from user-facing documentation
+
+---
+
 ## [specks-10.md] Step 2: Update Implementer SKILL.md | COMPLETE | 2026-02-09
 
 **Completed:** 2026-02-09

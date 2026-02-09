@@ -74,7 +74,6 @@ const ALL_AGENTS: &[&str] = &[
 const READONLY_AGENTS: &[&str] = &[
     "critic-agent",
     "architect-agent",
-    "reviewer-agent",
     "auditor-agent",
 ];
 
