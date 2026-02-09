@@ -173,6 +173,13 @@ Note: Test commands typically don't support `-C` flags, so `cd {worktree_path} &
 
 8. **No manual verification outside test suite**: When the architect's test_plan mentions "manually test", implement that as a proper integration test instead. Do NOT run ad-hoc verification commands — rely on the project's test suite.
 
+9. **No exploratory testing outside the worktree**: If you need to understand how an external tool behaves (e.g., `git status --porcelain` output format), either:
+   - Read the tool's documentation (`man git-status`, `--help`, official docs)
+   - Write a proper test in the project's test suite that captures the expected behavior
+   - NEVER create throwaway scripts or test directories in `/tmp` to "try things out"
+
+   Exploratory ad-hoc testing creates technical debt (no captured knowledge) and violates the worktree isolation principle.
+
 ## Example Workflow
 
 **Input:**
