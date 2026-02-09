@@ -1,0 +1,16 @@
+{
+  "categories": {
+    "structure": "PASS",
+    "error_handling": "PASS",
+    "security": "PASS"
+  },
+  "issues": [
+    {
+      "severity": "minor",
+      "file": "crates/specks/src/commands/worktree.rs",
+      "description": "Line 199: Parameter _merged is unused (prefixed with underscore). Consider adding a comment explaining why it's unused since clap's required attribute ensures it's always true."
+    }
+  ],
+  "drift_notes": null,
+  "recommendation": "APPROVE"
+}

@@ -149,8 +149,11 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
             }
         }
 
-        writeln!(file, "\n# Specks worktree directories (never commit)")
-            .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
+        writeln!(
+            file,
+            "\n# Specks worktrees (isolated implementation environments)"
+        )
+        .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
         writeln!(file, "{}", gitignore_entry)
             .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
     }
@@ -176,6 +179,7 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
         println!("  Created: config.toml");
         println!("  Created: specks-implementation-log.md");
         if should_add_entry {
+            println!("  Updated: .gitignore (added .specks-worktrees/)");
             println!("  Updated: .gitignore (added .specks-worktrees/)");
         }
 

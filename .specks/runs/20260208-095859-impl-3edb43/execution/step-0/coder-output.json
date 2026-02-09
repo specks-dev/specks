@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "halted_for_drift": false,
+  "files_created": [],
+  "files_modified": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"],
+  "tests_run": true,
+  "tests_passed": true,
+  "drift_assessment": {
+    "drift_severity": "minor",
+    "expected_files": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"],
+    "actual_changes": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md", ".beads/issues.jsonl"],
+    "unexpected_changes": [
+      {
+        "file": ".beads/issues.jsonl",
+        "category": "yellow",
+        "reason": "Auto-updated by beads system when speck was accessed (expected system behavior)"
+      }
+    ],
+    "drift_budget": {
+      "yellow_used": 1,
+      "yellow_max": 4,
+      "red_used": 0,
+      "red_max": 2
+    },
+    "qualitative_assessment": "All changes within expected scope. Primary target file modified as planned. The beads issues file was auto-updated by the system - expected adjacent change."
+  }
+}

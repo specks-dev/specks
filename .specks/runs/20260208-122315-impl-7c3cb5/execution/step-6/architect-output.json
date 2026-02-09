@@ -1,0 +1,18 @@
+{
+  "step_anchor": "#step-6",
+  "approach": "Update CLAUDE.md with worktree workflow documentation (commands, cleanup procedure, troubleshooting), and add an integration test that validates the full worktree lifecycle (create → list → cleanup).",
+  "expected_touch_set": [
+    "CLAUDE.md",
+    "crates/specks/tests/worktree_integration_tests.rs"
+  ],
+  "implementation_steps": [
+    {"order": 1, "description": "Update CLAUDE.md: add worktree commands, document cleanup procedure, add troubleshooting section"},
+    {"order": 2, "description": "Create worktree_integration_tests.rs: test full lifecycle (create, verify session.json, list, merge, cleanup)"},
+    {"order": 3, "description": "Run cargo nextest run to verify all tests pass"}
+  ],
+  "test_plan": "Run cargo nextest run to verify all tests pass, specifically check worktree integration tests",
+  "risks": [
+    "Integration tests with git worktree may be slow",
+    "Some cleanup edge cases (squash/rebase merges) are known limitations"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "step_anchor": "#step-1",
+  "approach": "Create a new session.rs module in specks-core that defines Session struct matching Spec S01 schema and SessionStatus enum with five variants (pending, in_progress, completed, failed, needs_reconcile). Implement load_session and save_session functions for JSON file I/O. Use serde for serialization with the existing project patterns. For timestamps, add a simple ISO 8601 timestamp generation utility using std::time::SystemTime (avoiding new dependencies). Export the new module from lib.rs.",
+  "expected_touch_set": [
+    "/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/session.rs",
+    "/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/lib.rs"
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "description": "Create session.rs with SessionStatus enum (pending, in_progress, completed, failed, needs_reconcile) with Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq derives and Display impl",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/session.rs"]
+    },
+    {
+      "order": 2,
+      "description": "Create Session struct with all fields from Spec S01: schema_version, speck_path, speck_slug, branch_name, base_branch, worktree_path, created_at, status, current_step, total_steps, beads_root. Add serde derives.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/session.rs"]
+    },
+    {
+      "order": 3,
+      "description": "Implement now_iso8601() helper function to generate UTC timestamps in ISO 8601 format",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/session.rs"]
+    },
+    {
+      "order": 4,
+      "description": "Implement load_session(worktree_path: &Path) that reads and deserializes session.json",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/session.rs"]
+    },
+    {
+      "order": 5,
+      "description": "Implement save_session(session: &Session) that serializes to JSON and writes",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/session.rs"]
+    },
+    {
+      "order": 6,
+      "description": "Add unit tests for serialization roundtrip and status transitions",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/session.rs"]
+    },
+    {
+      "order": 7,
+      "description": "Export session module from lib.rs",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/crates/specks-core/src/lib.rs"]
+    }
+  ],
+  "test_plan": "Run `cargo build -p specks-core` to verify compilation with no warnings. Run `cargo nextest run -p specks-core session` to verify all session-related tests pass.",
+  "risks": [
+    "ISO 8601 timestamp generation without chrono requires careful implementation",
+    "PathBuf serialization with serde needs verification",
+    "Session file path convention must be consistent with Step 2 worktree module"
+  ]
+}

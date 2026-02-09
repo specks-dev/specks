@@ -1,0 +1,11 @@
+{
+  "session_id": "20260208-095859-impl-3edb43",
+  "speck_path": ".specks/specks-7.md",
+  "commit_policy": "manual",
+  "status": "completed",
+  "created_at": "2026-02-08T09:58:59-08:00",
+  "last_updated_at": "2026-02-08T10:05:00-08:00",
+  "current_step": null,
+  "steps_completed": ["#step-0", "#step-1"],
+  "steps_remaining": []
+}

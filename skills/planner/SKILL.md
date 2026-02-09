@@ -19,7 +19,7 @@ allowed-tools: Task, AskUserQuestion
 
 **YOUR ENTIRE JOB:** Parse input → spawn agents in sequence → relay results → ask user questions when needed.
 
-**GOAL:** Produce a speck file at `.specks/specks-N.md` by orchestrating agents.
+**GOAL:** Produce a speck file at `.specks/specks-N.md` by orchestrating agents. All state flows through memory, not persisted to disk.
 
 ---
 
@@ -61,27 +61,12 @@ allowed-tools: Task, AskUserQuestion
 ```
 Task(
   subagent_type: "specks:planner-setup-agent",
-  prompt: '{"mode": "<new|revise|resume>", "idea": "<idea or null>", "speck_path": "<path or null>", "resume_session_id": "<id or null>"}',
-  description: "Initialize planning session"
+  prompt: '{"mode": "<new|revise>", "idea": "<idea or null>", "speck_path": "<path or null>"}',
+  description: "Check prerequisites and validate input"
 )
 ```
 
-Parse response. If `success: false`, halt with error. Otherwise, extract `session_id` and `session_dir`.
-
-If `conflicts.active_sessions` is non-empty:
-```
-AskUserQuestion(
-  questions: [{
-    question: "Another session is active on this speck. Continue anyway?",
-    header: "Conflict",
-    options: [
-      { label: "Continue", description: "Start new session" },
-      { label: "Abort", description: "Cancel" }
-    ],
-    multiSelect: false
-  }]
-)
-```
+Parse response. If `success: false`, halt with error. Otherwise, extract `mode`, `initialized`, `speck_path`, and `idea`.
 
 ### 2. Clarifier Loop Entry
 
@@ -97,7 +82,7 @@ Task(
 )
 ```
 
-Save response to `<session_dir>/clarifier-output.json`.
+Store response in memory for later reference.
 
 If `questions` array is non-empty, present to user:
 
@@ -117,7 +102,7 @@ AskUserQuestion(
 )
 ```
 
-Save answers to `<session_dir>/user-answers.json`.
+Store user answers in memory.
 
 ### 4. Spawn Author
 
@@ -135,7 +120,7 @@ Task(
 )
 ```
 
-Save response to `<session_dir>/author-output.json`.
+Store response in memory.
 
 If `validation_status == "errors"`: halt with error.
 
@@ -149,12 +134,11 @@ Task(
 )
 ```
 
-Save response to `<session_dir>/critic-output.json`.
+Store response in memory.
 
 ### 6. Handle Critic Recommendation
 
 **APPROVE:**
-- Update metadata: `status: "completed"`
 - Return success with speck path
 
 **REVISE:**
@@ -173,8 +157,8 @@ AskUserQuestion(
 )
 ```
 - If "Revise": set `critic_feedback = critic response`, **GO TO STEP 3**
-- If "Accept": update metadata to completed, return success
-- If "Abort": update metadata to failed, return abort
+- If "Accept": return success
+- If "Abort": return abort
 
 **REJECT:**
 ```
@@ -191,7 +175,7 @@ AskUserQuestion(
 )
 ```
 - If "Start over": set `critic_feedback = critic response`, **GO TO STEP 3**
-- If "Abort": update metadata to failed, return abort
+- If "Abort": return abort
 
 ---
 
@@ -203,7 +187,6 @@ Parse the user's input to determine mode:
 |---------------|------|----------|
 | `"idea text"` | new | Create new speck from idea |
 | `.specks/specks-N.md` | revise | Revise existing speck |
-| `--resume <session-id>` | resume | Resume incomplete session |
 
 ---
 
@@ -211,34 +194,17 @@ Parse the user's input to determine mode:
 
 If Task tool fails or returns unparseable JSON:
 
-1. Write to `<session_dir>/error.json`:
-   ```json
-   {
-     "agent": "<agent-name>",
-     "raw_output": "<raw response>",
-     "error": "<parse error or failure reason>",
-     "timestamp": "<ISO timestamp>"
-   }
-   ```
-
-2. Update metadata: `status: "failed"`
-
-3. Halt with:
-   ```
-   Agent [name] failed: [reason]
-   See <session_dir>/error.json for details.
-   ```
+1. Report the error with agent name and reason
+2. Halt with clear error message
 
 ---
 
 ## Output
 
 **On success:**
-- Session ID
 - Speck path created/revised
 - Critic recommendation
 
 **On failure:**
-- Session ID
 - Phase where failure occurred
-- Path to error.json
+- Error details

@@ -1,0 +1,14 @@
+{
+  "commit_message": "docs(skills): update implementer skill for worktree integration\n\nRefactor implementer SKILL.md to use worktree-based model:\n- Replace .specks/runs/<session-id> with {worktree_path}/.specks/\n- Add worktree_path to all agent Task invocations\n- Add PR creation at end via committer-agent publish mode (Spec S04)\n- Remove commit_policy manual/auto logic and Done/Abort prompts\n- Fix mode→operation field per Spec S04 contract",
+  "files_staged": [
+    "skills/implementer/SKILL.md",
+    ".specks/specks-implementation-log.md"
+  ],
+  "committed": false,
+  "commit_hash": null,
+  "bead_closed": false,
+  "bead_id": "specks-dff.6",
+  "aborted": false,
+  "reason": null,
+  "warnings": ["Manual policy: staged files only, awaiting user commit"]
+}

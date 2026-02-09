@@ -1,0 +1,11 @@
+{
+  "session_id": "20260208-184443-plan-d84dc0",
+  "mode": "new",
+  "speck_path": null,
+  "idea": "Substantially improve the specks workflow by adding git worktrees, integrating this change with beads, and simplifying the session model with respect to Claude Code.\n\nKey decisions already made:\n1. Worktree location: .specks-worktrees/ in project root (gitignored)\n2. Commit granularity: One commit per step (matches bead granularity)\n3. Implementation log: Lives in worktree, committed with each step, merged via PR\n4. PR auto-creation: Always auto-create\n5. Post-merge cleanup: Start manual (specks worktree cleanup --merged), add auto-detection in Phase 3\n\nThe workflow:\n1. Setup agent runs in main → syncs beads, determines steps\n2. Create branch: specks/<speck-slug>-<timestamp>\n3. Create worktree: .specks-worktrees/<branch-name>/\n4. For each step: architect → coder → reviewer → auditor → logger → committer (each step = one commit, bead closed atomically)\n5. Push branch, create PR\n6. User merges PR → beads merge, implementation done\n7. Cleanup worktree\n\nWhat gets eliminated:\n- .specks/runs/<session-id>/ → Worktree itself\n- metadata.json → session.json (minimal)\n- step-N/*.json agent outputs → Git commits + beads\n- commit_policy: manual/auto → Always auto\n- Manual Done/Abort prompts → PR review\n\nClaude Code integration via path prefixing:\n- All agents receive worktree_path in their input\n- Coder-agent prefixes file paths\n- Git uses -C flag\n- Tests run with cd to worktree\n\nImplementation phases:\n- Phase 1 (MVP): Worktree creation, path prefixing, always-auto commit\n- Phase 2 (PR): Auto-create PR at completion\n- Phase 3 (Sessions): Concurrent detection, resume, failure recovery\n- Phase 4 (Future): Multi-speck dashboard, conflict detection",
+  "status": "in_progress",
+  "created_at": "2026-02-08T18:44:39Z",
+  "last_updated_at": "2026-02-08T18:44:39Z",
+  "current_phase": "clarifier",
+  "loop_count": 0
+}

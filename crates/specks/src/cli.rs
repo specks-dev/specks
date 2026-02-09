@@ -12,7 +12,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[command(version = VERSION)]
 #[command(about = "From ideas to implementation via multi-agent orchestration")]
 #[command(
-    long_about = "Specks transforms ideas into working software through orchestrated LLM agents.\n\nA 5-agent suite (director, planner, interviewer, architect, implementer) collaborates to create structured plans and execute them to completion.\n\nPlanning and execution are invoked via Claude Code skills (/specks:plan, /specks:execute).\n\nThe CLI provides utilities to initialize, validate, list, track progress, and integrate with beads for execution tracking."
+    long_about = "Specks transforms ideas into working software through orchestrated LLM agents.\n\nA multi-agent suite collaborates to create structured plans and execute them to completion.\n\nPlanning and execution are invoked via Claude Code skills (/specks:planner, /specks:implementer).\n\nThe CLI provides utilities to initialize, validate, list, track progress, and integrate with beads for execution tracking."
 )]
 pub struct Cli {
     /// Increase output verbosity
@@ -36,9 +36,10 @@ pub enum Commands {
     /// Initialize a specks project in current directory
     ///
     /// Creates .specks/ directory with skeleton template and config.
+    /// Creates .specks/ directory with skeleton template and config.
     /// Run this once in your project root to start using specks.
     #[command(
-        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Progress tracking"
+        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Implementation progress tracking"
     )]
     Init {
         /// Overwrite existing .specks directory

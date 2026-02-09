@@ -1,0 +1,28 @@
+{
+  "step_anchor": "#step-4",
+  "approach": "Update all 7 implementation agent markdown files to include worktree_path in their input contracts, add path prefixing requirements, document the no-persistent-cd rule, and implement the new committer-agent publish mode. The implementer-setup-agent receives the most significant changes: worktree creation via CLI, beads sync, and commit bead annotations. The committer-agent gains dual-mode operation (commit/publish) per Spec S04.",
+  "expected_touch_set": [
+    "agents/implementer-setup-agent.md",
+    "agents/architect-agent.md",
+    "agents/coder-agent.md",
+    "agents/reviewer-agent.md",
+    "agents/auditor-agent.md",
+    "agents/logger-agent.md",
+    "agents/committer-agent.md"
+  ],
+  "implementation_steps": [
+    {"order": 1, "description": "Update implementer-setup-agent.md: Add worktree creation, beads sync, commit bead annotations, update output to Spec S06"},
+    {"order": 2, "description": "Update architect-agent.md: Add worktree_path to input, path prefixing, no-persistent-cd rule"},
+    {"order": 3, "description": "Update coder-agent.md: Add worktree_path, path prefixing, git -C requirement, no-persistent-cd rule"},
+    {"order": 4, "description": "Update reviewer-agent.md: Add worktree_path, path prefixing for verification, no-persistent-cd rule"},
+    {"order": 5, "description": "Update auditor-agent.md: Add worktree_path, path prefixing for reads, no-persistent-cd rule"},
+    {"order": 6, "description": "Update logger-agent.md: Add worktree_path, change log path to worktree, no-persistent-cd rule"},
+    {"order": 7, "description": "Update committer-agent.md: Add worktree_path, git -C, operation field (commit/publish), Spec S04 publish mode, D10 failure semantics, no-persistent-cd rule"}
+  ],
+  "test_plan": "Checkpoints: grep -l 'worktree_path' agents/*-agent.md | wc -l = 7, grep -l 'Never rely on persistent' agents/*-agent.md | wc -l = 7",
+  "risks": [
+    "implementer-setup-agent changes from READ-ONLY to active worktree creation",
+    "committer-agent publish mode requires gh CLI auth check",
+    "no-persistent-cd rule must be phrased consistently for grep checkpoint"
+  ]
+}

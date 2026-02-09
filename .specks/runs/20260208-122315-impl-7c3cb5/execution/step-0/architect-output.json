@@ -1,0 +1,26 @@
+{
+  "step_anchor": "#step-0",
+  "approach": "Step 0 is already complete. The .gitignore file at /Users/kocienda/Mounts/u/src/specks/.gitignore already contains both required entries: '.specks-worktrees/' (line 30) and '.specks/step-artifacts/' (line 33). This was done in commit 36b6762 ('feat(specks): add worktree and step-artifacts entries to gitignore'). The coder agent should verify the checkpoints pass and report the step as complete without making any changes.",
+  "expected_touch_set": [],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "description": "Verify checkpoint: run 'grep -q specks-worktrees .gitignore' and confirm it returns success (exit code 0)",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/.gitignore"]
+    },
+    {
+      "order": 2,
+      "description": "Verify checkpoint: run 'grep -q specks/step-artifacts .gitignore' and confirm it returns success (exit code 0)",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/.gitignore"]
+    },
+    {
+      "order": 3,
+      "description": "Confirm both entries exist at lines 30 and 33 respectively in .gitignore - no modifications needed",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/.gitignore"]
+    }
+  ],
+  "test_plan": "Run the two checkpoint commands specified in the speck: 'grep -q specks-worktrees .gitignore' and 'grep -q specks/step-artifacts .gitignore'. Both should return exit code 0. No tests to run since this is a gitignore-only change and the speck marks tests as optional.",
+  "risks": [
+    "None - this step is already complete and verified"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "categories": {
+    "structure": "PASS",
+    "error_handling": "PASS",
+    "security": "PASS"
+  },
+  "issues": [],
+  "drift_notes": null,
+  "recommendation": "APPROVE"
+}

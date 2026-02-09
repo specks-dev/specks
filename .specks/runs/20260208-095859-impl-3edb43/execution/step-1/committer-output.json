@@ -1,0 +1,16 @@
+{
+  "commit_message": "feat(skills): fix implementer beads workflow\n\nRemove per-step beads sync and read bead IDs from session metadata.\nSetup-agent now provides root_bead and bead_mapping at session start.\nAdd defensive error handling for missing bead IDs.",
+  "files_staged": [
+    "/Users/kocienda/Mounts/u/src/specks/skills/implementer/SKILL.md",
+    "/Users/kocienda/Mounts/u/src/specks/.specks/specks-implementation-log.md"
+  ],
+  "committed": false,
+  "commit_hash": null,
+  "bead_closed": false,
+  "bead_id": "specks-v0r.2",
+  "aborted": false,
+  "reason": null,
+  "warnings": [
+    "Manual policy: staged files only, awaiting user commit"
+  ]
+}

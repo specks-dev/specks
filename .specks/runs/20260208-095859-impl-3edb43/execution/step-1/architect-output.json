@@ -1,0 +1,39 @@
+{
+  "step_anchor": "#step-1",
+  "approach": "Update the implementer SKILL.md to remove the incorrect per-step beads sync pattern and replace it with reading bead IDs from session metadata. The setup agent already provides bead_mapping in its output (this was added in step-0), so the implementer skill needs to: (1) store that bead_mapping in session metadata.json, (2) remove the incorrect --step flag references, (3) read bead IDs from metadata when invoking the committer agent.",
+  "expected_touch_set": [
+    "/Users/kocienda/Mounts/u/src/specks/skills/implementer/SKILL.md"
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "description": "Update the metadata.json schema in section 3 to include root_bead and bead_mapping fields.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/skills/implementer/SKILL.md"]
+    },
+    {
+      "order": 2,
+      "description": "Update section 4a (Step Preparation) to remove the incorrect beads sync command and replace with reading bead ID from metadata.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/skills/implementer/SKILL.md"]
+    },
+    {
+      "order": 3,
+      "description": "Update section 4h (Spawn Committer) to clarify that bead_id comes from metadata.bead_mapping[step_anchor].",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/skills/implementer/SKILL.md"]
+    },
+    {
+      "order": 4,
+      "description": "Update the Reference: Beads Integration section to remove the --step flag from sync command and clarify sync is handled at session start.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/skills/implementer/SKILL.md"]
+    },
+    {
+      "order": 5,
+      "description": "Update the orchestration loop diagram to reflect that beads sync is now handled by setup-agent.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/skills/implementer/SKILL.md"]
+    }
+  ],
+  "test_plan": "Run the checkpoint commands from the speck: (1) `! grep -q \"\\-\\-step\" skills/implementer/SKILL.md` to verify no --step flag remains, (2) `grep -q \"bead_mapping\\[step_anchor\\]\" skills/implementer/SKILL.md` to verify the new metadata access pattern is documented.",
+  "risks": [
+    "The orchestration loop ASCII diagram at the top of the file also references beads sync in the per-step loop - this should be updated for consistency but is not explicitly called out in the speck tasks.",
+    "The implementer skill is documentation (markdown), not code, so there is no automated test suite - verification is via grep checkpoints only."
+  ]
+}

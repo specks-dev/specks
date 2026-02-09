@@ -1,0 +1,45 @@
+{
+  "step_anchor": "#step-0",
+  "approach": "Update the implementer-setup-agent to perform beads sync during initialization (Phase 1) and extract bead IDs from the speck file after sync. Add a new Phase 4b for bead ID extraction. Update the output contract to include a 'beads' object with sync_performed, root_bead, and bead_mapping fields. Add validation to ensure all steps have bead IDs before returning status: ready.",
+  "expected_touch_set": [
+    "/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "description": "Add beads sync call to Phase 1 (Prerequisites Check) after the beads availability check (after line 107). The sync command should be: `specks beads sync <speck_path>`. Capture the output to verify success.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"]
+    },
+    {
+      "order": 2,
+      "description": "Update the Output Contract section (lines 44-83) to add a 'beads' object inside the response structure. The beads object should contain: sync_performed (boolean), root_bead (string, from Beads Root in Plan Metadata), and bead_mapping (object mapping step anchors like '#step-0' to bead IDs like 'specks-v0r.1').",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"]
+    },
+    {
+      "order": 3,
+      "description": "Add a new Phase 4b: Extract Bead IDs from Speck after Phase 3 (Determine State). This phase should: (1) Re-read the speck file after sync to get updated content, (2) Extract Beads Root from Plan Metadata table, (3) For each step in all_steps, extract the bead ID using regex pattern `\\*\\*Bead:\\*\\*\\s*`([^`]+)`` from the step block, (4) Build bead_mapping object.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"]
+    },
+    {
+      "order": 4,
+      "description": "Add validation in Phase 6 (Validate) to check that all steps have bead IDs. If any step in all_steps lacks a corresponding entry in bead_mapping, add a validation issue with type 'missing_bead_id' and set blocking to true.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"]
+    },
+    {
+      "order": 5,
+      "description": "Update Phase 7 (Determine Output Status) to return status: 'error' if any step is missing a bead ID after sync. Include a clear error message identifying which steps lack beads.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"]
+    },
+    {
+      "order": 6,
+      "description": "Update the examples (lines 265-357) to include the new 'beads' object in example output. At minimum, Example 2 (status: ready) should show the beads field with realistic values.",
+      "files": ["/Users/kocienda/Mounts/u/src/specks/agents/implementer-setup-agent.md"]
+    }
+  ],
+  "test_plan": "Run the checkpoint commands specified in the speck: (1) `grep -q 'beads sync' agents/implementer-setup-agent.md` should succeed, (2) `grep -q 'bead_mapping' agents/implementer-setup-agent.md` should succeed. Additionally verify the file structure is valid markdown and the output contract JSON example is valid.",
+  "risks": [
+    "The regex pattern for extracting bead IDs from step blocks must handle the markdown context correctly - bead lines appear within step sections, not at top level",
+    "Phase numbering may shift - adding Phase 4b between existing phases requires careful renumbering or using 4b designation to avoid confusion",
+    "The beads object needs to be included consistently in all example outputs that show status: ready"
+  ]
+}

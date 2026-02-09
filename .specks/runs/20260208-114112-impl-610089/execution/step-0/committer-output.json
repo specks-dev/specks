@@ -1,0 +1,11 @@
+{
+  "commit_message": "feat(specks): add worktree and step-artifacts entries to gitignore",
+  "files_staged": [".gitignore", ".specks/specks-implementation-log.md"],
+  "committed": false,
+  "commit_hash": null,
+  "bead_closed": false,
+  "bead_id": "specks-dff.1",
+  "aborted": false,
+  "reason": null,
+  "warnings": ["Manual policy: staged files only, awaiting user commit"]
+}

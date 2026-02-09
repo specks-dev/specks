@@ -1,0 +1,20 @@
+{
+  "commit_message": "docs(agents): update input contracts for worktree integration\n\nUpdate all 7 implementation agents with:\n- worktree_path field in input contracts\n- Path prefixing requirements ({worktree_path}/{relative_path})\n- No-persistent-cd rule for all agents\n- implementer-setup-agent: worktree creation, beads sync, bead commit\n- committer-agent: dual-mode operation (commit/publish) per Spec S04\n- needs_reconcile semantics per D10",
+  "files_staged": [
+    "agents/implementer-setup-agent.md",
+    "agents/architect-agent.md",
+    "agents/coder-agent.md",
+    "agents/reviewer-agent.md",
+    "agents/auditor-agent.md",
+    "agents/logger-agent.md",
+    "agents/committer-agent.md",
+    ".specks/specks-implementation-log.md"
+  ],
+  "committed": false,
+  "commit_hash": null,
+  "bead_closed": false,
+  "bead_id": "specks-dff.5",
+  "aborted": false,
+  "reason": null,
+  "warnings": ["Manual policy: staged files only, awaiting user commit"]
+}

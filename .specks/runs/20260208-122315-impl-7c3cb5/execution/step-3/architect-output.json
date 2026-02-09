@@ -1,0 +1,38 @@
+{
+  "step_anchor": "#step-3",
+  "approach": "Create a new worktree CLI module following the pattern of the beads subcommand, implementing three sub-subcommands (create, list, cleanup). The worktree commands will wrap the core library functions and handle CLI argument parsing, output formatting (text and JSON), and exit codes per Table T02.",
+  "expected_touch_set": [
+    "crates/specks/src/commands/worktree.rs",
+    "crates/specks/src/commands/mod.rs",
+    "crates/specks/src/cli.rs",
+    "crates/specks/src/main.rs"
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "description": "Create worktree.rs with WorktreeCommands enum (Create, List, Cleanup), output structs, and run functions calling specks_core::worktree functions"
+    },
+    {
+      "order": 2,
+      "description": "Update commands/mod.rs to export worktree module"
+    },
+    {
+      "order": 3,
+      "description": "Update cli.rs to add Worktree variant to Commands enum"
+    },
+    {
+      "order": 4,
+      "description": "Update main.rs to handle Commands::Worktree"
+    },
+    {
+      "order": 5,
+      "description": "Add integration tests for worktree commands"
+    }
+  ],
+  "test_plan": "Run cargo build -p specks, specks worktree --help, cargo nextest run -p specks worktree",
+  "risks": [
+    "Integration tests require git repository setup",
+    "Exit codes must match Table T02",
+    "Create command needs valid speck with execution steps"
+  ]
+}
