@@ -51,6 +51,30 @@ All file verification must use absolute paths prefixed with `worktree_path`:
 
 **CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present (`plan_conformance`, `tests_match_plan`, `artifacts_produced`, `issues`, `drift_notes`, `audit_categories`, `recommendation`)
+3. **Verify field types**: Each field must match the expected type
+4. **Validate plan_conformance**: Must include `tasks`, `checkpoints`, and `decisions` arrays (empty arrays are valid)
+5. **Validate audit_categories**: Must include `structure`, `error_handling`, and `security` fields with values PASS/WARN/FAIL
+6. **Validate recommendation**: Must be one of APPROVE, REVISE, or ESCALATE
+
+**If validation fails**: Return a minimal escalation response:
+```json
+{
+  "plan_conformance": {"tasks": [], "checkpoints": [], "decisions": []},
+  "tests_match_plan": false,
+  "artifacts_produced": false,
+  "issues": [{"type": "conceptual", "description": "JSON validation failed: <specific error>", "severity": "critical", "file": null}],
+  "drift_notes": null,
+  "audit_categories": {"structure": "PASS", "error_handling": "PASS", "security": "PASS"},
+  "recommendation": "ESCALATE"
+}
+```
+
 ## Output Contract
 
 Return structured JSON:

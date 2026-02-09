@@ -57,6 +57,35 @@ Git operations must use `git -C {worktree_path}`:
 
 **CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present (`success`, `halted_for_drift`, `files_created`, `files_modified`, `tests_run`, `tests_passed`, `drift_assessment`)
+3. **Verify field types**: Each field must match the expected type
+4. **Validate drift_assessment**: This field is MANDATORY and must include all sub-fields (`drift_severity`, `expected_files`, `actual_changes`, `unexpected_changes`, `drift_budget`, `qualitative_assessment`)
+
+**If validation fails**: Return a minimal valid response:
+```json
+{
+  "success": false,
+  "halted_for_drift": false,
+  "files_created": [],
+  "files_modified": [],
+  "tests_run": false,
+  "tests_passed": false,
+  "drift_assessment": {
+    "drift_severity": "none",
+    "expected_files": [],
+    "actual_changes": [],
+    "unexpected_changes": [],
+    "drift_budget": {"yellow_used": 0, "yellow_max": 4, "red_used": 0, "red_max": 2},
+    "qualitative_assessment": "JSON validation failed: <specific error>"
+  }
+}
+```
+
 ## Output Contract
 
 Return structured JSON:
@@ -172,6 +201,13 @@ Note: Test commands typically don't support `-C` flags, so `cd {worktree_path} &
 7. **Stay within the worktree**: All commands must run inside `{worktree_path}`. Do NOT create directories in `/tmp` or run commands outside the worktree.
 
 8. **No manual verification outside test suite**: When the architect's test_plan mentions "manually test", implement that as a proper integration test instead. Do NOT run ad-hoc verification commands — rely on the project's test suite.
+
+9. **No exploratory testing outside the worktree**: If you need to understand how an external tool behaves (e.g., `git status --porcelain` output format), either:
+   - Read the tool's documentation (`man git-status`, `--help`, official docs)
+   - Write a proper test in the project's test suite that captures the expected behavior
+   - NEVER create throwaway scripts or test directories in `/tmp` to "try things out"
+
+   Exploratory ad-hoc testing creates technical debt (no captured knowledge) and violates the worktree isolation principle.
 
 ## Example Workflow
 

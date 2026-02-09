@@ -48,6 +48,35 @@ This agent creates worktrees and performs git operations. All git commands must 
 
 ---
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present (`status`, `worktree_path`, `branch_name`, `base_branch`, `prerequisites`, `state`, `intent`, `resolved_steps`, `validation`, `beads`, `beads_committed`, `clarification_needed`, `error`)
+3. **Verify field types**: Each field must match the expected type
+4. **Validate nested objects**: `prerequisites`, `state`, `intent`, `validation`, and `beads` must include all required sub-fields
+5. **Validate status**: Must be one of "ready", "needs_clarification", or "error"
+
+**If validation fails**: Return an error response:
+```json
+{
+  "status": "error",
+  "worktree_path": null,
+  "branch_name": null,
+  "base_branch": null,
+  "prerequisites": {"specks_initialized": false, "beads_available": false, "error": "JSON validation failed: <specific error>"},
+  "state": {"all_steps": [], "completed_steps": [], "remaining_steps": [], "next_step": null, "total_count": 0, "completed_count": 0, "remaining_count": 0},
+  "intent": {"parsed_as": "ambiguous", "raw_input": null},
+  "resolved_steps": null,
+  "validation": {"valid": false, "issues": []},
+  "beads": {"sync_performed": false, "root_bead": null, "bead_mapping": {}},
+  "beads_committed": false,
+  "clarification_needed": null,
+  "error": "JSON validation failed: <specific error>"
+}
+```
+
 ## Output Contract
 
 Return structured JSON:

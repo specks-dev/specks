@@ -34,6 +34,45 @@ You receive a JSON payload:
 | `speck_path` | Path to the speck to review |
 | `skeleton_path` | Path to skeleton (always `.specks/specks-skeleton.md`) |
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present (`skeleton_compliant`, `skeleton_check`, `areas`, `issues`, `recommendation`)
+3. **Verify field types**: Each field must match the expected type
+4. **Validate skeleton_check**: Must include all boolean fields and `violations` array
+5. **Validate areas**: Each area must have value PASS, WARN, or FAIL
+6. **Validate recommendation**: Must be one of APPROVE, REVISE, or REJECT
+
+**If validation fails**: Return a rejection response:
+```json
+{
+  "skeleton_compliant": false,
+  "skeleton_check": {
+    "has_required_sections": false,
+    "has_explicit_anchors": false,
+    "steps_properly_formatted": false,
+    "references_valid": false,
+    "decisions_formatted": false,
+    "violations": ["JSON validation failed: <specific error>"]
+  },
+  "areas": {
+    "completeness": "FAIL",
+    "implementability": "FAIL",
+    "sequencing": "FAIL"
+  },
+  "issues": [
+    {
+      "priority": "P0",
+      "category": "skeleton",
+      "description": "JSON validation failed: <specific error>"
+    }
+  ],
+  "recommendation": "REJECT"
+}
+```
+
 ## Output Contract
 
 Return structured JSON:

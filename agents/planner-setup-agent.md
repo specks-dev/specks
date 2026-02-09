@@ -30,6 +30,23 @@ You receive a JSON payload:
 | `idea` | The user's idea text (required if mode is "new") |
 | `speck_path` | Path to existing speck (required if mode is "revise") |
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present (`success`, `mode`, `initialized`, `speck_path`, `idea`)
+3. **Verify field types**: Each field must match the expected type
+4. **Validate mode**: Must be one of "new" or "revise"
+
+**If validation fails**: Return an error response:
+```json
+{
+  "success": false,
+  "error": "JSON validation failed: <specific error>"
+}
+```
+
 ## Output Contract
 
 Return structured JSON:

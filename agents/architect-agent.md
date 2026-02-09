@@ -47,6 +47,27 @@ All file operations must use absolute paths prefixed with `worktree_path`:
 
 **CRITICAL: Never rely on persistent `cd` state between commands.** Shell working directory does not persist between tool calls. If a tool lacks `-C` or path arguments, you may use `cd {worktree_path} && <cmd>` within a single command invocation only.
 
+## JSON Validation Requirements
+
+Before returning your response, you MUST validate that your JSON output conforms to the contract:
+
+1. **Parse your JSON**: Verify it is valid JSON with no syntax errors
+2. **Check required fields**: All fields in the output contract must be present
+3. **Verify field types**: Each field must match the expected type (string, array, object, boolean)
+4. **Validate structure**: Nested objects must have all required sub-fields
+
+**If validation fails**: Return an error response with this structure:
+```json
+{
+  "step_anchor": "#step-N",
+  "approach": "",
+  "expected_touch_set": [],
+  "implementation_steps": [],
+  "test_plan": "",
+  "risks": ["JSON validation failed: <specific error>"]
+}
+```
+
 ## Output Contract
 
 Return structured JSON:

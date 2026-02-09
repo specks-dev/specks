@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 
-use crate::commands::{BeadsCommands, WorktreeCommands};
+use crate::commands::{BeadsCommands, LogCommands, WorktreeCommands};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -110,6 +110,23 @@ pub enum Commands {
         long_about = "Worktree commands for isolated implementation environments.\n\nProvides git worktree integration for speck implementations:\n  - Each speck gets its own branch and worktree\n  - Isolated working directory prevents conflicts\n  - Clean up merged worktrees after PR completion\n\nSubcommands:\n  create  Create worktree and branch for a speck (optionally sync beads)\n  list    Show all active worktrees\n  cleanup Remove worktrees for merged branches\n\nTypical workflow:\n  1. specks worktree create .specks/specks-auth.md --sync-beads\n  2. (implement in worktree, create PR, merge)\n  3. specks worktree cleanup --merged"
     )]
     Worktree(WorktreeCommands),
+
+    /// Log management commands
+    ///
+    /// Rotate and prepend entries to the implementation log.
+    #[command(
+        subcommand,
+        long_about = "Log management commands.\n\nProvides log rotation and prepend functionality:\n  - Rotate: Archive logs exceeding size thresholds\n  - Prepend: Add new entries atomically\n\nSubcommands:\n  rotate  Archive log when over 500 lines or 100KB\n  prepend Add entry to log atomically\n\nTypical workflow:\n  1. specks log rotate  # Manual rotation\n  2. (automatic rotation happens via beads close and committer)"
+    )]
+    Log(LogCommands),
+
+    /// Health checks for specks project
+    ///
+    /// Verify initialization, log size, worktrees, and references.
+    #[command(
+        long_about = "Health checks for specks project.\n\nRuns checks:\n  - initialized: Verify .specks/ exists with required files\n  - log_size: Check implementation log within thresholds\n  - worktrees: Verify worktree paths are valid\n  - broken_refs: Check for broken anchor references\n\nExit codes:\n  0 - All checks passed\n  1 - Some checks have warnings\n  2 - Some checks failed\n\nUse --json for machine-readable output."
+    )]
+    Doctor,
 
     /// Merge a speck's PR and clean up worktree
     ///
@@ -408,6 +425,180 @@ mod tests {
                 assert!(force);
             }
             _ => panic!("Expected Merge command"),
+        }
+    }
+
+    #[test]
+    fn test_log_rotate_command() {
+        let cli = Cli::try_parse_from(["specks", "log", "rotate"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Log(log_cmd)) => match log_cmd {
+                LogCommands::Rotate { force } => {
+                    assert!(!force);
+                }
+                _ => panic!("Expected Log Rotate command"),
+            },
+            _ => panic!("Expected Log command"),
+        }
+    }
+
+    #[test]
+    fn test_log_rotate_command_with_force() {
+        let cli = Cli::try_parse_from(["specks", "log", "rotate", "--force"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Log(log_cmd)) => match log_cmd {
+                LogCommands::Rotate { force } => {
+                    assert!(force);
+                }
+                _ => panic!("Expected Log Rotate command"),
+            },
+            _ => panic!("Expected Log command"),
+        }
+    }
+
+    #[test]
+    fn test_log_prepend_command() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "log",
+            "prepend",
+            "--step",
+            "#step-0",
+            "--speck",
+            ".specks/specks-13.md",
+            "--summary",
+            "Completed step 0",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::Log(log_cmd)) => match log_cmd {
+                LogCommands::Prepend {
+                    step,
+                    speck,
+                    summary,
+                    bead,
+                } => {
+                    assert_eq!(step, "#step-0");
+                    assert_eq!(speck, ".specks/specks-13.md");
+                    assert_eq!(summary, "Completed step 0");
+                    assert!(bead.is_none());
+                }
+                _ => panic!("Expected Log Prepend command"),
+            },
+            _ => panic!("Expected Log command"),
+        }
+    }
+
+    #[test]
+    fn test_log_prepend_command_with_bead() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "log",
+            "prepend",
+            "--step",
+            "#step-0",
+            "--speck",
+            ".specks/specks-13.md",
+            "--summary",
+            "Completed step 0",
+            "--bead",
+            "bd-abc123",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::Log(log_cmd)) => match log_cmd {
+                LogCommands::Prepend {
+                    step,
+                    speck,
+                    summary,
+                    bead,
+                } => {
+                    assert_eq!(step, "#step-0");
+                    assert_eq!(speck, ".specks/specks-13.md");
+                    assert_eq!(summary, "Completed step 0");
+                    assert_eq!(bead, Some("bd-abc123".to_string()));
+                }
+                _ => panic!("Expected Log Prepend command"),
+            },
+            _ => panic!("Expected Log command"),
+        }
+    }
+
+    #[test]
+    fn test_log_rotate_with_json_flag() {
+        let cli = Cli::try_parse_from(["specks", "--json", "log", "rotate"]).unwrap();
+
+        assert!(cli.json);
+        match cli.command {
+            Some(Commands::Log(log_cmd)) => match log_cmd {
+                LogCommands::Rotate { force } => {
+                    assert!(!force);
+                }
+                _ => panic!("Expected Log Rotate command"),
+            },
+            _ => panic!("Expected Log command"),
+        }
+    }
+
+    #[test]
+    fn test_log_prepend_with_quiet_flag() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "--quiet",
+            "log",
+            "prepend",
+            "--step",
+            "#step-0",
+            "--speck",
+            ".specks/specks-1.md",
+            "--summary",
+            "Done",
+        ])
+        .unwrap();
+
+        assert!(cli.quiet);
+        match cli.command {
+            Some(Commands::Log(log_cmd)) => match log_cmd {
+                LogCommands::Prepend { .. } => {}
+                _ => panic!("Expected Log Prepend command"),
+            },
+            _ => panic!("Expected Log command"),
+        }
+    }
+
+    #[test]
+    fn test_doctor_command() {
+        let cli = Cli::try_parse_from(["specks", "doctor"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Doctor) => {}
+            _ => panic!("Expected Doctor command"),
+        }
+    }
+
+    #[test]
+    fn test_doctor_with_json_flag() {
+        let cli = Cli::try_parse_from(["specks", "--json", "doctor"]).unwrap();
+
+        assert!(cli.json);
+        match cli.command {
+            Some(Commands::Doctor) => {}
+            _ => panic!("Expected Doctor command"),
+        }
+    }
+
+    #[test]
+    fn test_doctor_with_quiet_flag() {
+        let cli = Cli::try_parse_from(["specks", "--quiet", "doctor"]).unwrap();
+
+        assert!(cli.quiet);
+        match cli.command {
+            Some(Commands::Doctor) => {}
+            _ => panic!("Expected Doctor command"),
         }
     }
 }

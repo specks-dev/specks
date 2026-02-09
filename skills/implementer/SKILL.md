@@ -409,6 +409,116 @@ specks beads close <bead_id> --reason "<reason>"
 
 ---
 
+## JSON Validation and Error Handling
+
+### Agent Output Validation
+
+All agents must return valid JSON conforming to their contracts. When you receive an agent response:
+
+1. **Parse the JSON**: Attempt to parse the response as JSON
+2. **Validate required fields**: Check that all required fields are present
+3. **Verify field types**: Ensure fields match expected types
+4. **Check enum values**: Validate that status/recommendation fields have valid values
+
+**Example validation patterns:**
+
+**Architect validation:**
+```json
+{
+  "step_anchor": string (required),
+  "approach": string (required),
+  "expected_touch_set": array of strings (required),
+  "implementation_steps": array of objects (required),
+  "test_plan": string (required),
+  "risks": array of strings (required)
+}
+```
+
+**Coder validation:**
+```json
+{
+  "success": boolean (required),
+  "halted_for_drift": boolean (required),
+  "files_created": array (required),
+  "files_modified": array (required),
+  "tests_run": boolean (required),
+  "tests_passed": boolean (required),
+  "drift_assessment": {
+    "drift_severity": enum (required: "none", "minor", "moderate", "major"),
+    "expected_files": array (required),
+    "actual_changes": array (required),
+    "unexpected_changes": array (required),
+    "drift_budget": object (required),
+    "qualitative_assessment": string (required)
+  }
+}
+```
+
+**Reviewer validation:**
+```json
+{
+  "plan_conformance": object (required),
+  "tests_match_plan": boolean (required),
+  "artifacts_produced": boolean (required),
+  "issues": array (required),
+  "drift_notes": string or null (required),
+  "audit_categories": {
+    "structure": enum (required: "PASS", "WARN", "FAIL"),
+    "error_handling": enum (required: "PASS", "WARN", "FAIL"),
+    "security": enum (required: "PASS", "WARN", "FAIL")
+  },
+  "recommendation": enum (required: "APPROVE", "REVISE", "ESCALATE")
+}
+```
+
+**Committer validation (commit mode):**
+```json
+{
+  "operation": "commit" (required),
+  "commit_message": string (required),
+  "files_staged": array (required),
+  "committed": boolean (required),
+  "commit_hash": string or null (required),
+  "bead_closed": boolean (required),
+  "bead_id": string or null (required),
+  "log_updated": boolean (required),
+  "log_entry_added": object or null (required),
+  "log_rotated": boolean (required),
+  "archived_path": string or null (required),
+  "needs_reconcile": boolean (required),
+  "aborted": boolean (required),
+  "reason": string or null (required),
+  "warnings": array (required)
+}
+```
+
+### Handling Validation Failures
+
+If an agent returns invalid JSON or missing required fields:
+
+1. **Write to error.json**: Document the validation failure in `{worktree_path}/.specks/error.json`
+2. **Update session status**: Set `status: "failed"` in session.json
+3. **Halt execution**: Report the validation failure to the user
+4. **Include raw output**: Preserve the agent's raw output for debugging
+
+**Do NOT:**
+- Attempt to "fix" the JSON yourself
+- Retry the agent automatically
+- Continue with partial/invalid data
+- Guess at missing field values
+
+### Common Validation Errors
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| Parse error | Invalid JSON syntax | Agent returned malformed JSON - halt and report |
+| Missing field | Required field absent | Agent contract violation - halt and report |
+| Wrong type | Field has unexpected type | Agent contract violation - halt and report |
+| Invalid enum | Status/recommendation not in allowed set | Agent contract violation - halt and report |
+| Missing nested field | Required sub-field absent | Agent contract violation - halt and report |
+
+---
+
 ## Error Handling
 
 If Task tool fails or returns unparseable JSON:
