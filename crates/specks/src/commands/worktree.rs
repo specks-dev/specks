@@ -269,6 +269,7 @@ pub fn run_worktree_create(
         speck_path: speck_path.clone(),
         base_branch: base,
         repo_root: repo_root.clone(),
+        reuse_existing: false,
     };
 
     match create_worktree(&config) {
@@ -663,6 +664,7 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
+            reuse_existing: false,
         };
 
         let result = create_worktree(&config);
@@ -691,6 +693,7 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
+            reuse_existing: false,
         };
 
         // Create a worktree
@@ -712,6 +715,7 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
+            reuse_existing: false,
         };
 
         // Create a worktree

@@ -59,6 +59,9 @@ pub struct Session {
     pub total_steps: usize,
     /// Root bead ID if beads are synced
     pub beads_root: Option<String>,
+    /// True if this session was reused from an existing worktree
+    #[serde(default)]
+    pub reused: bool,
 }
 
 /// Generate ISO 8601 timestamp in UTC
@@ -340,6 +343,7 @@ mod tests {
             current_step: 2,
             total_steps: 5,
             beads_root: Some("bd-abc123".to_string()),
+            reused: false,
         };
 
         let json = serde_json::to_string_pretty(&session).unwrap();
@@ -408,6 +412,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         // Create worktree directory and internal .specks dir
@@ -452,6 +457,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         // Create worktree directory
@@ -497,6 +503,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         // Create worktree directory and internal .specks dir
@@ -539,6 +546,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         // Create worktree directory
@@ -585,6 +593,7 @@ mod tests {
             current_step: 2,
             total_steps: 3,
             beads_root: Some("bd-external".to_string()),
+            reused: false,
         };
 
         // Create a different session for internal storage
@@ -600,6 +609,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: Some("bd-internal".to_string()),
+            reused: false,
         };
 
         // Create worktree directory and internal .specks dir
@@ -807,6 +817,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         // Create worktree directory
@@ -922,6 +933,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         // Create worktree directory

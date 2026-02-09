@@ -9,6 +9,22 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-4
+date: 2026-02-09T19:10:00Z
+bead: specks-tyo.5
+---
+
+## #step-4: Added reuse_existing flag to WorktreeConfig for idempotent worktree creation, prefers most recent worktree by timestamp. Added reused field to Session for output reporting.
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+- crates/specks-core/src/worktree.rs
+- crates/specks/src/commands/merge.rs
+- crates/specks/src/commands/worktree.rs
+
+---
+
+---
 step: #step-3
 date: 2026-02-09T19:05:00Z
 bead: specks-tyo.4

@@ -1077,6 +1077,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1122,6 +1123,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1172,6 +1174,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1229,6 +1232,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
