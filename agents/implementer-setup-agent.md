@@ -151,6 +151,8 @@ Return structured JSON:
 
 **IMPORTANT:** This agent creates the worktree and commits bead annotations. All subsequent implementation work happens in this worktree.
 
+**Session and Artifact Storage:** Session files are stored externally at `.specks-worktrees/.sessions/<session-id>.json` (not inside the worktree). Step artifacts are stored at `.specks-worktrees/.artifacts/<session-id>/`. This keeps orchestration data outside git-managed worktrees for clean removal.
+
 **Step 0a: Check for existing worktree**
 
 Before creating a new worktree, check if one already exists for this speck:
@@ -170,7 +172,11 @@ Parse the JSON output and look for an entry where `speck_path` matches the input
    ```bash
    specks worktree create <speck_path>
    ```
-   This command creates the branch and worktree directory automatically. It will fail if a worktree already exists for this speck (exit code 3) or if the speck has no execution steps (exit code 8).
+   **Optional:** Use `--reuse-existing` flag for idempotent worktree creation:
+   ```bash
+   specks worktree create --reuse-existing <speck_path>
+   ```
+   This flag makes the command idempotent: if a worktree already exists for the speck, it returns the existing worktree instead of failing. The command creates the branch and worktree directory automatically. It will fail if a worktree already exists for this speck (exit code 3, unless `--reuse-existing` is used) or if the speck has no execution steps (exit code 8).
 
 2. Parse the CLI output to extract:
    - Worktree path (absolute)
@@ -180,6 +186,8 @@ Parse the JSON output and look for an entry where `speck_path` matches the input
 3. If worktree creation fails, return `status: "error"` with appropriate error message.
 
 ### Phase 1: Prerequisites Check
+
+**Note:** Session files are stored externally at `.specks-worktrees/.sessions/<session-id>.json`, where `<session-id>` is derived from the worktree directory name (e.g., worktree `specks__auth-20260208-143022` → session ID `auth-20260208-143022`). This keeps orchestration data outside the git-managed worktree for clean removal.
 
 1. Check if specks is initialized (in repo root):
    ```bash

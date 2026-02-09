@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-7
+date: 2026-02-10T01:40:00Z
+bead: specks-tyo.8
+---
+
+## #step-7: Updated implementer-setup-agent documentation to reflect external session storage at .specks-worktrees/.sessions/ and added documentation for --reuse-existing flag for idempotent worktree creation.
+
+**Files changed:**
+- agents/implementer-setup-agent.md
+
+---
+
+---
 step: #step-6
 date: 2026-02-10T01:35:00Z
 bead: specks-tyo.7
