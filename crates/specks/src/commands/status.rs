@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 
 use specks_core::{Speck, find_project_root, parse_speck, speck_name_from_path};
 
-use crate::output::{JsonIssue, JsonResponse, Progress, StatusData, StepInfo, StepStatus, SubstepStatus};
+use crate::output::{
+    JsonIssue, JsonResponse, Progress, StatusData, StepInfo, StepStatus, SubstepStatus,
+};
 
 /// Run the status command
 pub fn run_status(
@@ -286,10 +288,8 @@ fn build_status_data(speck: &Speck, name: &str) -> StatusData {
         .collect();
 
     // Remaining steps are those not in completed_steps
-    let completed_anchors: std::collections::HashSet<String> = completed_steps
-        .iter()
-        .map(|s| s.anchor.clone())
-        .collect();
+    let completed_anchors: std::collections::HashSet<String> =
+        completed_steps.iter().map(|s| s.anchor.clone()).collect();
 
     let remaining_steps: Vec<StepInfo> = all_steps
         .iter()
@@ -305,9 +305,9 @@ fn build_status_data(speck: &Speck, name: &str) -> StatusData {
         .steps
         .iter()
         .filter_map(|step| {
-            step.bead_id.as_ref().map(|bead_id| {
-                (format!("#{}", step.anchor), bead_id.clone())
-            })
+            step.bead_id
+                .as_ref()
+                .map(|bead_id| (format!("#{}", step.anchor), bead_id.clone()))
         })
         .collect();
 

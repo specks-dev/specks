@@ -84,11 +84,7 @@ pub fn run_init_check(json_output: bool) -> Result<i32, String> {
     }
 
     // Return exit code 0 if initialized, 9 (E009) if not
-    if initialized {
-        Ok(0)
-    } else {
-        Ok(9)
-    }
+    if initialized { Ok(0) } else { Ok(9) }
 }
 
 /// Run the init command

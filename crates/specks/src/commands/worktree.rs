@@ -95,10 +95,13 @@ pub struct CleanupData {
 fn sync_beads_in_worktree(
     worktree_path: &Path,
     speck_path: &str,
-) -> Result<(std::collections::HashMap<String, String>, Option<String>), specks_core::error::SpecksError> {
-    use std::process::Command;
+) -> Result<
+    (std::collections::HashMap<String, String>, Option<String>),
+    specks_core::error::SpecksError,
+> {
     use crate::commands::beads::sync::SyncData;
     use crate::output::JsonResponse;
+    use std::process::Command;
 
     // Run specks beads sync in the worktree
     let output = Command::new(std::env::current_exe().map_err(|e| {
@@ -542,8 +545,8 @@ mod tests {
 
     #[test]
     fn test_worktree_create_help_includes_sync_beads() {
-        use clap::CommandFactory;
         use crate::cli::Cli;
+        use clap::CommandFactory;
 
         let app = Cli::command();
         let worktree_subcommand = app
@@ -567,7 +570,8 @@ mod tests {
             "create help should document --sync-beads flag"
         );
         assert!(
-            long_about.to_string().contains("atomically") || long_about.to_string().contains("rollback"),
+            long_about.to_string().contains("atomically")
+                || long_about.to_string().contains("rollback"),
             "create help should explain atomic behavior"
         );
     }

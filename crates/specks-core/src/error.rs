@@ -309,8 +309,8 @@ impl SpecksError {
             SpecksError::SpeckHasNoSteps => 8,           // Speck has no steps (exit code 8 per T02)
             SpecksError::WorktreeCreationFailed { .. } => 1, // Worktree creation failed
             SpecksError::WorktreeCleanupFailed { .. } => 1, // Worktree cleanup failed
-            SpecksError::BeadsSyncFailed { .. } => 10,       // Beads sync failed (exit code 10 per S02)
-            SpecksError::BeadCommitFailed { .. } => 11,      // Bead commit failed (exit code 11 per S02)
+            SpecksError::BeadsSyncFailed { .. } => 10,   // Beads sync failed (exit code 10 per S02)
+            SpecksError::BeadCommitFailed { .. } => 11, // Bead commit failed (exit code 11 per S02)
         }
     }
 }

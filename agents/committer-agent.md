@@ -390,6 +390,8 @@ This approach:
 
 5. **HALT on critical failures**: If bead close fails after commit, set `needs_reconcile: true` and `aborted: true`.
 
+6. **No AI attribution**: NEVER include Co-Authored-By lines or any AI/agent attribution in commit messages.
+
 ### Publish Mode
 
 1. **Check authentication first**: Run `gh auth status` before attempting PR creation. If it fails, return error immediately.
