@@ -6,6 +6,90 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+---
+step: #step-3
+date: 2026-02-08T19:25:00Z
+bead: specks-0yy.4
+speck: .specks/specks-11.md
+---
+
+## [specks-11.md] Step 3: Document E035/E036 error codes and add help text verification tests | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08T19:25:00Z
+
+**Summary:** Document E035/E036 error codes and add help text verification tests
+
+**Files Changed:**
+- CLAUDE.md
+- README.md
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/worktree.rs
+
+**Bead:** specks-0yy.4
+
+---
+step: #step-2
+date: 2026-02-09T03:00:03Z
+bead: specks-0yy.3
+speck: .specks/specks-11.md
+---
+
+## [specks-11.md] Step 2: Add --sync-beads flag to specks worktree create for atomic bead sync and commit with rollback on failure | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T03:00:03Z
+
+**Summary:** Add --sync-beads flag to specks worktree create for atomic bead sync and commit with rollback on failure
+
+**Files Changed:**
+- crates/specks-core/src/error.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/commands/beads/sync.rs
+- crates/specks/src/main.rs
+
+**Bead:** specks-0yy.3
+
+---
+step: #step-1
+date: 2026-02-09T03:00:03Z
+bead: specks-0yy.2
+speck: .specks/specks-11.md
+---
+
+## [specks-11.md] Step 1: Extend specks status --json with step state fields for implementer agents | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T03:00:03Z
+
+**Summary:** Extend specks status --json with step state fields for implementer agents
+
+**Files Changed:**
+- crates/specks/src/output.rs
+- crates/specks/src/commands/status.rs
+
+**Bead:** specks-0yy.2
+
+---
+step: #step-0
+date: 2026-02-09T03:00:03Z
+bead: specks-0yy.1
+speck: .specks/specks-11.md
+---
+
+## [specks-11.md] Step 0: Add --check flag to specks init for lightweight initialization verification | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T03:00:03Z
+
+**Summary:** Add --check flag to specks init for lightweight initialization verification
+
+**Files Changed:**
+- crates/specks/src/output.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/init.rs
+- crates/specks/src/main.rs
+- crates/specks/tests/cli_integration_tests.rs
+
+**Bead:** specks-0yy.1
+
 ## [specks-10.md] Step 4: Delete Obsolete Agent Files | COMPLETE | 2026-02-09
 
 **Completed:** 2026-02-09

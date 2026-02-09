@@ -14,7 +14,9 @@ fn main() -> ExitCode {
     let cli = cli::parse();
 
     let result = match cli.command {
-        Some(Commands::Init { force }) => commands::run_init(force, cli.json, cli.quiet),
+        Some(Commands::Init { force, check }) => {
+            commands::run_init(force, check, cli.json, cli.quiet)
+        }
         Some(Commands::Validate { file, strict }) => {
             commands::run_validate(file, strict, cli.json, cli.quiet)
         }
@@ -58,8 +60,8 @@ fn main() -> ExitCode {
             }
         },
         Some(Commands::Worktree(worktree_cmd)) => match worktree_cmd {
-            WorktreeCommands::Create { speck, base } => {
-                commands::run_worktree_create(speck, base, cli.json, cli.quiet)
+            WorktreeCommands::Create { speck, base, sync_beads } => {
+                commands::run_worktree_create(speck, base, sync_beads, cli.json, cli.quiet)
             }
             WorktreeCommands::List => commands::run_worktree_list(cli.json, cli.quiet),
             WorktreeCommands::Cleanup { merged, dry_run } => {

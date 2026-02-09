@@ -39,12 +39,16 @@ pub enum Commands {
     /// Creates .specks/ directory with skeleton template and config.
     /// Run this once in your project root to start using specks.
     #[command(
-        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Implementation progress tracking"
+        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Implementation progress tracking\n\nWith --check, performs a lightweight verification of initialization status without side effects."
     )]
     Init {
         /// Overwrite existing .specks directory
-        #[arg(long)]
+        #[arg(long, conflicts_with = "check")]
         force: bool,
+
+        /// Check if project is initialized (no side effects)
+        #[arg(long, conflicts_with = "force")]
+        check: bool,
     },
 
     /// Validate speck structure against format conventions
@@ -103,7 +107,7 @@ pub enum Commands {
     /// Create, list, and clean up git worktrees for speck implementations.
     #[command(
         subcommand,
-        long_about = "Worktree commands for isolated implementation environments.\n\nProvides git worktree integration for speck implementations:\n  - Each speck gets its own branch and worktree\n  - Isolated working directory prevents conflicts\n  - Clean up merged worktrees after PR completion\n\nSubcommands:\n  create  Create worktree and branch for a speck\n  list    Show all active worktrees\n  cleanup Remove worktrees for merged branches\n\nTypical workflow:\n  1. specks worktree create .specks/specks-auth.md\n  2. (implement in worktree, create PR, merge)\n  3. specks worktree cleanup --merged"
+        long_about = "Worktree commands for isolated implementation environments.\n\nProvides git worktree integration for speck implementations:\n  - Each speck gets its own branch and worktree\n  - Isolated working directory prevents conflicts\n  - Clean up merged worktrees after PR completion\n\nSubcommands:\n  create  Create worktree and branch for a speck (optionally sync beads)\n  list    Show all active worktrees\n  cleanup Remove worktrees for merged branches\n\nTypical workflow:\n  1. specks worktree create .specks/specks-auth.md --sync-beads\n  2. (implement in worktree, create PR, merge)\n  3. specks worktree cleanup --merged"
     )]
     Worktree(WorktreeCommands),
 
@@ -169,8 +173,9 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "init"]).unwrap();
 
         match cli.command {
-            Some(Commands::Init { force }) => {
+            Some(Commands::Init { force, check }) => {
                 assert!(!force);
+                assert!(!check);
             }
             _ => panic!("Expected Init command"),
         }
@@ -181,11 +186,34 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "init", "--force"]).unwrap();
 
         match cli.command {
-            Some(Commands::Init { force }) => {
+            Some(Commands::Init { force, check }) => {
                 assert!(force);
+                assert!(!check);
             }
             _ => panic!("Expected Init command"),
         }
+    }
+
+    #[test]
+    fn test_init_command_with_check() {
+        let cli = Cli::try_parse_from(["specks", "init", "--check"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Init { force, check }) => {
+                assert!(!force);
+                assert!(check);
+            }
+            _ => panic!("Expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_init_check_and_force_mutually_exclusive() {
+        let result = Cli::try_parse_from(["specks", "init", "--check", "--force"]);
+        assert!(
+            result.is_err(),
+            "--check and --force should be mutually exclusive"
+        );
     }
 
     #[test]
@@ -257,5 +285,29 @@ mod tests {
 
         assert!(cli.json);
         assert!(cli.quiet);
+    }
+
+    #[test]
+    fn test_init_help_includes_check_flag() {
+        use clap::CommandFactory;
+        let app = Cli::command();
+        let init_subcommand = app
+            .find_subcommand("init")
+            .expect("init subcommand should exist");
+
+        // Get the long_about text
+        let long_about = init_subcommand
+            .get_long_about()
+            .expect("init should have long_about");
+
+        // Verify --check flag is documented
+        assert!(
+            long_about.to_string().contains("--check"),
+            "init help should document --check flag"
+        );
+        assert!(
+            long_about.to_string().contains("without side effects"),
+            "init help should explain --check has no side effects"
+        );
     }
 }

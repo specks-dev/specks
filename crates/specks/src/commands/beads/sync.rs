@@ -9,7 +9,7 @@ use specks_core::{BeadsCli, Config, Speck, SpecksError, find_project_root, parse
 use crate::output::{JsonIssue, JsonResponse};
 
 /// Sync result data for JSON output
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct SyncData {
     pub file: String,
     pub root_bead_id: Option<String>,

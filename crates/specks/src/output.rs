@@ -110,6 +110,15 @@ pub struct InitData {
     pub files_created: Vec<String>,
 }
 
+/// Data payload for init --check command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InitCheckData {
+    /// Whether the project is initialized
+    pub initialized: bool,
+    /// Path to .specks directory
+    pub path: String,
+}
+
 /// Data payload for validate command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidateData {
@@ -170,6 +179,24 @@ pub struct StatusData {
     pub progress: Progress,
     /// Step-by-step status
     pub steps: Vec<StepStatus>,
+    /// All steps in the speck
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub all_steps: Option<Vec<StepInfo>>,
+    /// Steps with all checkboxes checked
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_steps: Option<Vec<StepInfo>>,
+    /// Steps with unchecked checkboxes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remaining_steps: Option<Vec<StepInfo>>,
+    /// First remaining step, or None if all done
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_step: Option<StepInfo>,
+    /// Map of step anchor (with #) to bead ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bead_mapping: Option<std::collections::HashMap<String, String>>,
+    /// Map of step anchor (with #) to dependency anchors (with #)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<std::collections::HashMap<String, Vec<String>>>,
 }
 
 /// Status of a single step
@@ -199,4 +226,18 @@ pub struct SubstepStatus {
     pub done: usize,
     /// Total number of items
     pub total: usize,
+}
+
+/// Lightweight step information for extended status queries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepInfo {
+    /// Step anchor (with #)
+    pub anchor: String,
+    /// Step title
+    pub title: String,
+    /// Step number (e.g., "0", "1", "2-1")
+    pub number: String,
+    /// Bead ID if assigned
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bead_id: Option<String>,
 }

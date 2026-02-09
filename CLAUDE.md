@@ -149,6 +149,8 @@ Then use the skills:
 | E009 | Not initialized |
 | E010 | Broken reference |
 | E011 | Circular dependency |
+| E035 | Beads sync failed |
+| E036 | Bead commit failed |
 
 ## Implementation Log
 

@@ -390,3 +390,108 @@ fn test_json_output_status() {
     assert!(json["data"]["progress"]["done"].is_number());
     assert!(json["data"]["progress"]["total"].is_number());
 }
+
+#[test]
+fn test_init_check_uninitialized_project() {
+    let temp = tempfile::tempdir().expect("failed to create temp dir");
+
+    let output = Command::new(specks_binary())
+        .arg("init")
+        .arg("--check")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks init --check");
+
+    // Should return exit code 9 for uninitialized project
+    assert_eq!(
+        output.status.code(),
+        Some(9),
+        "init --check should return exit code 9 for uninitialized project"
+    );
+}
+
+#[test]
+fn test_init_check_initialized_project() {
+    let temp = setup_test_project();
+
+    let output = Command::new(specks_binary())
+        .arg("init")
+        .arg("--check")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks init --check");
+
+    // Should return exit code 0 for initialized project
+    assert!(
+        output.status.success(),
+        "init --check should succeed on initialized project"
+    );
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
+fn test_init_check_json_uninitialized() {
+    let temp = tempfile::tempdir().expect("failed to create temp dir");
+
+    let output = Command::new(specks_binary())
+        .arg("init")
+        .arg("--check")
+        .arg("--json")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks init --check --json");
+
+    assert_eq!(output.status.code(), Some(9));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse JSON
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("should be valid JSON");
+    assert_eq!(json["schema_version"], "1");
+    assert_eq!(json["command"], "init");
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["data"]["initialized"], false);
+    assert_eq!(json["data"]["path"], ".specks/");
+}
+
+#[test]
+fn test_init_check_json_initialized() {
+    let temp = setup_test_project();
+
+    let output = Command::new(specks_binary())
+        .arg("init")
+        .arg("--check")
+        .arg("--json")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks init --check --json");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse JSON
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("should be valid JSON");
+    assert_eq!(json["schema_version"], "1");
+    assert_eq!(json["command"], "init");
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["data"]["initialized"], true);
+    assert_eq!(json["data"]["path"], ".specks/");
+}
+
+#[test]
+fn test_init_check_force_mutually_exclusive() {
+    let temp = tempfile::tempdir().expect("failed to create temp dir");
+
+    let output = Command::new(specks_binary())
+        .arg("init")
+        .arg("--check")
+        .arg("--force")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks init --check --force");
+
+    // Should fail due to mutually exclusive flags
+    assert!(
+        !output.status.success(),
+        "init --check --force should fail due to mutually exclusive flags"
+    );
+}
