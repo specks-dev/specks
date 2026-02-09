@@ -273,6 +273,9 @@ impl<'a> GitCli<'a> {
     }
 
     /// Remove a worktree
+    ///
+    /// Uses --force to handle untracked files (session.json, step-artifacts, etc.)
+    /// that are created during implementation but not tracked in git.
     fn worktree_remove(&self, path: &Path) -> Result<(), SpecksError> {
         let path_str = path
             .to_str()
@@ -283,7 +286,7 @@ impl<'a> GitCli<'a> {
         let output = Command::new("git")
             .arg("-C")
             .arg(self.repo_root)
-            .args(["worktree", "remove", path_str])
+            .args(["worktree", "remove", "--force", path_str])
             .output()
             .map_err(|e| SpecksError::WorktreeCleanupFailed {
                 reason: format!("failed to remove worktree: {}", e),

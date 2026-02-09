@@ -147,9 +147,24 @@ Return structured JSON:
 
 ## Behavior
 
-### Phase 0: Create Worktree
+### Phase 0: Create or Reuse Worktree
 
 **IMPORTANT:** This agent creates the worktree and commits bead annotations. All subsequent implementation work happens in this worktree.
+
+**Step 0a: Check for existing worktree**
+
+Before creating a new worktree, check if one already exists for this speck:
+
+```bash
+specks worktree list --json
+```
+
+Parse the JSON output and look for an entry where `speck_path` matches the input speck. If found:
+- Extract the `worktree_path`, `branch_name`, and `base_branch` from the existing session
+- Skip to Phase 1 (beads sync may still be needed if resuming a partial session)
+- Set a flag `worktree_reused: true` for logging purposes
+
+**Step 0b: Create new worktree (only if no existing worktree found)**
 
 1. Create worktree via CLI:
    ```bash
