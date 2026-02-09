@@ -69,10 +69,7 @@ const ALL_AGENTS: &[&str] = &[
 ];
 
 /// Read-only agents (no Write/Edit/Bash)
-const READONLY_AGENTS: &[&str] = &[
-    "critic-agent",
-    "architect-agent",
-];
+const READONLY_AGENTS: &[&str] = &["critic-agent", "architect-agent"];
 
 /// Core agents with full documentation structure (Input/Output contracts, Your Role, etc.)
 /// Setup agents have simpler structure and are excluded.
