@@ -6,6 +6,58 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-10.md] Step 1: Consolidate Committer-Agent | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 1 specification (#step-1, lines 476-509)
+- [D01] Merge logger INTO committer (#d01-merge-logger)
+- [D03] Review/audit before log (#d03-log-timing)
+- Spec S03: Consolidated Committer Input (#s03-committer-input)
+- Spec S04: Consolidated Committer Output (#s04-committer-output)
+- Spec S05: Consolidated Committer Workflow (#s05-committer-workflow)
+- `agents/committer-agent.md` - Current committer implementation
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add log_entry to commit mode input contract | Done |
+| Add log_updated and log_entry_added to output contract | Done |
+| Add Edit tool to frontmatter | Done |
+| Add workflow section explaining: read speck -> read log -> prepend entry -> stage -> commit -> close bead | Done |
+| Add log entry format section (copy from logger-agent.md) | Done |
+| Add log failure handling (needs_reconcile scenario) | Done |
+
+**Files Modified:**
+- `agents/committer-agent.md` - Added logging responsibilities:
+  - Input contract: Added `log_entry` field with summary, tasks_completed, tests_run, checkpoints_verified
+  - Output contract: Added `log_updated` (boolean) and `log_entry_added` (object with step, timestamp, summary)
+  - Tools: Added Edit tool to frontmatter for updating implementation log
+  - Workflow section: Documented 7-step logging workflow (receive log_entry -> prepend to log -> stage -> commit -> close bead -> report)
+  - Log entry format: Machine-parseable YAML frontmatter with structured sections
+  - Log file structure: Reverse-chronological order with prepend strategy using Edit tool
+  - Error handling: Log update failure treated as needs_reconcile scenario, does not block commit
+
+**Test Results:**
+- Smoke test: YAML frontmatter is valid (verified Edit tool in tools list)
+- Integration test: Agent file structure is complete and consistent
+
+**Checkpoints Verified:**
+- `grep "log_entry" agents/committer-agent.md` finds input contract: PASS
+- `grep "log_updated" agents/committer-agent.md` finds output contract: PASS
+- `grep "Edit" agents/committer-agent.md` finds tool in frontmatter: PASS
+
+**Key Decisions/Notes:**
+- Logging happens BEFORE git commit operations to ensure atomic commits (log + code changes staged together)
+- Log entry format uses YAML frontmatter for machine-parseability (enables step-to-bead mapping, chronological tracking, audit trail)
+- Edit tool strategy avoids temp files and permissions issues by using exact string matching
+- Log update failure sets `needs_reconcile: true` but allows commit to proceed (can be reconciled later)
+- Orchestrator is responsible for adding implementation log to `files_to_stage` to ensure atomicity
+
+---
+
 ## [specks-10.md] Step 0: Consolidate Reviewer-Agent | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08
