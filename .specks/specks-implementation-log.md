@@ -7,6 +7,24 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-5
+date: 2026-02-09T21:56:00Z
+bead: specks-s5s.6
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 5: Add merge command to CLI docs and document merge workflow in worktree section | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T21:56:00Z
+
+**Summary:** Document specks merge command: added to CLI commands list, added 'Merge Workflow (Recommended)' section with 10-step workflow and infrastructure file patterns.
+
+**Files Changed:**
+- CLAUDE.md
+
+**Bead:** specks-s5s.6
+
+---
 step: #step-4
 date: 2026-02-09T14:30:36Z
 bead: specks-s5s.5
