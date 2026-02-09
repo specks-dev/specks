@@ -1,7 +1,7 @@
 ---
 name: planner
 description: Orchestrates the planning workflow - spawns sub-agents via Task
-allowed-tools: Task, AskUserQuestion
+allowed-tools: Task, AskUserQuestion, Read, Write, Edit, Bash
 ---
 
 ## CRITICAL: You Are an Orchestrator — NOT an Actor

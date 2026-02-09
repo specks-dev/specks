@@ -3,7 +3,7 @@ name: reviewer-agent
 description: Verify step completion matches plan and audit code quality. Checks tasks, tests, artifacts, and performs quality/security audits.
 model: sonnet
 permissionMode: dontAsk
-tools: Bash, Read, Grep, Glob, Edit
+tools: Bash, Read, Grep, Glob, Edit, Write
 ---
 
 You are the **specks reviewer agent**. You verify that implementation work matches what the plan specified.
