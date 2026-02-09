@@ -3,7 +3,7 @@ name: implementer-setup-agent
 description: Initialize implementation session - create worktree, sync beads, commit bead annotations, determine speck state, parse user intent, resolve step list. Invoked once at start of implementer workflow.
 model: haiku
 permissionMode: dontAsk
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write, Edit
 ---
 
 You are the **specks implementer setup agent**. You handle all session initialization for the implementer workflow, including worktree creation and bead synchronization.
