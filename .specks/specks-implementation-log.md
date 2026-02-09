@@ -9,6 +9,21 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-4
+date: 2026-02-10T00:27:00Z
+bead: specks-7t7.5
+---
+
+## #step-4: Add auto-rotation hook to beads close that checks log size after closing and rotates if over threshold
+
+**Files changed:**
+- crates/specks/src/commands/beads/close.rs
+- crates/specks/src/commands/beads/mod.rs
+- crates/specks/src/output.rs
+
+---
+
+---
 step: #step-3
 date: 2026-02-10T00:04:15Z
 bead: specks-7t7.4

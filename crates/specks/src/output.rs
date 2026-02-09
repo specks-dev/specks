@@ -310,3 +310,20 @@ pub struct HealthCheck {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,
 }
+
+/// Data payload for beads close command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BeadsCloseData {
+    /// Bead ID that was closed
+    pub bead_id: String,
+    /// Whether the bead was closed successfully
+    pub closed: bool,
+    /// Optional reason for closing
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Whether log rotation was triggered
+    pub log_rotated: bool,
+    /// Path to archived log if rotation occurred
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_path: Option<String>,
+}
