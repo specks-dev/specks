@@ -1,11 +1,12 @@
 //! Implementation of the `specks status` command (Spec S04)
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use specks_core::{Speck, find_project_root, parse_speck, speck_name_from_path};
 
-use crate::output::{JsonIssue, JsonResponse, Progress, StatusData, StepStatus, SubstepStatus};
+use crate::output::{JsonIssue, JsonResponse, Progress, StatusData, StepInfo, StepStatus, SubstepStatus};
 
 /// Run the status command
 pub fn run_status(
@@ -35,6 +36,12 @@ pub fn run_status(
                         status: String::new(),
                         progress: Progress { done: 0, total: 0 },
                         steps: vec![],
+                        all_steps: None,
+                        completed_steps: None,
+                        remaining_steps: None,
+                        next_step: None,
+                        bead_mapping: None,
+                        dependencies: None,
                     },
                     issues,
                 );
@@ -66,6 +73,12 @@ pub fn run_status(
                     status: String::new(),
                     progress: Progress { done: 0, total: 0 },
                     steps: vec![],
+                    all_steps: None,
+                    completed_steps: None,
+                    remaining_steps: None,
+                    next_step: None,
+                    bead_mapping: None,
+                    dependencies: None,
                 },
                 issues,
             );
@@ -97,6 +110,12 @@ pub fn run_status(
                         status: String::new(),
                         progress: Progress { done: 0, total: 0 },
                         steps: vec![],
+                        all_steps: None,
+                        completed_steps: None,
+                        remaining_steps: None,
+                        next_step: None,
+                        bead_mapping: None,
+                        dependencies: None,
                     },
                     issues,
                 );
@@ -128,6 +147,12 @@ pub fn run_status(
                         status: String::new(),
                         progress: Progress { done: 0, total: 0 },
                         steps: vec![],
+                        all_steps: None,
+                        completed_steps: None,
+                        remaining_steps: None,
+                        next_step: None,
+                        bead_mapping: None,
+                        dependencies: None,
                     },
                     issues,
                 );
@@ -231,6 +256,75 @@ fn build_status_data(speck: &Speck, name: &str) -> StatusData {
         .clone()
         .unwrap_or_else(|| "unknown".to_string());
 
+    // Build extended fields
+    let all_steps: Vec<StepInfo> = speck
+        .steps
+        .iter()
+        .map(|step| StepInfo {
+            anchor: format!("#{}", step.anchor),
+            title: step.title.clone(),
+            number: step.number.clone(),
+            bead_id: step.bead_id.clone(),
+        })
+        .collect();
+
+    // A step is complete if all its items are checked (both tasks and substeps)
+    let completed_steps: Vec<StepInfo> = speck
+        .steps
+        .iter()
+        .filter(|step| {
+            let step_done = step.completed_items();
+            let step_total = step.total_items();
+            step_total > 0 && step_done == step_total
+        })
+        .map(|step| StepInfo {
+            anchor: format!("#{}", step.anchor),
+            title: step.title.clone(),
+            number: step.number.clone(),
+            bead_id: step.bead_id.clone(),
+        })
+        .collect();
+
+    // Remaining steps are those not in completed_steps
+    let completed_anchors: std::collections::HashSet<String> = completed_steps
+        .iter()
+        .map(|s| s.anchor.clone())
+        .collect();
+
+    let remaining_steps: Vec<StepInfo> = all_steps
+        .iter()
+        .filter(|step| !completed_anchors.contains(&step.anchor))
+        .cloned()
+        .collect();
+
+    // Next step is the first remaining step
+    let next_step = remaining_steps.first().cloned();
+
+    // Build bead mapping (only include steps with bead_id)
+    let bead_mapping: HashMap<String, String> = speck
+        .steps
+        .iter()
+        .filter_map(|step| {
+            step.bead_id.as_ref().map(|bead_id| {
+                (format!("#{}", step.anchor), bead_id.clone())
+            })
+        })
+        .collect();
+
+    // Build dependencies mapping
+    let dependencies: HashMap<String, Vec<String>> = speck
+        .steps
+        .iter()
+        .map(|step| {
+            let deps = step
+                .depends_on
+                .iter()
+                .map(|dep| format!("#{}", dep))
+                .collect();
+            (format!("#{}", step.anchor), deps)
+        })
+        .collect();
+
     StatusData {
         name: name.to_string(),
         status,
@@ -239,6 +333,12 @@ fn build_status_data(speck: &Speck, name: &str) -> StatusData {
             total: total_items,
         },
         steps,
+        all_steps: Some(all_steps),
+        completed_steps: Some(completed_steps),
+        remaining_steps: Some(remaining_steps),
+        next_step,
+        bead_mapping: Some(bead_mapping),
+        dependencies: Some(dependencies),
     }
 }
 

@@ -7,6 +7,25 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-1
+date: 2026-02-09T03:00:03Z
+bead: specks-0yy.2
+speck: .specks/specks-11.md
+---
+
+## [specks-11.md] Step 1: Extend specks status --json with step state fields for implementer agents | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T03:00:03Z
+
+**Summary:** Extend specks status --json with step state fields for implementer agents
+
+**Files Changed:**
+- crates/specks/src/output.rs
+- crates/specks/src/commands/status.rs
+
+**Bead:** specks-0yy.2
+
+---
 step: #step-0
 date: 2026-02-09T03:00:03Z
 bead: specks-0yy.1
