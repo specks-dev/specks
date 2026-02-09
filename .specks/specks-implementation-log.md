@@ -6,6 +6,256 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-10.md] Step 4: Delete Obsolete Agent Files | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 4 specification (#step-4, lines 597-627)
+- [D01] Merge logger INTO committer (#d01-merge-logger)
+- [D02] Merge auditor INTO reviewer (#d02-merge-auditor)
+- [D05] Keep existing agent file names (#d05-file-names)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Delete `agents/auditor-agent.md` | Done |
+| Delete `agents/logger-agent.md` | Done |
+| Verify remaining agent files: architect, coder, reviewer, committer (implementation) + clarifier, author, critic (planning) + implementer-setup | Done |
+| Update integration test constants to remove auditor-agent and logger-agent | Done |
+
+**Files Created:**
+- None (deletion only)
+
+**Files Modified:**
+- `crates/specks/tests/agent_integration_tests.rs` - Removed auditor-agent and logger-agent from ALL_AGENTS constant (11 agents -> 9 agents), updated comments to reflect Phase 10.0 consolidation
+
+**Files Deleted:**
+- `agents/auditor-agent.md` - Functionality consolidated into reviewer-agent
+- `agents/logger-agent.md` - Functionality consolidated into committer-agent
+
+**Test Results:**
+- Integration test: `cargo nextest run agent_integration_tests` - PASS
+- Test correctly verifies 9 remaining agent files exist
+
+**Checkpoints Verified:**
+- `ls agents/auditor-agent.md` fails (file not found): PASS
+- `ls agents/logger-agent.md` fails (file not found): PASS
+- `Glob "agents/*-agent.md"` returns 9 files (3 planning + 4 implementation + 2 setup): PASS
+
+**Key Decisions/Notes:**
+- Agent consolidation is now complete: 11 agents -> 9 agents (auditor and logger merged)
+- Integration tests updated to reflect the new architecture
+- Remaining 9 agents: clarifier, author, critic, planner-setup (planning) + architect, coder, reviewer, committer, implementer-setup (implementation)
+- All functionality preserved through consolidation into reviewer-agent and committer-agent
+
+---
+
+## [specks-10.md] Step 3: Update CLAUDE.md Documentation | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 3 specification (#step-3, lines 557-592)
+- Table T02: Implementation Agent Changes (#t02-agent-changes)
+- Table T03: Tool Set Merges (#t03-tool-changes)
+- `CLAUDE.md` - Project documentation for Claude Code
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update "Sub-Agents (9)" to "Sub-Agents (7)" in section header | Done |
+| Remove auditor-agent row from implementation agents table | Done |
+| Remove logger-agent row from implementation agents table | Done |
+| Update reviewer-agent description to include audit responsibilities | Done |
+| Update committer-agent description to include logging responsibilities | Done |
+| Update reviewer-agent tools to include Edit | Done |
+| Update committer-agent tools to include Edit | Done |
+| Update implementer orchestration description (6 agents -> 4 agents) | Done |
+
+**Files Created:**
+- None (documentation update only)
+
+**Files Modified:**
+- `CLAUDE.md` - Updated agent count from 9 to 7 sub-agents, removed auditor-agent and logger-agent rows, updated reviewer-agent description to "Verifies completed step matches plan and audits code quality, security, error handling", updated committer-agent description to "Stages files, commits changes, updates implementation log, closes beads", added Edit tool to both reviewer and committer tools
+- `crates/specks/tests/agent_integration_tests.rs` - Removed reviewer-agent from READONLY_AGENTS constant (since it now has Edit tool)
+
+**Test Results:**
+- Integration test: CLAUDE.md is valid markdown - PASS
+- Unit test: Test constants updated to reflect tool changes - PASS
+
+**Checkpoints Verified:**
+- `Grep "Sub-Agents (7)" CLAUDE.md` finds updated count: PASS
+- `Grep "auditor-agent" CLAUDE.md` returns no results: PASS
+- `Grep "logger-agent" CLAUDE.md` returns no results: PASS
+- `Grep "reviewer-agent.*audit" CLAUDE.md` finds updated description: PASS
+- `Grep "committer-agent.*log" CLAUDE.md` finds updated description: PASS
+
+**Key Decisions/Notes:**
+- Both CLAUDE.md and test constants were updated to reflect the new 4-agent architecture
+- The reviewer-agent was removed from READONLY_AGENTS test list because it gained the Edit tool for potential future use
+- Documentation now accurately reflects the consolidated implementer loop with 7 total sub-agents (3 planning + 4 implementation)
+- All references to auditor-agent and logger-agent have been removed from user-facing documentation
+
+---
+
+## [specks-10.md] Step 2: Update Implementer SKILL.md | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 2 specification (#step-2, lines 512-552)
+- [D04] Combined retry budget (#d04-retry-budget)
+- Spec S06: Combined Retry Budget (#s06-retry-budget)
+- Diagram Diag01: Consolidated Implementer Loop (#diag01-loop)
+- Table T02: Implementation Agent Changes (#t02-agent-changes)
+- `skills/implementer/SKILL.md` - Current implementer orchestration
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update orchestration diagram to show 4 agents | Done |
+| Remove auditor-agent spawn section (4f) | Done |
+| Remove logger-agent spawn section (4g) | Done |
+| Merge audit retry logic into reviewer retry logic | Done |
+| Update committer input to include log_entry fields | Done |
+| Update worktree structure section (fewer agent output files) | Done |
+| Update "Execute This Sequence" summary to list 4 agents | Done |
+| Change auditor_attempts to single reviewer_attempts counter | Done |
+| Update max attempts from 2+3 to just 3 total | Done |
+
+**Files Modified:**
+- `skills/implementer/SKILL.md` - Consolidated to 4-agent architecture, removed auditor and logger sections, updated orchestration diagram, merged retry logic to max 3 attempts
+
+**Test Results:**
+- YAML frontmatter validation: PASS
+- Skill file parsing: PASS
+
+**Checkpoints Verified:**
+- `Grep "architect-agent" skills/implementer/SKILL.md` finds spawn: PASS
+- `Grep "coder-agent" skills/implementer/SKILL.md` finds spawn: PASS
+- `Grep "reviewer-agent" skills/implementer/SKILL.md` finds spawn: PASS
+- `Grep "committer-agent" skills/implementer/SKILL.md` finds spawn: PASS
+- `Grep "auditor-agent" skills/implementer/SKILL.md` returns no results: PASS
+- `Grep "logger-agent" skills/implementer/SKILL.md` returns no results: PASS
+- `Grep "max 3" skills/implementer/SKILL.md` finds retry budget: PASS
+
+**Key Decisions/Notes:**
+- Removed sections 4f (auditor-agent) and 4g (logger-agent) from orchestration sequence
+- Consolidated retry counter from separate reviewer_attempts and auditor_attempts to single reviewer_attempts with max 3 total
+- Updated committer spawn to include log_entry fields (summary, tasks_completed, tests_run, checkpoints_verified)
+- Simplified worktree structure documentation to reflect 4 output files instead of 6
+- Updated orchestration diagram to show consolidated review+audit loop and committer logging workflow
+
+---
+
+## [specks-10.md] Step 1: Consolidate Committer-Agent | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 1 specification (#step-1, lines 476-509)
+- [D01] Merge logger INTO committer (#d01-merge-logger)
+- [D03] Review/audit before log (#d03-log-timing)
+- Spec S03: Consolidated Committer Input (#s03-committer-input)
+- Spec S04: Consolidated Committer Output (#s04-committer-output)
+- Spec S05: Consolidated Committer Workflow (#s05-committer-workflow)
+- `agents/committer-agent.md` - Current committer implementation
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add log_entry to commit mode input contract | Done |
+| Add log_updated and log_entry_added to output contract | Done |
+| Add Edit tool to frontmatter | Done |
+| Add workflow section explaining: read speck -> read log -> prepend entry -> stage -> commit -> close bead | Done |
+| Add log entry format section (copy from logger-agent.md) | Done |
+| Add log failure handling (needs_reconcile scenario) | Done |
+
+**Files Modified:**
+- `agents/committer-agent.md` - Added logging responsibilities:
+  - Input contract: Added `log_entry` field with summary, tasks_completed, tests_run, checkpoints_verified
+  - Output contract: Added `log_updated` (boolean) and `log_entry_added` (object with step, timestamp, summary)
+  - Tools: Added Edit tool to frontmatter for updating implementation log
+  - Workflow section: Documented 7-step logging workflow (receive log_entry -> prepend to log -> stage -> commit -> close bead -> report)
+  - Log entry format: Machine-parseable YAML frontmatter with structured sections
+  - Log file structure: Reverse-chronological order with prepend strategy using Edit tool
+  - Error handling: Log update failure treated as needs_reconcile scenario, does not block commit
+
+**Test Results:**
+- Smoke test: YAML frontmatter is valid (verified Edit tool in tools list)
+- Integration test: Agent file structure is complete and consistent
+
+**Checkpoints Verified:**
+- `grep "log_entry" agents/committer-agent.md` finds input contract: PASS
+- `grep "log_updated" agents/committer-agent.md` finds output contract: PASS
+- `grep "Edit" agents/committer-agent.md` finds tool in frontmatter: PASS
+
+**Key Decisions/Notes:**
+- Logging happens BEFORE git commit operations to ensure atomic commits (log + code changes staged together)
+- Log entry format uses YAML frontmatter for machine-parseability (enables step-to-bead mapping, chronological tracking, audit trail)
+- Edit tool strategy avoids temp files and permissions issues by using exact string matching
+- Log update failure sets `needs_reconcile: true` but allows commit to proceed (can be reconciled later)
+- Orchestrator is responsible for adding implementation log to `files_to_stage` to ensure atomicity
+
+---
+
+## [specks-10.md] Step 0: Consolidate Reviewer-Agent | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 0 specification (#step-0, lines 439-473)
+- [D02] Merge auditor INTO reviewer (#d02-merge-auditor)
+- Spec S01: Consolidated Reviewer Input (#s01-reviewer-input)
+- Spec S02: Consolidated Reviewer Output (#s02-reviewer-output)
+- Table T01: Consolidated Reviewer Recommendations (#t01-reviewer-recs)
+- List L01: Explicit Audit Responsibilities (#l01-audit-checklist)
+- `agents/reviewer-agent.md` - Current reviewer implementation
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Add audit_categories to output contract | Done |
+| Add severity field to issues array | Done |
+| Add file field to issues array | Done |
+| Add audit issue types (audit_structure, audit_error, audit_security) | Done |
+| Add auditing checklist section with all 8 explicit responsibilities | Done |
+| Update recommendation criteria to include audit conditions | Done |
+| Map FIX_REQUIRED to REVISE, MAJOR_REVISION to ESCALATE | Done |
+| Add Edit tool to frontmatter | Done |
+
+**Files Created:**
+None (modification only)
+
+**Files Modified:**
+- `agents/reviewer-agent.md` - Consolidated auditor responsibilities into reviewer: added audit_categories field, severity/file fields in issues array, 8-item auditing checklist (lint, formatting, duplication, idioms, performance, Big-O, error handling, security), audit category ratings (structure/error_handling/security with PASS/WARN/FAIL), expanded issue types to include audit_structure/audit_error/audit_security, updated recommendations to map FIX_REQUIRED→REVISE and MAJOR_REVISION→ESCALATE, added Edit tool
+
+**Test Results:**
+- YAML frontmatter validation: PASS (tools includes Read, Grep, Glob, Edit)
+- Smoke test: Agent file parses correctly
+
+**Checkpoints Verified:**
+- `Grep "audit_categories" agents/reviewer-agent.md`: PASS (found in output contract at line 65)
+- `Grep "Edit" agents/reviewer-agent.md`: PASS (found in frontmatter tools at line 6)
+- `Grep "Lint failures" agents/reviewer-agent.md`: PASS (found in audit checklist at line 124)
+- All 8 audit items documented: lint failures, formatting errors, code duplication, unidiomatic code, performance regressions, bad Big-O, error handling, security
+
+**Key Decisions/Notes:**
+- Consolidated auditor-agent responsibilities into reviewer-agent to reduce implementer loop from 6 agents to 4 agents per step
+- Combined retry budget will be 3 attempts total for all review+audit issues (single counter in implementer)
+- Reviewer now performs both plan-conformance checking AND quality/security auditing in a single pass
+- Edit tool added to reviewer but not currently used (reserved for future potential use)
+- Issue types extended to include audit categories: audit_structure, audit_error, audit_security
+- Recommendation mapping simplified: FIX_REQUIRED and MAJOR_REVISION from old auditor now mapped to REVISE and ESCALATE respectively
+
+---
+
 ## [specks-9.md] Step 5: Final Verification | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

@@ -172,9 +172,9 @@ Two orchestrator skills contain the main workflow logic and spawn sub-agents via
 | Skill | Role |
 |-------|------|
 | **planner** | Orchestrates planning loop: clarifier → author → critic |
-| **implementer** | Orchestrates implementation loop: architect → coder → reviewer → auditor → logger → committer |
+| **implementer** | Orchestrates implementation loop: architect → coder → reviewer → committer |
 
-### Sub-Agents (9)
+### Sub-Agents (7)
 
 Sub-agents are invoked via Task tool and return JSON results. Each has specific tools and contracts.
 
@@ -192,10 +192,8 @@ Sub-agents are invoked via Task tool and return JSON results. Each has specific 
 |-------|------|-------|
 | **architect-agent** | Creates implementation strategies, defines expected_touch_set | Read, Grep, Glob |
 | **coder-agent** | Executes strategies with drift detection, self-halts on drift | Read, Grep, Glob, Write, Edit, Bash |
-| **reviewer-agent** | Verifies completed step matches plan | Read, Grep, Glob |
-| **auditor-agent** | Checks code quality, security, error handling | Read, Grep, Glob |
-| **logger-agent** | Updates implementation log with completed work | Read, Grep, Glob, Edit |
-| **committer-agent** | Stages files, commits changes, closes beads | Read, Grep, Glob, Bash |
+| **reviewer-agent** | Verifies completed step matches plan and audits code quality, security, error handling | Read, Grep, Glob, Edit |
+| **committer-agent** | Stages files, commits changes, updates implementation log, closes beads | Read, Grep, Glob, Edit, Bash |
 
 ### Development Workflow
 

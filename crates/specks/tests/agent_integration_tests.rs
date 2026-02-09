@@ -54,7 +54,7 @@ fn parse_agent_frontmatter(content: &str) -> Option<(String, String, String)> {
     }
 }
 
-/// List of all sub-agents (Phase 4.0+: 11 agents invoked via Task)
+/// List of all sub-agents (Phase 4.0+: 9 agents invoked via Task)
 /// Per specks-4.md and specks-5.md, these are the sub-agents.
 const ALL_AGENTS: &[&str] = &[
     "clarifier-agent",
@@ -64,8 +64,6 @@ const ALL_AGENTS: &[&str] = &[
     "architect-agent",
     "coder-agent",
     "reviewer-agent",
-    "auditor-agent",
-    "logger-agent",
     "committer-agent",
     "implementer-setup-agent",
 ];
@@ -74,8 +72,6 @@ const ALL_AGENTS: &[&str] = &[
 const READONLY_AGENTS: &[&str] = &[
     "critic-agent",
     "architect-agent",
-    "reviewer-agent",
-    "auditor-agent",
 ];
 
 /// Core agents with full documentation structure (Input/Output contracts, Your Role, etc.)
@@ -87,8 +83,6 @@ const CORE_AGENTS: &[&str] = &[
     "architect-agent",
     "coder-agent",
     "reviewer-agent",
-    "auditor-agent",
-    "logger-agent",
     "committer-agent",
 ];
 
@@ -149,8 +143,8 @@ fn test_only_expected_agents_exist() {
 
     assert_eq!(
         entries.len(),
-        11,
-        "Expected exactly 11 agent files, found {}",
+        9,
+        "Expected exactly 9 agent files, found {}",
         entries.len()
     );
 
@@ -371,34 +365,6 @@ fn test_critic_documents_recommendations() {
 }
 
 // =============================================================================
-// Logger Agent Tests
-// =============================================================================
-
-#[test]
-fn test_logger_uses_edit_tool() {
-    let path = agents_dir().join("logger-agent.md");
-    let content = fs::read_to_string(&path).expect("Failed to read logger-agent");
-
-    let frontmatter = parse_agent_frontmatter(&content).expect("Failed to parse frontmatter");
-    let tools = frontmatter.2;
-
-    // Logger uses Edit for prepending
-    assert!(tools.contains("Edit"), "Logger must have Edit tool");
-}
-
-#[test]
-fn test_logger_documents_prepend_pattern() {
-    let path = agents_dir().join("logger-agent.md");
-    let content = fs::read_to_string(&path).expect("Failed to read logger-agent");
-
-    // Logger must document prepend strategy
-    assert!(
-        content.contains("prepend") || content.contains("Prepend"),
-        "Logger must document prepend strategy"
-    );
-}
-
-// =============================================================================
 // Committer Agent Tests
 // =============================================================================
 
@@ -439,29 +405,5 @@ fn test_reviewer_documents_recommendations() {
     assert!(
         content.contains("APPROVE") && content.contains("REVISE") && content.contains("ESCALATE"),
         "Reviewer must document APPROVE, REVISE, ESCALATE recommendations"
-    );
-}
-
-// =============================================================================
-// Auditor Agent Tests
-// =============================================================================
-
-#[test]
-fn test_auditor_documents_categories() {
-    let path = agents_dir().join("auditor-agent.md");
-    let content = fs::read_to_string(&path).expect("Failed to read auditor-agent");
-
-    // Auditor checks structure, error_handling, security
-    assert!(
-        content.contains("structure") || content.contains("Structure"),
-        "Auditor must document structure checks"
-    );
-    assert!(
-        content.contains("error") || content.contains("Error"),
-        "Auditor must document error handling checks"
-    );
-    assert!(
-        content.contains("security") || content.contains("Security"),
-        "Auditor must document security checks"
     );
 }
