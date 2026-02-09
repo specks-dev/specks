@@ -136,7 +136,3 @@ This skill is invoked by the **specks-implementer** agent during execution. When
 - The **implementer** agent invokes this skill to do the actual work
 - The **monitor** agent runs in parallel watching for drift
 - After completion, **reviewer** and **auditor** verify your work
-
-### Halt Signal Awareness
-
-When running under the implementer agent, this skill should be aware that a halt signal may be written to `.specks/runs/{uuid}/.halt`. The implementer agent handles halt checking between major operations. If halted, work stops gracefully and partial status is returned to the director.

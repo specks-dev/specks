@@ -6,6 +6,242 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-9.md] Step 5: Final Verification | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 5 specification (#step-5, lines 269-295)
+- [D01] Remove runs directory references completely
+- [D02] Preserve historical specks unchanged
+- (#success-criteria)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Run comprehensive grep verification | Done |
+| Confirm runs references only in historical specks | Done |
+| Expand scope: remove runs from init.rs help text | Done |
+| Expand scope: remove runs from cli.rs help text | Done |
+| Expand scope: slim down planner-setup-agent.md | Done |
+| Run specks validate | Done |
+
+**Files Created:**
+- None (verification step with expanded cleanup)
+
+**Files Modified:**
+- `crates/specks/src/commands/init.rs` - Removed mention of "runs/" from help text and output messages
+- `crates/specks/src/cli.rs` - Updated long_about descriptions to remove "runs/" references and focus on worktree workflow
+- `agents/planner-setup-agent.md` - Removed obsolete session management references, simplified to focus on init verification and mode detection
+
+**Test Results:**
+- `grep -r "\.specks/runs" . --include="*.md" --include="*.rs" --include="*.toml" | grep -v "specks-[1-8].md" | grep -v "specks-9.md" | grep -v "implementation-log"`: Returns empty (no non-historical references)
+- `specks validate .specks/specks-9.md`: PASS (validation successful)
+
+**Checkpoints Verified:**
+- Runs references only in historical specks (specks-1 through specks-8): PASS
+- No runs references in active codebase: PASS
+- CLI help text accurate and worktree-focused: PASS
+- Agent definitions reflect current architecture: PASS
+
+**Key Decisions/Notes:**
+- During verification, discovered additional runs references in init.rs and cli.rs help text that were not caught in earlier steps
+- Expanded scope to clean these up for consistency
+- planner-setup-agent.md had obsolete session management complexity that was simplified to match current stateless planner design
+- All changes maintain backward compatibility while improving documentation accuracy
+
+---
+
+## [specks-9.md] Step 4: Update implement-plan skill | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 4 specification (#step-4, lines 239-266)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove halt signal awareness section (lines 140-143) | Done |
+| Verify Integration section coherence | Done |
+
+**Files Created:**
+- None (modification only)
+
+**Files Modified:**
+- `.claude/skills/implement-plan/SKILL.md` - Removed obsolete halt signal awareness section that referenced `.specks/runs/{uuid}/.halt`
+
+**Test Results:**
+- Visual inspection: Integration section flows coherently without the removed halt signal reference
+- grep verification: `grep -c "runs" .claude/skills/implement-plan/SKILL.md` returns 0
+
+**Checkpoints Verified:**
+- No "runs" references in SKILL.md: PASS
+- Integration section remains coherent: PASS
+- Document structure intact: PASS
+
+**Key Decisions/Notes:**
+- Removed 4 lines total: blank line, "### Halt Signal Awareness" header, blank line, and paragraph describing halt signal at `.specks/runs/{uuid}/.halt`
+- The Integration section now cleanly lists the agent collaboration without referencing obsolete halt file monitoring
+- This completes the removal of all runs directory references from active documentation and skill files
+
+---
+
+## [specks-9.md] Step 3: Update execute-plan.md | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 3 specification (#step-3, lines 205-235)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove lines 115-131 that describe monitoring the runs directory structure | Done |
+| Remove lines 143-144 referencing the run directory in completion output | Done |
+| Remove lines 225-229 that describe checking the halt file | Done |
+| Update lines 273-323 "Understanding Run Artifacts" section - remove entirely | Done |
+| Ensure document still flows coherently after removals | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `docs/tutorials/execute-plan.md` - Removed all references to obsolete `.specks/runs/` directory structure and halt files. The tutorial now focuses on the worktree-based execution workflow without mentioning the deprecated runs directory.
+
+**Test Results:**
+- Visual inspection: Document flows coherently after section removals
+- Content check: Tutorial still provides complete guidance on execution workflow
+
+**Checkpoints Verified:**
+- `grep -c "runs/" docs/tutorials/execute-plan.md` returns 0: PASS
+- `grep -c "\.specks/runs" docs/tutorials/execute-plan.md` returns 0: PASS
+
+**Key Decisions/Notes:**
+- Removed multiple sections totaling approximately 70 lines of obsolete documentation
+- The "Understanding Run Artifacts" section (lines 273-323) was completely removed as it described functionality that no longer exists
+- Document maintains coherent narrative flow after removals, focusing on current worktree-based architecture
+
+---
+
+## [specks-9.md] Step 2: Update getting-started.md | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 2 specification (#step-2, lines 176-202)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove lines 347-349 that reference `.specks/runs/*/\.halt` for monitor halt files | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `docs/getting-started.md` - Removed "Monitor Halted Execution" section that described obsolete halt file functionality
+
+**Test Results:**
+- Visual inspection: getting-started.md flows coherently (PASS)
+- `grep -c "runs" docs/getting-started.md`: Returns 0 (PASS)
+
+**Checkpoints Verified:**
+- `grep -c "runs" docs/getting-started.md` returns 0: PASS
+
+**Key Decisions/Notes:**
+- Removed the "Monitor Halted Execution" section that described checking `.specks/runs/*/\.halt` for drift detection
+- The section recommended three options after halt detection, but this functionality no longer exists in the current architecture
+- The implementer now uses worktrees, and the coder agent self-halts on drift rather than using halt files
+- The documentation now accurately reflects the current architecture without confusing references to obsolete features
+
+---
+
+## [specks-9.md] Step 1: Update README.md | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 1 specification (#step-1, lines 145-173)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove "Run Artifacts" subsection describing `.specks/runs/<session-id>/` | Done |
+| Remove "runs/` - Agent run artifacts (gitignored)" from Quick Start section | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `README.md` - Removed obsolete runs directory references from Quick Start and Run Artifacts sections
+
+**Test Results:**
+- Visual inspection: README.md flows coherently (PASS)
+- `grep -c "runs/" README.md`: Returns 0 (PASS)
+- `grep -c "\.specks/runs" README.md`: Returns 0 (PASS)
+
+**Checkpoints Verified:**
+- `grep -c "runs/" README.md` returns 0: PASS
+- `grep -c "\.specks/runs" README.md` returns 0: PASS
+
+**Key Decisions/Notes:**
+- Removed the "Run Artifacts" subsection that described the obsolete `.specks/runs/<session-id>/` directory structure
+- Removed the runs reference from the Quick Start directory structure listing
+- The README.md now accurately reflects that the planner is stateless and the implementer uses worktrees, not runs directories
+- This is step 2 of 5 in the cleanup of runs directory references across the codebase
+
+---
+
+## [specks-9.md] Step 0: Update .gitignore | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08
+
+**References Reviewed:**
+- `.specks/specks-9.md` - Step 0 specification (#step-0, lines 116-142)
+- [D01] Remove runs directory references completely
+- (#context, #strategy)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Remove lines 26-27 (comment and `.specks/runs/` entry) from .gitignore | Done |
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `.gitignore` - Removed obsolete `.specks/runs/` entry and comment
+
+**Test Results:**
+- `grep "runs" .gitignore`: No results (PASS)
+- `grep "worktrees" .gitignore`: Returns `.specks-worktrees/` (PASS)
+
+**Checkpoints Verified:**
+- `grep "runs" .gitignore` returns no results: PASS
+- `grep "worktrees" .gitignore` returns `.specks-worktrees/`: PASS
+
+**Key Decisions/Notes:**
+- Removed the obsolete `.specks/runs/` directory reference from .gitignore as the runs directory was never implemented in the current architecture
+- The planner is stateless and the implementer uses worktrees (`.specks-worktrees/`), making the runs directory reference obsolete
+- This is the first step in cleaning up all runs directory references from the codebase
+
+---
+
 ## [specks-8.md] Step 6: Integration Testing and Documentation | COMPLETE | 2026-02-08
 
 **Completed:** 2026-02-08

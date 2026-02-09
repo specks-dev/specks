@@ -339,19 +339,6 @@ Increase the timeout for complex operations:
 specks execute .specks/specks-complex.md --timeout 900
 ```
 
-### Monitor Halted Execution
-
-If the monitor detects drift, execution halts. Check the halt file:
-
-```bash
-cat .specks/runs/*/\.halt
-```
-
-Options:
-1. Review the drift and decide to continue
-2. Return to architect with feedback
-3. Return to planner to revise the plan
-
 ## Next Steps
 
 - **Tutorial**: [Build a Python Calculator](tutorials/py-calc-example.md) — Complete greenfield example

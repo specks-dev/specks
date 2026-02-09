@@ -122,13 +122,9 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
     fs::write(&log_path, IMPLEMENTATION_LOG_CONTENT)
         .map_err(|e| format!("failed to write specks-implementation-log.md: {}", e))?;
 
-    // Create runs directory for agent reports (D15)
-    let runs_dir = specks_dir.join("runs");
-    fs::create_dir_all(&runs_dir).map_err(|e| format!("failed to create runs directory: {}", e))?;
-
-    // Ensure .specks/runs/ is in .gitignore
+    // Ensure .specks-worktrees/ is in .gitignore
     let gitignore_path = Path::new(".gitignore");
-    let gitignore_entry = ".specks/runs/";
+    let gitignore_entry = ".specks-worktrees/";
 
     let should_add_entry = if gitignore_path.exists() {
         let content = fs::read_to_string(gitignore_path)
@@ -153,7 +149,7 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
             }
         }
 
-        writeln!(file, "\n# Specks run artifacts (never commit)")
+        writeln!(file, "\n# Specks worktree directories (never commit)")
             .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
         writeln!(file, "{}", gitignore_entry)
             .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
@@ -163,7 +159,6 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
         "specks-skeleton.md".to_string(),
         "config.toml".to_string(),
         "specks-implementation-log.md".to_string(),
-        "runs/".to_string(),
     ];
 
     if json_output {
@@ -180,9 +175,8 @@ pub fn run_init(force: bool, json_output: bool, quiet: bool) -> Result<i32, Stri
         println!("  Created: specks-skeleton.md");
         println!("  Created: config.toml");
         println!("  Created: specks-implementation-log.md");
-        println!("  Created: runs/");
         if should_add_entry {
-            println!("  Updated: .gitignore (added .specks/runs/)");
+            println!("  Updated: .gitignore (added .specks-worktrees/)");
         }
 
         // Note about plugin-based workflow
