@@ -7,6 +7,117 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-5
+date: 2026-02-09T21:56:00Z
+bead: specks-s5s.6
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 5: Add merge command to CLI docs and document merge workflow in worktree section | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T21:56:00Z
+
+**Summary:** Document specks merge command: added to CLI commands list, added 'Merge Workflow (Recommended)' section with 10-step workflow and infrastructure file patterns.
+
+**Files Changed:**
+- CLAUDE.md
+
+**Bead:** specks-s5s.6
+
+---
+step: #step-4
+date: 2026-02-09T14:30:36Z
+bead: specks-s5s.5
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 4: Implement full merge workflow | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:30:36Z
+
+**Summary:** Implement full merge workflow: infrastructure file staging/commit, git push, gh pr merge --squash, git pull, worktree cleanup. Added dry-run mode with would_* fields and comprehensive JSON output.
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+
+**Bead:** specks-s5s.5
+
+---
+step: #step-3
+date: 2026-02-09T14:24:35Z
+bead: specks-s5s.4
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 3: Implement pre-merge validations | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:24:35Z
+
+**Summary:** Implement pre-merge validations: check_main_sync (unpushed commits), check_pr_checks (CI status), validate_pr_state, and --force flag for non-infrastructure files. Added comprehensive unit and integration tests.
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+
+**Bead:** specks-s5s.4
+
+---
+step: #step-2
+date: 2026-02-09T14:43:15Z
+bead: specks-s5s.3
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 2: Implement infrastructure pattern matching and file categorization | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:43:15Z
+
+**Summary:** Implement file categorization: INFRASTRUCTURE_PATTERNS constant, is_infrastructure_file(), and categorize_uncommitted() using git status. Added 11 unit tests and 1 integration test.
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+
+**Bead:** specks-s5s.3
+
+---
+step: #step-1
+date: 2026-02-09T14:08:22Z
+bead: specks-s5s.2
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 1: Implement worktree and PR lookup | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:08:22Z
+
+**Summary:** Implement worktree and PR lookup functions: find_worktree_for_speck searches session.json files, get_pr_for_branch uses gh CLI. Added 8 unit tests.
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+
+**Bead:** specks-s5s.2
+
+---
+step: #step-0
+date: 2026-02-09T14:03:04Z
+bead: specks-s5s.1
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 0: Add merge command skeleton | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:03:04Z
+
+**Summary:** Add merge command skeleton with CLI flags (--dry-run, --force), MergeData struct for JSON output, and command routing
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/mod.rs
+- crates/specks/src/main.rs
+
+**Bead:** specks-s5s.1
+
+---
 step: #step-3
 date: 2026-02-08T19:25:00Z
 bead: specks-0yy.4

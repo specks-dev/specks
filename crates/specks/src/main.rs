@@ -70,6 +70,11 @@ fn main() -> ExitCode {
                 commands::run_worktree_cleanup(merged, dry_run, cli.json, cli.quiet)
             }
         },
+        Some(Commands::Merge {
+            speck,
+            dry_run,
+            force,
+        }) => commands::run_merge(speck, dry_run, force, cli.json, cli.quiet),
         Some(Commands::Version { verbose }) => commands::run_version(verbose, cli.json, cli.quiet),
         None => {
             // No subcommand - show splash screen

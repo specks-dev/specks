@@ -117,6 +117,7 @@ specks beads close bd-xxx      # Close a bead
 specks worktree create <speck>      # Create isolated worktree for implementation
 specks worktree list                # List active worktrees
 specks worktree cleanup --merged    # Remove worktrees for merged PRs
+specks merge <speck>                # Merge PR and clean up (recommended approach)
 ```
 
 ### Claude Code Skills (Planning and Execution)
@@ -227,9 +228,44 @@ When you run `/specks:implementer .specks/specks-N.md`:
 4. **Steps executed**: Each step is implemented and committed separately
 5. **PR created**: After all steps complete, a PR is automatically created to main
 
-### Cleanup After PR Merge
+### Merge Workflow (Recommended)
 
-After your PR is merged, clean up the worktree:
+After implementation completes and a PR is created, use the `specks merge` command to automate the merge workflow:
+
+```bash
+# Preview what will happen
+specks merge .specks/specks-12.md --dry-run
+
+# Merge the PR and clean up
+specks merge .specks/specks-12.md
+```
+
+The merge command:
+1. Finds the worktree for the speck
+2. Checks that main is synced with origin (no unpushed commits)
+3. Finds the PR for the worktree's branch
+4. Verifies all PR checks have passed
+5. Detects uncommitted changes in main
+6. Auto-commits infrastructure files (agents/, .claude/skills/, CLAUDE.md, etc.)
+7. Pushes main to origin
+8. Merges the PR via squash
+9. Pulls main to get the squashed commit
+10. Cleans up the worktree and branch
+
+**Infrastructure files** are auto-committed automatically:
+- `agents/*.md` - Agent definition files
+- `.claude/skills/**/` - Skill directories and contents
+- `.specks/specks-skeleton.md` - Speck template
+- `.specks/config.toml` - Configuration
+- `.specks/specks-implementation-log.md` - Implementation log
+- `.beads/*` - Beads tracking files
+- `CLAUDE.md` - Project instructions
+
+The command aborts if non-infrastructure files have uncommitted changes (use `--force` to override, though not recommended).
+
+### Manual Cleanup (Alternative)
+
+If you prefer manual control or the merge command is unavailable:
 
 ```bash
 # Fetch latest main to ensure merge is detected
