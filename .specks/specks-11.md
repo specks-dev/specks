@@ -13,6 +13,7 @@
 | Target branch | main |
 | Tracking issue/PR | TBD |
 | Last updated | 2026-02-08 |
+| Beads Root | `specks-0yy` |
 
 ---
 
@@ -348,6 +349,8 @@ The planner and implementer skills currently construct shell commands inline for
 
 #### Step 0: Add init --check flag {#step-0}
 
+**Bead:** `specks-0yy.1`
+
 **Commit:** `feat(cli): add init --check flag for initialization verification`
 
 **References:** [D01] Init check uses flag, Spec S01, (#init-check-spec, #context)
@@ -386,6 +389,8 @@ The planner and implementer skills currently construct shell commands inline for
 
 **Depends on:** #step-0
 
+**Bead:** `specks-0yy.2`
+
 **Commit:** `feat(cli): extend status --json with step arrays and bead mapping`
 
 **References:** [D04] Extend existing status, Spec S03, (#extended-status-spec, #strategy)
@@ -423,6 +428,8 @@ The planner and implementer skills currently construct shell commands inline for
 #### Step 2: Implement worktree create --sync-beads {#step-2}
 
 **Depends on:** #step-1
+
+**Bead:** `specks-0yy.3`
 
 **Commit:** `feat(cli): add worktree create --sync-beads with atomic commit and rollback`
 
@@ -468,6 +475,8 @@ The planner and implementer skills currently construct shell commands inline for
 #### Step 3: Add new error codes and documentation {#step-3}
 
 **Depends on:** #step-2
+
+**Bead:** `specks-0yy.4`
 
 **Commit:** `docs(cli): add error codes E010, E011 and update help text`
 
