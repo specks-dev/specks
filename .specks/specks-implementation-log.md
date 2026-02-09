@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-0
+date: 2026-02-09T17:30:00Z
+bead: specks-tyo.1
+---
+
+## #step-0: Added four helper functions for computing external session storage paths: session_id_from_worktree, sessions_dir, artifacts_dir, session_file_path
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+
+---
+
+---
 step: #step-8
 date: 2026-02-09T23:50:00Z
 bead: specks-7t7.9

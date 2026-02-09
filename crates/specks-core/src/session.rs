@@ -185,6 +185,47 @@ pub fn save_session(session: &Session) -> Result<(), SpecksError> {
     Ok(())
 }
 
+/// Extract session ID from worktree directory path
+///
+/// Given a worktree path like `.specks-worktrees/specks__auth-20260208-143022`,
+/// extracts the session ID by stripping the `specks__` prefix from the directory basename.
+///
+/// Returns the session ID (e.g., `auth-20260208-143022`) or None if the path doesn't
+/// match the expected format.
+pub fn session_id_from_worktree(worktree_path: &Path) -> Option<String> {
+    let basename = worktree_path.file_name()?.to_str()?;
+    basename.strip_prefix("specks__").map(|s| s.to_string())
+}
+
+/// Get the sessions directory path
+///
+/// Returns the path to the external sessions directory: `<repo_root>/.specks-worktrees/.sessions/`
+/// This directory stores session.json files externally from worktrees.
+pub fn sessions_dir(repo_root: &Path) -> std::path::PathBuf {
+    repo_root.join(".specks-worktrees").join(".sessions")
+}
+
+/// Get the artifacts directory path for a session
+///
+/// Returns the path to the artifacts directory for a given session ID:
+/// `<repo_root>/.specks-worktrees/.artifacts/<session-id>/`
+///
+/// This directory stores session-specific artifacts like log files and strategy JSONs.
+pub fn artifacts_dir(repo_root: &Path, session_id: &str) -> std::path::PathBuf {
+    repo_root
+        .join(".specks-worktrees")
+        .join(".artifacts")
+        .join(session_id)
+}
+
+/// Get the full path to a session file in external storage
+///
+/// Returns the path to session.json in the external sessions directory:
+/// `<repo_root>/.specks-worktrees/.sessions/<session-id>.json`
+pub fn session_file_path(repo_root: &Path, session_id: &str) -> std::path::PathBuf {
+    sessions_dir(repo_root).join(format!("{}.json", session_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,6 +377,133 @@ mod tests {
             (2020..=2100).contains(&year),
             "Year should be reasonable: {}",
             year
+        );
+    }
+
+    #[test]
+    fn test_session_id_from_worktree_basic() {
+        let path = Path::new(".specks-worktrees/specks__auth-20260208-143022");
+        let session_id = session_id_from_worktree(path);
+        assert_eq!(session_id, Some("auth-20260208-143022".to_string()));
+    }
+
+    #[test]
+    fn test_session_id_from_worktree_numeric() {
+        let path = Path::new(".specks-worktrees/specks__14-20250209-172747");
+        let session_id = session_id_from_worktree(path);
+        assert_eq!(session_id, Some("14-20250209-172747".to_string()));
+    }
+
+    #[test]
+    fn test_session_id_from_worktree_with_hyphenated_slug() {
+        let path = Path::new(".specks-worktrees/specks__my-feature-name-20260208-143022");
+        let session_id = session_id_from_worktree(path);
+        assert_eq!(
+            session_id,
+            Some("my-feature-name-20260208-143022".to_string())
+        );
+    }
+
+    #[test]
+    fn test_session_id_from_worktree_absolute_path() {
+        let path = Path::new("/abs/path/to/.specks-worktrees/specks__auth-20260208-143022");
+        let session_id = session_id_from_worktree(path);
+        assert_eq!(session_id, Some("auth-20260208-143022".to_string()));
+    }
+
+    #[test]
+    fn test_session_id_from_worktree_invalid_prefix() {
+        let path = Path::new(".specks-worktrees/other__auth-20260208-143022");
+        let session_id = session_id_from_worktree(path);
+        assert_eq!(session_id, None);
+    }
+
+    #[test]
+    fn test_session_id_from_worktree_no_prefix() {
+        let path = Path::new(".specks-worktrees/auth-20260208-143022");
+        let session_id = session_id_from_worktree(path);
+        assert_eq!(session_id, None);
+    }
+
+    #[test]
+    fn test_session_id_from_worktree_root_path() {
+        let path = Path::new("/");
+        let session_id = session_id_from_worktree(path);
+        assert_eq!(session_id, None);
+    }
+
+    #[test]
+    fn test_sessions_dir() {
+        let repo_root = Path::new("/repo");
+        let dir = sessions_dir(repo_root);
+        assert_eq!(
+            dir,
+            std::path::PathBuf::from("/repo/.specks-worktrees/.sessions")
+        );
+    }
+
+    #[test]
+    fn test_artifacts_dir() {
+        let repo_root = Path::new("/repo");
+        let dir = artifacts_dir(repo_root, "auth-20260208-143022");
+        assert_eq!(
+            dir,
+            std::path::PathBuf::from("/repo/.specks-worktrees/.artifacts/auth-20260208-143022")
+        );
+    }
+
+    #[test]
+    fn test_artifacts_dir_numeric() {
+        let repo_root = Path::new("/repo");
+        let dir = artifacts_dir(repo_root, "14-20250209-172747");
+        assert_eq!(
+            dir,
+            std::path::PathBuf::from("/repo/.specks-worktrees/.artifacts/14-20250209-172747")
+        );
+    }
+
+    #[test]
+    fn test_session_file_path() {
+        let repo_root = Path::new("/repo");
+        let path = session_file_path(repo_root, "auth-20260208-143022");
+        assert_eq!(
+            path,
+            std::path::PathBuf::from("/repo/.specks-worktrees/.sessions/auth-20260208-143022.json")
+        );
+    }
+
+    #[test]
+    fn test_session_file_path_numeric() {
+        let repo_root = Path::new("/repo");
+        let path = session_file_path(repo_root, "14-20250209-172747");
+        assert_eq!(
+            path,
+            std::path::PathBuf::from("/repo/.specks-worktrees/.sessions/14-20250209-172747.json")
+        );
+    }
+
+    #[test]
+    fn test_path_helpers_integration() {
+        // Simulate a typical worktree path
+        let worktree_path = Path::new(".specks-worktrees/specks__auth-20260208-143022");
+        let repo_root = Path::new("/repo");
+
+        // Extract session ID
+        let session_id = session_id_from_worktree(worktree_path).unwrap();
+        assert_eq!(session_id, "auth-20260208-143022");
+
+        // Derive session file path
+        let session_file = session_file_path(repo_root, &session_id);
+        assert_eq!(
+            session_file,
+            std::path::PathBuf::from("/repo/.specks-worktrees/.sessions/auth-20260208-143022.json")
+        );
+
+        // Derive artifacts directory
+        let artifacts = artifacts_dir(repo_root, &session_id);
+        assert_eq!(
+            artifacts,
+            std::path::PathBuf::from("/repo/.specks-worktrees/.artifacts/auth-20260208-143022")
         );
     }
 }
