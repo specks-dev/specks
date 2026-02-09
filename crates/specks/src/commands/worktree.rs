@@ -539,6 +539,38 @@ mod tests {
         assert!(json.contains("removed"));
         assert!(json.contains("dry_run"));
     }
+
+    #[test]
+    fn test_worktree_create_help_includes_sync_beads() {
+        use clap::CommandFactory;
+        use crate::cli::Cli;
+
+        let app = Cli::command();
+        let worktree_subcommand = app
+            .find_subcommand("worktree")
+            .expect("worktree subcommand should exist");
+
+        // Find the create subcommand
+        let create_subcommand = worktree_subcommand
+            .get_subcommands()
+            .find(|cmd| cmd.get_name() == "create")
+            .expect("create subcommand should exist");
+
+        // Get the long_about text
+        let long_about = create_subcommand
+            .get_long_about()
+            .expect("create should have long_about");
+
+        // Verify --sync-beads flag is documented
+        assert!(
+            long_about.to_string().contains("--sync-beads"),
+            "create help should document --sync-beads flag"
+        );
+        assert!(
+            long_about.to_string().contains("atomically") || long_about.to_string().contains("rollback"),
+            "create help should explain atomic behavior"
+        );
+    }
 }
 
 #[cfg(test)]

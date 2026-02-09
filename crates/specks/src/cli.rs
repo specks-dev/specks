@@ -286,4 +286,28 @@ mod tests {
         assert!(cli.json);
         assert!(cli.quiet);
     }
+
+    #[test]
+    fn test_init_help_includes_check_flag() {
+        use clap::CommandFactory;
+        let app = Cli::command();
+        let init_subcommand = app
+            .find_subcommand("init")
+            .expect("init subcommand should exist");
+
+        // Get the long_about text
+        let long_about = init_subcommand
+            .get_long_about()
+            .expect("init should have long_about");
+
+        // Verify --check flag is documented
+        assert!(
+            long_about.to_string().contains("--check"),
+            "init help should document --check flag"
+        );
+        assert!(
+            long_about.to_string().contains("without side effects"),
+            "init help should explain --check has no side effects"
+        );
+    }
 }

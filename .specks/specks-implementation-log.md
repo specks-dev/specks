@@ -7,6 +7,27 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-3
+date: 2026-02-08T19:25:00Z
+bead: specks-0yy.4
+speck: .specks/specks-11.md
+---
+
+## [specks-11.md] Step 3: Document E035/E036 error codes and add help text verification tests | COMPLETE | 2026-02-08
+
+**Completed:** 2026-02-08T19:25:00Z
+
+**Summary:** Document E035/E036 error codes and add help text verification tests
+
+**Files Changed:**
+- CLAUDE.md
+- README.md
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/worktree.rs
+
+**Bead:** specks-0yy.4
+
+---
 step: #step-2
 date: 2026-02-09T03:00:03Z
 bead: specks-0yy.3

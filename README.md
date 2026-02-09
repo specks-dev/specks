@@ -445,6 +445,8 @@ pull_checkbox_mode = "checkpoints"  # What to check: "checkpoints" or "all"
 | E011 | Circular dependency |
 | E013 | Beads not initialized (.beads/ not found) |
 | E016 | Beads command failed |
+| E035 | Beads sync failed |
+| E036 | Bead commit failed |
 
 ## Troubleshooting
 
