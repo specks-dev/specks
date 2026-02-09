@@ -7,6 +7,24 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-4
+date: 2026-02-09T14:30:36Z
+bead: specks-s5s.5
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 4: Implement full merge workflow | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:30:36Z
+
+**Summary:** Implement full merge workflow: infrastructure file staging/commit, git push, gh pr merge --squash, git pull, worktree cleanup. Added dry-run mode with would_* fields and comprehensive JSON output.
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+
+**Bead:** specks-s5s.5
+
+---
 step: #step-3
 date: 2026-02-09T14:24:35Z
 bead: specks-s5s.4

@@ -601,52 +601,371 @@ pub fn run_merge(
         );
     }
 
-    // Populate response with lookup results
+    // If dry-run mode, return now with would_* fields populated
+    if dry_run {
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: Some(pr_info.url.clone()),
+            pr_number: Some(pr_info.number),
+            branch_name: Some(session.branch_name.clone()),
+            infrastructure_committed: None,
+            infrastructure_files: None,
+            worktree_cleaned: None,
+            dry_run: true,
+            would_commit: if !infrastructure.is_empty() {
+                Some(infrastructure.clone())
+            } else {
+                None
+            },
+            would_merge_pr: Some(pr_info.url.clone()),
+            would_cleanup_worktree: Some(worktree_path.display().to_string()),
+            error: None,
+            message: Some(format!(
+                "Would merge PR #{} for worktree at {}",
+                pr_info.number,
+                worktree_path.display()
+            )),
+        };
+
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        } else if !quiet {
+            println!("Dry-run mode: showing planned operations\n");
+            println!("Found worktree: {}", worktree_path.display());
+            println!("Branch: {}", session.branch_name);
+            println!("PR: #{} - {}", pr_info.number, pr_info.url);
+            if !infrastructure.is_empty() {
+                println!(
+                    "\nWould commit infrastructure files:\n  {}",
+                    infrastructure.join("\n  ")
+                );
+            }
+            println!("\nWould merge PR: {}", pr_info.url);
+            println!("Would cleanup worktree: {}", worktree_path.display());
+        }
+
+        return Ok(0);
+    }
+
+    // Step 8: Stage and commit infrastructure files (if any)
+    let infrastructure_committed = if !infrastructure.is_empty() {
+        // Extract speck name from speck_path for commit message
+        let speck_name = Path::new(&session.speck_path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+
+        // Stage infrastructure files
+        for file in &infrastructure {
+            let add_output = Command::new("git")
+                .args(["add", file])
+                .output()
+                .map_err(|e| format!("Failed to execute git add: {}", e))?;
+
+            if !add_output.status.success() {
+                let stderr = String::from_utf8_lossy(&add_output.stderr);
+                let error_msg = format!("Failed to stage {}: {}", file, stderr);
+
+                let data = MergeData {
+                    status: "error".to_string(),
+                    pr_url: Some(pr_info.url.clone()),
+                    pr_number: Some(pr_info.number),
+                    branch_name: Some(session.branch_name.clone()),
+                    infrastructure_committed: Some(false),
+                    infrastructure_files: Some(infrastructure.clone()),
+                    worktree_cleaned: None,
+                    dry_run: false,
+                    would_commit: None,
+                    would_merge_pr: None,
+                    would_cleanup_worktree: None,
+                    error: Some(error_msg.clone()),
+                    message: None,
+                };
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&data).unwrap());
+                } else if !quiet {
+                    eprintln!("Error: {}", error_msg);
+                }
+                return Err(error_msg);
+            }
+        }
+
+        // Commit with message following D04 format
+        let commit_message = format!("chore({}): infrastructure updates", speck_name);
+        let commit_output = Command::new("git")
+            .args(["commit", "-m", &commit_message])
+            .output()
+            .map_err(|e| format!("Failed to execute git commit: {}", e))?;
+
+        if !commit_output.status.success() {
+            let stderr = String::from_utf8_lossy(&commit_output.stderr);
+
+            // Check if it's an empty commit (no changes to commit)
+            if stderr.contains("nothing to commit") || stderr.contains("no changes added to commit") {
+                if !quiet {
+                    println!("No infrastructure changes to commit (already committed)");
+                }
+                false
+            } else {
+                let error_msg = format!("Failed to commit infrastructure files: {}", stderr);
+
+                let data = MergeData {
+                    status: "error".to_string(),
+                    pr_url: Some(pr_info.url.clone()),
+                    pr_number: Some(pr_info.number),
+                    branch_name: Some(session.branch_name.clone()),
+                    infrastructure_committed: Some(false),
+                    infrastructure_files: Some(infrastructure.clone()),
+                    worktree_cleaned: None,
+                    dry_run: false,
+                    would_commit: None,
+                    would_merge_pr: None,
+                    would_cleanup_worktree: None,
+                    error: Some(error_msg.clone()),
+                    message: None,
+                };
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&data).unwrap());
+                } else if !quiet {
+                    eprintln!("Error: {}", error_msg);
+                }
+                return Err(error_msg);
+            }
+        } else {
+            if !quiet {
+                println!("Committed infrastructure files: {}", infrastructure.join(", "));
+            }
+            true
+        }
+    } else {
+        false
+    };
+
+    // Step 9: Push main to origin
+    if infrastructure_committed {
+        let push_output = Command::new("git")
+            .args(["push", "origin", "main"])
+            .output()
+            .map_err(|e| format!("Failed to execute git push: {}", e))?;
+
+        if !push_output.status.success() {
+            let stderr = String::from_utf8_lossy(&push_output.stderr);
+            let error_msg = format!("Failed to push main to origin: {}", stderr);
+
+            let data = MergeData {
+                status: "error".to_string(),
+                pr_url: Some(pr_info.url.clone()),
+                pr_number: Some(pr_info.number),
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: Some(infrastructure_committed),
+                infrastructure_files: Some(infrastructure.clone()),
+                worktree_cleaned: None,
+                dry_run: false,
+                would_commit: None,
+                would_merge_pr: None,
+                would_cleanup_worktree: None,
+                error: Some(error_msg.clone()),
+                message: None,
+            };
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            } else if !quiet {
+                eprintln!("Error: {}", error_msg);
+            }
+            return Err(error_msg);
+        }
+
+        if !quiet {
+            println!("Pushed main to origin");
+        }
+    }
+
+    // Step 10: Merge PR via gh pr merge --squash
+    if !quiet {
+        println!("Merging PR #{} via squash...", pr_info.number);
+    }
+
+    let merge_output = Command::new("gh")
+        .args(["pr", "merge", "--squash", &session.branch_name])
+        .output()
+        .map_err(|e| format!("Failed to execute gh pr merge: {}", e))?;
+
+    if !merge_output.status.success() {
+        let stderr = String::from_utf8_lossy(&merge_output.stderr);
+        let error_msg = format!("Failed to merge PR: {}", stderr);
+
+        let data = MergeData {
+            status: "error".to_string(),
+            pr_url: Some(pr_info.url.clone()),
+            pr_number: Some(pr_info.number),
+            branch_name: Some(session.branch_name.clone()),
+            infrastructure_committed: Some(infrastructure_committed),
+            infrastructure_files: if infrastructure_committed {
+                Some(infrastructure.clone())
+            } else {
+                None
+            },
+            worktree_cleaned: None,
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            error: Some(error_msg.clone()),
+            message: None,
+        };
+
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        } else if !quiet {
+            eprintln!("Error: {}", error_msg);
+        }
+        return Err(error_msg);
+    }
+
+    if !quiet {
+        println!("PR merged successfully");
+    }
+
+    // Step 11: Pull main to fetch the squashed commit
+    let pull_output = Command::new("git")
+        .args(["pull", "origin", "main"])
+        .output()
+        .map_err(|e| format!("Failed to execute git pull: {}", e))?;
+
+    if !pull_output.status.success() {
+        let stderr = String::from_utf8_lossy(&pull_output.stderr);
+        let error_msg = format!("Failed to pull main after merge: {}", stderr);
+
+        let data = MergeData {
+            status: "error".to_string(),
+            pr_url: Some(pr_info.url.clone()),
+            pr_number: Some(pr_info.number),
+            branch_name: Some(session.branch_name.clone()),
+            infrastructure_committed: Some(infrastructure_committed),
+            infrastructure_files: if infrastructure_committed {
+                Some(infrastructure.clone())
+            } else {
+                None
+            },
+            worktree_cleaned: None,
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            error: Some(error_msg.clone()),
+            message: None,
+        };
+
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        } else if !quiet {
+            eprintln!("Error: {}", error_msg);
+        }
+        return Err(error_msg);
+    }
+
+    if !quiet {
+        println!("Pulled squashed commit from origin");
+    }
+
+    // Step 12: Cleanup worktree by removing it and deleting the branch
+    if !quiet {
+        println!("Cleaning up worktree...");
+    }
+
+    // Remove the worktree directory using git worktree remove
+    let remove_output = Command::new("git")
+        .args(["worktree", "remove", worktree_path.to_str().unwrap()])
+        .output()
+        .map_err(|e| format!("Failed to execute git worktree remove: {}", e))?;
+
+    let mut worktree_cleaned = if !remove_output.status.success() {
+        let stderr = String::from_utf8_lossy(&remove_output.stderr);
+        if !quiet {
+            eprintln!("Warning: Failed to remove worktree: {}", stderr);
+            eprintln!("You may need to manually run: git worktree remove {}", worktree_path.display());
+        }
+        false
+    } else {
+        if !quiet {
+            println!("Removed worktree directory");
+        }
+        true
+    };
+
+    // Delete the branch
+    let delete_output = Command::new("git")
+        .args(["branch", "-D", &session.branch_name])
+        .output()
+        .map_err(|e| format!("Failed to execute git branch -D: {}", e))?;
+
+    if !delete_output.status.success() {
+        let stderr = String::from_utf8_lossy(&delete_output.stderr);
+        if !quiet {
+            eprintln!("Warning: Failed to delete branch: {}", stderr);
+            eprintln!("You may need to manually run: git branch -D {}", session.branch_name);
+        }
+        worktree_cleaned = false;
+    } else {
+        if !quiet {
+            println!("Deleted branch: {}", session.branch_name);
+        }
+    }
+
+    // Prune stale worktree metadata
+    let prune_output = Command::new("git")
+        .args(["worktree", "prune"])
+        .output()
+        .map_err(|e| format!("Failed to execute git worktree prune: {}", e))?;
+
+    if !prune_output.status.success() {
+        let stderr = String::from_utf8_lossy(&prune_output.stderr);
+        if !quiet {
+            eprintln!("Warning: Failed to prune worktree metadata: {}", stderr);
+        }
+    } else {
+        if !quiet {
+            println!("Pruned worktree metadata");
+        }
+    }
+
+    // Step 13: Return success response
     let data = MergeData {
         status: "ok".to_string(),
         pr_url: Some(pr_info.url.clone()),
         pr_number: Some(pr_info.number),
         branch_name: Some(session.branch_name.clone()),
-        infrastructure_committed: None,
-        infrastructure_files: None,
-        worktree_cleaned: None,
-        dry_run,
-        would_commit: if dry_run && !infrastructure.is_empty() {
+        infrastructure_committed: Some(infrastructure_committed),
+        infrastructure_files: if infrastructure_committed {
             Some(infrastructure.clone())
         } else {
             None
         },
-        would_merge_pr: if dry_run {
-            Some(pr_info.url.clone())
-        } else {
-            None
-        },
-        would_cleanup_worktree: if dry_run {
-            Some(worktree_path.display().to_string())
-        } else {
-            None
-        },
+        worktree_cleaned: Some(worktree_cleaned),
+        dry_run: false,
+        would_commit: None,
+        would_merge_pr: None,
+        would_cleanup_worktree: None,
         error: None,
         message: Some(format!(
-            "Found PR #{} ({}) for worktree at {}",
-            pr_info.number,
-            pr_info.state,
-            worktree_path.display()
+            "Successfully merged PR #{} and cleaned up worktree",
+            pr_info.number
         )),
     };
 
     if json {
         println!("{}", serde_json::to_string_pretty(&data).unwrap());
     } else if !quiet {
-        println!("Found worktree: {}", worktree_path.display());
-        println!("Branch: {}", session.branch_name);
-        println!("PR: #{} - {}", pr_info.number, pr_info.url);
-        println!("State: {}", pr_info.state);
-        if !infrastructure.is_empty() {
-            println!(
-                "\nInfrastructure files to commit:\n  {}",
-                infrastructure.join("\n  ")
-            );
+        println!("\nMerge complete!");
+        println!("PR: {}", pr_info.url);
+        if infrastructure_committed {
+            println!("Infrastructure committed: {}", infrastructure.join(", "));
+        }
+        if worktree_cleaned {
+            println!("Worktree cleaned: {}", worktree_path.display());
         }
     }
 
@@ -1372,5 +1691,138 @@ mod tests {
         // Cleanup
         std::env::set_current_dir(original_dir).unwrap();
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_merge_data_json_serialization() {
+        // Test successful merge response
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: Some("https://github.com/owner/repo/pull/123".to_string()),
+            pr_number: Some(123),
+            branch_name: Some("specks/feature-20260209-120000".to_string()),
+            infrastructure_committed: Some(true),
+            infrastructure_files: Some(vec!["CLAUDE.md".to_string(), "agents/coder-agent.md".to_string()]),
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            error: None,
+            message: Some("Successfully merged PR #123 and cleaned up worktree".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"status\": \"ok\""));
+        assert!(json.contains("\"pr_number\": 123"));
+        assert!(json.contains("\"infrastructure_committed\": true"));
+        assert!(json.contains("\"worktree_cleaned\": true"));
+        assert!(!json.contains("\"dry_run\"")); // Should be omitted when false
+
+        // Verify it can be deserialized back
+        let _parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    }
+
+    #[test]
+    fn test_merge_data_dry_run_json_serialization() {
+        // Test dry-run response
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: Some("https://github.com/owner/repo/pull/123".to_string()),
+            pr_number: Some(123),
+            branch_name: Some("specks/feature-20260209-120000".to_string()),
+            infrastructure_committed: None,
+            infrastructure_files: None,
+            worktree_cleaned: None,
+            dry_run: true,
+            would_commit: Some(vec!["CLAUDE.md".to_string(), "agents/coder-agent.md".to_string()]),
+            would_merge_pr: Some("https://github.com/owner/repo/pull/123".to_string()),
+            would_cleanup_worktree: Some(".specks-worktrees/specks__feature-20260209-120000".to_string()),
+            error: None,
+            message: Some("Would merge PR #123 for worktree at .specks-worktrees/specks__feature-20260209-120000".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"status\": \"ok\""));
+        assert!(json.contains("\"dry_run\": true"));
+        assert!(json.contains("\"would_commit\""));
+        assert!(json.contains("\"would_merge_pr\""));
+        assert!(json.contains("\"would_cleanup_worktree\""));
+        assert!(!json.contains("\"infrastructure_committed\"")); // Should be omitted when None
+        assert!(!json.contains("\"worktree_cleaned\"")); // Should be omitted when None
+
+        // Verify it can be deserialized back
+        let _parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    }
+
+    #[test]
+    fn test_merge_data_error_json_serialization() {
+        // Test error response
+        let data = MergeData {
+            status: "error".to_string(),
+            pr_url: Some("https://github.com/owner/repo/pull/123".to_string()),
+            pr_number: Some(123),
+            branch_name: Some("specks/feature-20260209-120000".to_string()),
+            infrastructure_committed: None,
+            infrastructure_files: None,
+            worktree_cleaned: None,
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            error: Some("Main branch has 2 unpushed commits. Run 'git push' first.".to_string()),
+            message: None,
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"status\": \"error\""));
+        assert!(json.contains("\"error\""));
+        assert!(json.contains("unpushed commits"));
+        assert!(!json.contains("\"dry_run\"")); // Should be omitted when false
+
+        // Verify it can be deserialized back
+        let _parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    }
+
+    #[test]
+    fn test_validate_pr_state_open_success() {
+        let pr_info = PrInfo {
+            number: 123,
+            url: "https://github.com/owner/repo/pull/123".to_string(),
+            state: "OPEN".to_string(),
+        };
+
+        let result = validate_pr_state(&pr_info);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_pr_state_merged_error() {
+        let pr_info = PrInfo {
+            number: 123,
+            url: "https://github.com/owner/repo/pull/123".to_string(),
+            state: "MERGED".to_string(),
+        };
+
+        let result = validate_pr_state(&pr_info);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.contains("already merged"));
+        assert!(error.contains(&pr_info.url));
+    }
+
+    #[test]
+    fn test_validate_pr_state_closed_error() {
+        let pr_info = PrInfo {
+            number: 123,
+            url: "https://github.com/owner/repo/pull/123".to_string(),
+            state: "CLOSED".to_string(),
+        };
+
+        let result = validate_pr_state(&pr_info);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.contains("closed without merge"));
+        assert!(error.contains(&pr_info.url));
     }
 }
