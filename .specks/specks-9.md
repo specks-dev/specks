@@ -13,7 +13,6 @@
 | Target branch | main |
 | Tracking issue/PR | N/A |
 | Last updated | 2025-02-08 |
-| Beads Root | `specks-bui` |
 
 ---
 
@@ -115,8 +114,6 @@ This cleanup removes dead code paths and documentation to accurately reflect the
 
 #### Step 0: Update .gitignore {#step-0}
 
-**Bead:** `specks-bui.1`
-
 **Commit:** `chore: remove obsolete .specks/runs/ from .gitignore`
 
 **References:** [D01] Remove runs directory references completely, (#context, #strategy)
@@ -145,8 +142,6 @@ This cleanup removes dead code paths and documentation to accurately reflect the
 #### Step 1: Update README.md {#step-1}
 
 **Depends on:** #step-0
-
-**Bead:** `specks-bui.2`
 
 **Commit:** `docs: remove obsolete Run Artifacts section from README`
 
@@ -177,8 +172,6 @@ This cleanup removes dead code paths and documentation to accurately reflect the
 
 **Depends on:** #step-1
 
-**Bead:** `specks-bui.3`
-
 **Commit:** `docs: remove runs references from getting-started guide`
 
 **References:** [D01] Remove runs directory references completely, (#context, #strategy)
@@ -205,8 +198,6 @@ This cleanup removes dead code paths and documentation to accurately reflect the
 #### Step 3: Update execute-plan.md {#step-3}
 
 **Depends on:** #step-2
-
-**Bead:** `specks-bui.4`
 
 **Commit:** `docs: remove runs directory references from execute-plan tutorial`
 
@@ -240,8 +231,6 @@ This cleanup removes dead code paths and documentation to accurately reflect the
 
 **Depends on:** #step-3
 
-**Bead:** `specks-bui.5`
-
 **Commit:** `chore: remove obsolete halt signal reference from implement-plan skill`
 
 **References:** [D01] Remove runs directory references completely, (#context, #strategy)
@@ -269,8 +258,6 @@ This cleanup removes dead code paths and documentation to accurately reflect the
 #### Step 5: Final Verification {#step-5}
 
 **Depends on:** #step-4
-
-**Bead:** `specks-bui.6`
 
 **Commit:** N/A (verification only)
 
