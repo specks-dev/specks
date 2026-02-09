@@ -6,6 +6,52 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-10.md] Step 4: Delete Obsolete Agent Files | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 4 specification (#step-4, lines 597-627)
+- [D01] Merge logger INTO committer (#d01-merge-logger)
+- [D02] Merge auditor INTO reviewer (#d02-merge-auditor)
+- [D05] Keep existing agent file names (#d05-file-names)
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Delete `agents/auditor-agent.md` | Done |
+| Delete `agents/logger-agent.md` | Done |
+| Verify remaining agent files: architect, coder, reviewer, committer (implementation) + clarifier, author, critic (planning) + implementer-setup | Done |
+| Update integration test constants to remove auditor-agent and logger-agent | Done |
+
+**Files Created:**
+- None (deletion only)
+
+**Files Modified:**
+- `crates/specks/tests/agent_integration_tests.rs` - Removed auditor-agent and logger-agent from ALL_AGENTS constant (11 agents -> 9 agents), updated comments to reflect Phase 10.0 consolidation
+
+**Files Deleted:**
+- `agents/auditor-agent.md` - Functionality consolidated into reviewer-agent
+- `agents/logger-agent.md` - Functionality consolidated into committer-agent
+
+**Test Results:**
+- Integration test: `cargo nextest run agent_integration_tests` - PASS
+- Test correctly verifies 9 remaining agent files exist
+
+**Checkpoints Verified:**
+- `ls agents/auditor-agent.md` fails (file not found): PASS
+- `ls agents/logger-agent.md` fails (file not found): PASS
+- `Glob "agents/*-agent.md"` returns 9 files (3 planning + 4 implementation + 2 setup): PASS
+
+**Key Decisions/Notes:**
+- Agent consolidation is now complete: 11 agents -> 9 agents (auditor and logger merged)
+- Integration tests updated to reflect the new architecture
+- Remaining 9 agents: clarifier, author, critic, planner-setup (planning) + architect, coder, reviewer, committer, implementer-setup (implementation)
+- All functionality preserved through consolidation into reviewer-agent and committer-agent
+
+---
+
 ## [specks-10.md] Step 3: Update CLAUDE.md Documentation | COMPLETE | 2026-02-09
 
 **Completed:** 2026-02-09
