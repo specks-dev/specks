@@ -143,10 +143,29 @@ fn year_to_days(year: i32) -> i64 {
     y * 365 + y / 4 - y / 100 + y / 400
 }
 
-/// Load session from worktree directory
+/// Load session from external or internal storage
 ///
-/// Reads and deserializes `session.json` from `{worktree_path}/.specks/session.json`
-pub fn load_session(worktree_path: &Path) -> Result<Session, SpecksError> {
+/// First checks external storage at `{repo_root}/.specks-worktrees/.sessions/{session-id}.json`,
+/// then falls back to internal storage at `{worktree_path}/.specks/session.json`.
+///
+/// If `repo_root` is None, only checks internal storage (backward compatibility).
+pub fn load_session(worktree_path: &Path, repo_root: Option<&Path>) -> Result<Session, SpecksError> {
+    // Try external storage first if repo_root is provided
+    if let Some(root) = repo_root {
+        if let Some(session_id) = session_id_from_worktree(worktree_path) {
+            let external_path = session_file_path(root, &session_id);
+            if external_path.exists() {
+                let content = fs::read_to_string(&external_path)?;
+                let session: Session = serde_json::from_str(&content).map_err(|e| SpecksError::Parse {
+                    message: format!("Failed to parse session.json: {}", e),
+                    line: None,
+                })?;
+                return Ok(session);
+            }
+        }
+    }
+
+    // Fall back to internal storage (backward compatibility)
     let session_path = worktree_path.join(".specks").join("session.json");
 
     if !session_path.exists() {
@@ -164,17 +183,30 @@ pub fn load_session(worktree_path: &Path) -> Result<Session, SpecksError> {
     Ok(session)
 }
 
-/// Save session to worktree directory
+/// Save session to external storage
 ///
-/// Serializes and writes session to `{session.worktree_path}/.specks/session.json`
-pub fn save_session(session: &Session) -> Result<(), SpecksError> {
+/// Serializes and writes session to `{repo_root}/.specks-worktrees/.sessions/{session-id}.json`.
+/// Creates the `.sessions/` directory if it doesn't exist.
+pub fn save_session(session: &Session, repo_root: &Path) -> Result<(), SpecksError> {
     let worktree_path = Path::new(&session.worktree_path);
-    let specks_dir = worktree_path.join(".specks");
 
-    // Create .specks directory if it doesn't exist
-    fs::create_dir_all(&specks_dir)?;
+    // Extract session ID from worktree path
+    let session_id = session_id_from_worktree(worktree_path).ok_or_else(|| {
+        SpecksError::Parse {
+            message: format!(
+                "Cannot extract session ID from worktree path: {}",
+                worktree_path.display()
+            ),
+            line: None,
+        }
+    })?;
 
-    let session_path = specks_dir.join("session.json");
+    // Create .specks-worktrees/.sessions directory if it doesn't exist
+    let sessions_directory = sessions_dir(repo_root);
+    fs::create_dir_all(&sessions_directory)?;
+
+    // Write to external storage
+    let session_path = session_file_path(repo_root, &session_id);
     let content = serde_json::to_string_pretty(session).map_err(|e| SpecksError::Parse {
         message: format!("Failed to serialize session: {}", e),
         line: None,
@@ -303,7 +335,7 @@ mod tests {
     #[test]
     fn test_load_session_missing_file() {
         let temp_dir = std::env::temp_dir().join("specks-test-missing");
-        let result = load_session(&temp_dir);
+        let result = load_session(&temp_dir, None);
         assert!(result.is_err());
         match result {
             Err(SpecksError::FileNotFound(path)) => {
@@ -314,17 +346,19 @@ mod tests {
     }
 
     #[test]
-    fn test_save_and_load_session() {
-        let temp_dir = std::env::temp_dir().join("specks-test-session");
+    fn test_save_and_load_session_internal() {
+        // Test old internal storage path for backward compatibility
+        let temp_dir = std::env::temp_dir().join("specks-test-session-internal");
         let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
 
+        let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
         let session = Session {
             schema_version: "1".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "test".to_string(),
             branch_name: "specks/test-20260208-120000".to_string(),
             base_branch: "main".to_string(),
-            worktree_path: temp_dir.display().to_string(),
+            worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::Pending,
             current_step: 0,
@@ -332,16 +366,215 @@ mod tests {
             beads_root: None,
         };
 
-        // Save session
-        save_session(&session).unwrap();
+        // Create worktree directory and internal .specks dir
+        let specks_dir = worktree_path.join(".specks");
+        fs::create_dir_all(&specks_dir).unwrap();
 
-        // Load session
-        let loaded = load_session(&temp_dir).unwrap();
+        // Write to old internal location
+        let session_path = specks_dir.join("session.json");
+        let content = serde_json::to_string_pretty(&session).unwrap();
+        fs::write(&session_path, content).unwrap();
+
+        // Load session with no repo_root (should fall back to internal)
+        let loaded = load_session(&worktree_path, None).unwrap();
         assert_eq!(loaded.schema_version, session.schema_version);
         assert_eq!(loaded.speck_path, session.speck_path);
         assert_eq!(loaded.status, SessionStatus::Pending);
         assert_eq!(loaded.current_step, 0);
         assert_eq!(loaded.total_steps, 3);
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_save_and_load_session_external() {
+        // Test new external storage path
+        let temp_dir = std::env::temp_dir().join("specks-test-session-external");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
+
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: "specks/test-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Pending,
+            current_step: 0,
+            total_steps: 3,
+            beads_root: None,
+        };
+
+        // Create worktree directory
+        fs::create_dir_all(&worktree_path).unwrap();
+
+        // Save session to external storage
+        save_session(&session, &repo_root).unwrap();
+
+        // Verify external file exists
+        let external_path = session_file_path(&repo_root, "test-20260208-120000");
+        assert!(external_path.exists());
+
+        // Load session from external storage
+        let loaded = load_session(&worktree_path, Some(&repo_root)).unwrap();
+        assert_eq!(loaded.schema_version, session.schema_version);
+        assert_eq!(loaded.speck_path, session.speck_path);
+        assert_eq!(loaded.status, SessionStatus::Pending);
+        assert_eq!(loaded.current_step, 0);
+        assert_eq!(loaded.total_steps, 3);
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_load_session_fallback_to_internal() {
+        // Test fallback: external doesn't exist, but internal does
+        let temp_dir = std::env::temp_dir().join("specks-test-session-fallback");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
+
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: "specks/test-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Pending,
+            current_step: 0,
+            total_steps: 3,
+            beads_root: None,
+        };
+
+        // Create worktree directory and internal .specks dir
+        let specks_dir = worktree_path.join(".specks");
+        fs::create_dir_all(&specks_dir).unwrap();
+
+        // Write to old internal location only
+        let session_path = specks_dir.join("session.json");
+        let content = serde_json::to_string_pretty(&session).unwrap();
+        fs::write(&session_path, content).unwrap();
+
+        // Load with repo_root provided, should fall back to internal
+        let loaded = load_session(&worktree_path, Some(&repo_root)).unwrap();
+        assert_eq!(loaded.schema_version, session.schema_version);
+        assert_eq!(loaded.speck_path, session.speck_path);
+        assert_eq!(loaded.status, SessionStatus::Pending);
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_save_session_creates_directory() {
+        // Test that save_session creates .sessions directory if it doesn't exist
+        let temp_dir = std::env::temp_dir().join("specks-test-session-create-dir");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
+
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: "specks/test-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Pending,
+            current_step: 0,
+            total_steps: 3,
+            beads_root: None,
+        };
+
+        // Create worktree directory
+        fs::create_dir_all(&worktree_path).unwrap();
+
+        // Verify .sessions directory doesn't exist yet
+        let sessions_directory = sessions_dir(&repo_root);
+        assert!(!sessions_directory.exists());
+
+        // Save session (should create directory)
+        save_session(&session, &repo_root).unwrap();
+
+        // Verify .sessions directory was created
+        assert!(sessions_directory.exists());
+        assert!(sessions_directory.is_dir());
+
+        // Verify session file exists
+        let external_path = session_file_path(&repo_root, "test-20260208-120000");
+        assert!(external_path.exists());
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_load_session_external_takes_precedence() {
+        // Test that external storage takes precedence over internal when both exist
+        let temp_dir = std::env::temp_dir().join("specks-test-session-precedence");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
+
+        // Create a session for external storage
+        let external_session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: "specks/test-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: 2,
+            total_steps: 3,
+            beads_root: Some("bd-external".to_string()),
+        };
+
+        // Create a different session for internal storage
+        let internal_session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: "specks/test-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Pending,
+            current_step: 0,
+            total_steps: 3,
+            beads_root: Some("bd-internal".to_string()),
+        };
+
+        // Create worktree directory and internal .specks dir
+        let specks_dir = worktree_path.join(".specks");
+        fs::create_dir_all(&specks_dir).unwrap();
+
+        // Write to internal location
+        let internal_path = specks_dir.join("session.json");
+        let internal_content = serde_json::to_string_pretty(&internal_session).unwrap();
+        fs::write(&internal_path, internal_content).unwrap();
+
+        // Write to external location
+        save_session(&external_session, &repo_root).unwrap();
+
+        // Load session - should get external version
+        let loaded = load_session(&worktree_path, Some(&repo_root)).unwrap();
+        assert_eq!(loaded.status, SessionStatus::InProgress);
+        assert_eq!(loaded.current_step, 2);
+        assert_eq!(loaded.beads_root, Some("bd-external".to_string()));
 
         // Clean up
         let _ = fs::remove_dir_all(&temp_dir);

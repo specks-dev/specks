@@ -9,6 +9,22 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-1
+date: 2026-02-09T19:00:00Z
+bead: specks-tyo.2
+---
+
+## #step-1: Updated load_session() and save_session() to support external storage at .specks-worktrees/.sessions/ with backward compatibility fallback
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/lib.rs
+- crates/specks/tests/worktree_integration_tests.rs
+
+---
+
+---
 step: #step-0
 date: 2026-02-09T17:30:00Z
 bead: specks-tyo.1

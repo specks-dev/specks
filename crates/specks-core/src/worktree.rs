@@ -5,7 +5,7 @@
 
 use crate::error::SpecksError;
 use crate::parser::parse_speck;
-use crate::session::{Session, SessionStatus, now_iso8601, save_session};
+use crate::session::{Session, SessionStatus, now_iso8601, save_session, load_session};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -417,7 +417,7 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
     };
 
     // Save session (with partial failure recovery)
-    if let Err(e) = save_session(&session) {
+    if let Err(e) = save_session(&session, &config.repo_root) {
         // Clean up: remove worktree and delete branch
         let _ = git.worktree_remove(&worktree_path);
         let _ = git.delete_branch(&branch_name);
@@ -449,12 +449,9 @@ pub fn list_worktrees(repo_root: &Path) -> Result<Vec<Session>, SpecksError> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                let session_file = path.join(".specks").join("session.json");
-                if session_file.exists() {
-                    // Try to load session, skip if it fails
-                    if let Ok(session) = crate::session::load_session(&path) {
-                        sessions.push(session);
-                    }
+                // Try to load session (checks both external and internal storage)
+                if let Ok(session) = load_session(&path, Some(repo_root)) {
+                    sessions.push(session);
                 }
             }
         }

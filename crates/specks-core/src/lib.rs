@@ -38,7 +38,10 @@ pub use config::{
 pub use error::SpecksError;
 pub use interaction::{InteractionAdapter, InteractionError, InteractionResult, ProgressHandle};
 pub use parser::parse_speck;
-pub use session::{Session, SessionStatus, load_session, now_iso8601, save_session};
+pub use session::{
+    Session, SessionStatus, artifacts_dir, load_session, now_iso8601, save_session,
+    session_file_path, session_id_from_worktree, sessions_dir,
+};
 pub use types::{
     Anchor, BeadsHints, Checkpoint, CheckpointKind, Decision, Question, Speck, SpeckMetadata,
     SpeckStatus, Step, Substep,
