@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-2
+date: 2026-02-09T19:01:00Z
+bead: specks-tyo.3
+---
+
+## #step-2: Added delete_session() function to remove session files and artifacts directories, with graceful handling of missing files
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+
+---
+
+---
 step: #step-1
 date: 2026-02-09T19:00:00Z
 bead: specks-tyo.2

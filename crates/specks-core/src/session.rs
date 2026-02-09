@@ -258,6 +258,50 @@ pub fn session_file_path(repo_root: &Path, session_id: &str) -> std::path::PathB
     sessions_dir(repo_root).join(format!("{}.json", session_id))
 }
 
+/// Delete session and artifacts for a given session ID
+///
+/// Removes both the session file at `.specks-worktrees/.sessions/<session-id>.json`
+/// and the entire artifacts directory at `.specks-worktrees/.artifacts/<session-id>/`.
+///
+/// This function gracefully handles missing files and directories - if they don't exist,
+/// the operation succeeds without error. This is intentional since the goal is to ensure
+/// the session data is removed, whether it existed or not.
+///
+/// # Arguments
+///
+/// * `session_id` - The session ID (derived from worktree directory name)
+/// * `repo_root` - The repository root path
+///
+/// # Returns
+///
+/// * `Ok(())` if deletion succeeds or files don't exist
+/// * `Err(SpecksError)` if deletion fails due to permission or I/O errors
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::path::Path;
+/// use specks_core::session::delete_session;
+///
+/// let repo_root = Path::new("/path/to/repo");
+/// delete_session("auth-20260208-143022", repo_root).unwrap();
+/// ```
+pub fn delete_session(session_id: &str, repo_root: &Path) -> Result<(), SpecksError> {
+    // Delete session file
+    let session_path = session_file_path(repo_root, session_id);
+    if session_path.exists() {
+        fs::remove_file(&session_path)?;
+    }
+
+    // Delete artifacts directory (recursively)
+    let artifacts_path = artifacts_dir(repo_root, session_id);
+    if artifacts_path.exists() {
+        fs::remove_dir_all(&artifacts_path)?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -738,5 +782,197 @@ mod tests {
             artifacts,
             std::path::PathBuf::from("/repo/.specks-worktrees/.artifacts/auth-20260208-143022")
         );
+    }
+
+    #[test]
+    fn test_delete_session_success() {
+        // Test successful deletion of session file and artifacts
+        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-success");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let session_id = "test-20260208-143022";
+        let worktree_path = temp_dir.join(format!(".specks-worktrees/specks__{}", session_id));
+
+        // Create session
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: format!("specks/{}", session_id),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T14:30:22Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: 0,
+            total_steps: 3,
+            beads_root: None,
+        };
+
+        // Create worktree directory
+        fs::create_dir_all(&worktree_path).unwrap();
+
+        // Save session (creates session file)
+        save_session(&session, &repo_root).unwrap();
+
+        // Create artifacts directory with nested subdirectories
+        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        let step_dir = artifacts_path.join("step-1");
+        fs::create_dir_all(&step_dir).unwrap();
+        fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
+        fs::write(step_dir.join("coder-output.json"), "{}").unwrap();
+
+        // Verify files exist before deletion
+        let session_path = session_file_path(&repo_root, session_id);
+        assert!(session_path.exists());
+        assert!(artifacts_path.exists());
+
+        // Delete session
+        delete_session(session_id, &repo_root).unwrap();
+
+        // Verify files are deleted
+        assert!(!session_path.exists());
+        assert!(!artifacts_path.exists());
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_delete_session_missing_files() {
+        // Test that delete_session succeeds even if files don't exist
+        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-missing");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let session_id = "nonexistent-20260208-143022";
+
+        // Verify files don't exist
+        let session_path = session_file_path(&repo_root, session_id);
+        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        assert!(!session_path.exists());
+        assert!(!artifacts_path.exists());
+
+        // Delete session (should succeed even though nothing exists)
+        let result = delete_session(session_id, &repo_root);
+        assert!(result.is_ok());
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_delete_session_nested_artifacts() {
+        // Test recursive deletion of deeply nested artifact directories
+        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-nested");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let session_id = "nested-20260208-143022";
+
+        // Create deeply nested artifact structure
+        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        let step1_dir = artifacts_path.join("step-1");
+        let step2_dir = artifacts_path.join("step-2");
+        let deep_dir = step1_dir.join("subdir").join("nested").join("deep");
+
+        fs::create_dir_all(&deep_dir).unwrap();
+        fs::create_dir_all(&step2_dir).unwrap();
+
+        // Create files at various levels
+        fs::write(artifacts_path.join("session-log.txt"), "log").unwrap();
+        fs::write(step1_dir.join("architect-output.json"), "{}").unwrap();
+        fs::write(deep_dir.join("data.json"), "{}").unwrap();
+        fs::write(step2_dir.join("coder-output.json"), "{}").unwrap();
+
+        // Verify structure exists
+        assert!(artifacts_path.exists());
+        assert!(deep_dir.exists());
+
+        // Delete session (artifacts only, no session file in this test)
+        delete_session(session_id, &repo_root).unwrap();
+
+        // Verify entire directory tree is deleted
+        assert!(!artifacts_path.exists());
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_delete_session_only_session_file() {
+        // Test deletion when only session file exists (no artifacts)
+        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-file-only");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let session_id = "file-only-20260208-143022";
+        let worktree_path = temp_dir.join(format!(".specks-worktrees/specks__{}", session_id));
+
+        // Create session
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: format!("specks/{}", session_id),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T14:30:22Z".to_string(),
+            status: SessionStatus::Pending,
+            current_step: 0,
+            total_steps: 3,
+            beads_root: None,
+        };
+
+        // Create worktree directory
+        fs::create_dir_all(&worktree_path).unwrap();
+
+        // Save session (creates session file only)
+        save_session(&session, &repo_root).unwrap();
+
+        // Verify session file exists, artifacts don't
+        let session_path = session_file_path(&repo_root, session_id);
+        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        assert!(session_path.exists());
+        assert!(!artifacts_path.exists());
+
+        // Delete session
+        delete_session(session_id, &repo_root).unwrap();
+
+        // Verify session file is deleted
+        assert!(!session_path.exists());
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_delete_session_only_artifacts() {
+        // Test deletion when only artifacts exist (no session file)
+        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-artifacts-only");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        let repo_root = temp_dir.clone();
+        let session_id = "artifacts-only-20260208-143022";
+
+        // Create artifacts directory only
+        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        let step_dir = artifacts_path.join("step-1");
+        fs::create_dir_all(&step_dir).unwrap();
+        fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
+
+        // Verify artifacts exist, session file doesn't
+        let session_path = session_file_path(&repo_root, session_id);
+        assert!(!session_path.exists());
+        assert!(artifacts_path.exists());
+
+        // Delete session
+        delete_session(session_id, &repo_root).unwrap();
+
+        // Verify artifacts are deleted
+        assert!(!artifacts_path.exists());
+
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }
