@@ -7,6 +7,24 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-1
+date: 2026-02-09T14:08:22Z
+bead: specks-s5s.2
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 1: Implement worktree and PR lookup | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:08:22Z
+
+**Summary:** Implement worktree and PR lookup functions: find_worktree_for_speck searches session.json files, get_pr_for_branch uses gh CLI. Added 8 unit tests.
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+
+**Bead:** specks-s5s.2
+
+---
 step: #step-0
 date: 2026-02-09T14:03:04Z
 bead: specks-s5s.1
