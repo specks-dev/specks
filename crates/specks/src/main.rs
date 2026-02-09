@@ -84,6 +84,7 @@ fn main() -> ExitCode {
                 bead,
             } => commands::run_log_prepend(step, speck, summary, bead, cli.json, cli.quiet),
         },
+        Some(Commands::Doctor) => commands::run_doctor(cli.json, cli.quiet),
         Some(Commands::Version { verbose }) => commands::run_version(verbose, cli.json, cli.quiet),
         None => {
             // No subcommand - show splash screen

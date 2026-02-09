@@ -120,6 +120,14 @@ pub enum Commands {
     )]
     Log(LogCommands),
 
+    /// Health checks for specks project
+    ///
+    /// Verify initialization, log size, worktrees, and references.
+    #[command(
+        long_about = "Health checks for specks project.\n\nRuns checks:\n  - initialized: Verify .specks/ exists with required files\n  - log_size: Check implementation log within thresholds\n  - worktrees: Verify worktree paths are valid\n  - broken_refs: Check for broken anchor references\n\nExit codes:\n  0 - All checks passed\n  1 - Some checks have warnings\n  2 - Some checks failed\n\nUse --json for machine-readable output."
+    )]
+    Doctor,
+
     /// Merge a speck's PR and clean up worktree
     ///
     /// Automates the post-implementation merge workflow.
@@ -559,6 +567,38 @@ mod tests {
                 _ => panic!("Expected Log Prepend command"),
             },
             _ => panic!("Expected Log command"),
+        }
+    }
+
+    #[test]
+    fn test_doctor_command() {
+        let cli = Cli::try_parse_from(["specks", "doctor"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Doctor) => {}
+            _ => panic!("Expected Doctor command"),
+        }
+    }
+
+    #[test]
+    fn test_doctor_with_json_flag() {
+        let cli = Cli::try_parse_from(["specks", "--json", "doctor"]).unwrap();
+
+        assert!(cli.json);
+        match cli.command {
+            Some(Commands::Doctor) => {}
+            _ => panic!("Expected Doctor command"),
+        }
+    }
+
+    #[test]
+    fn test_doctor_with_quiet_flag() {
+        let cli = Cli::try_parse_from(["specks", "--quiet", "doctor"]).unwrap();
+
+        assert!(cli.quiet);
+        match cli.command {
+            Some(Commands::Doctor) => {}
+            _ => panic!("Expected Doctor command"),
         }
     }
 }

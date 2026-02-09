@@ -276,3 +276,37 @@ pub struct PrependData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
 }
+
+/// Data payload for doctor command (Spec S03)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DoctorData {
+    /// Individual health checks
+    pub checks: Vec<HealthCheck>,
+    /// Summary statistics
+    pub summary: DoctorSummary,
+}
+
+/// Summary of doctor results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DoctorSummary {
+    /// Number of checks that passed
+    pub passed: usize,
+    /// Number of checks with warnings
+    pub warnings: usize,
+    /// Number of checks that failed
+    pub failures: usize,
+}
+
+/// Individual health check result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheck {
+    /// Check name (e.g., "initialized", "log_size")
+    pub name: String,
+    /// Status: "pass", "warn", or "fail"
+    pub status: String,
+    /// Human-readable message
+    pub message: String,
+    /// Optional structured details
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
+}

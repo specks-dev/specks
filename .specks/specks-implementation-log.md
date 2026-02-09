@@ -9,6 +9,23 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-3
+date: 2026-02-10T00:04:15Z
+bead: specks-7t7.4
+---
+
+## #step-3: Add specks doctor command with health checks for initialized state, log size, worktrees, and broken refs
+
+**Files changed:**
+- crates/specks/src/commands/doctor.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/mod.rs
+- crates/specks/src/main.rs
+- crates/specks/src/output.rs
+
+---
+
+---
 step: #step-2
 date: 2026-02-09T23:59:00Z
 bead: specks-7t7.3
