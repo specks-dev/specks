@@ -6,6 +6,57 @@ This file documents the implementation progress for the specks project.
 
 Entries are sorted newest-first.
 
+## [specks-10.md] Step 2: Update Implementer SKILL.md | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09
+
+**References Reviewed:**
+- `.specks/specks-10.md` - Step 2 specification (#step-2, lines 512-552)
+- [D04] Combined retry budget (#d04-retry-budget)
+- Spec S06: Combined Retry Budget (#s06-retry-budget)
+- Diagram Diag01: Consolidated Implementer Loop (#diag01-loop)
+- Table T02: Implementation Agent Changes (#t02-agent-changes)
+- `skills/implementer/SKILL.md` - Current implementer orchestration
+
+**Implementation Progress:**
+
+| Task | Status |
+|------|--------|
+| Update orchestration diagram to show 4 agents | Done |
+| Remove auditor-agent spawn section (4f) | Done |
+| Remove logger-agent spawn section (4g) | Done |
+| Merge audit retry logic into reviewer retry logic | Done |
+| Update committer input to include log_entry fields | Done |
+| Update worktree structure section (fewer agent output files) | Done |
+| Update "Execute This Sequence" summary to list 4 agents | Done |
+| Change auditor_attempts to single reviewer_attempts counter | Done |
+| Update max attempts from 2+3 to just 3 total | Done |
+
+**Files Modified:**
+- `skills/implementer/SKILL.md` - Consolidated to 4-agent architecture, removed auditor and logger sections, updated orchestration diagram, merged retry logic to max 3 attempts
+
+**Test Results:**
+- YAML frontmatter validation: PASS
+- Skill file parsing: PASS
+
+**Checkpoints Verified:**
+- `Grep "architect-agent" skills/implementer/SKILL.md` finds spawn: PASS
+- `Grep "coder-agent" skills/implementer/SKILL.md` finds spawn: PASS
+- `Grep "reviewer-agent" skills/implementer/SKILL.md` finds spawn: PASS
+- `Grep "committer-agent" skills/implementer/SKILL.md` finds spawn: PASS
+- `Grep "auditor-agent" skills/implementer/SKILL.md` returns no results: PASS
+- `Grep "logger-agent" skills/implementer/SKILL.md` returns no results: PASS
+- `Grep "max 3" skills/implementer/SKILL.md` finds retry budget: PASS
+
+**Key Decisions/Notes:**
+- Removed sections 4f (auditor-agent) and 4g (logger-agent) from orchestration sequence
+- Consolidated retry counter from separate reviewer_attempts and auditor_attempts to single reviewer_attempts with max 3 total
+- Updated committer spawn to include log_entry fields (summary, tasks_completed, tests_run, checkpoints_verified)
+- Simplified worktree structure documentation to reflect 4 output files instead of 6
+- Updated orchestration diagram to show consolidated review+audit loop and committer logging workflow
+
+---
+
 ## [specks-10.md] Step 1: Consolidate Committer-Agent | COMPLETE | 2026-02-09
 
 **Completed:** 2026-02-09
