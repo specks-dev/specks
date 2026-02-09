@@ -274,8 +274,9 @@ impl<'a> GitCli<'a> {
 
     /// Remove a worktree
     ///
-    /// Uses --force to handle untracked files (session.json, step-artifacts, etc.)
-    /// that are created during implementation but not tracked in git.
+    /// Removes the worktree directory using git worktree remove.
+    /// The worktree must be clean (no untracked files) for this to succeed.
+    /// Callers should clean up session files and artifacts before calling this.
     fn worktree_remove(&self, path: &Path) -> Result<(), SpecksError> {
         let path_str = path
             .to_str()
@@ -286,7 +287,7 @@ impl<'a> GitCli<'a> {
         let output = Command::new("git")
             .arg("-C")
             .arg(self.repo_root)
-            .args(["worktree", "remove", "--force", path_str])
+            .args(["worktree", "remove", path_str])
             .output()
             .map_err(|e| SpecksError::WorktreeCleanupFailed {
                 reason: format!("failed to remove worktree: {}", e),
@@ -488,6 +489,53 @@ pub fn is_valid_worktree_path(path: &Path) -> bool {
     path_str.starts_with(".specks-worktrees/specks__")
 }
 
+/// Remove a worktree and clean up all associated files
+///
+/// This function orchestrates the cleanup of a worktree by:
+/// 1. Deleting external session and artifacts at `.specks-worktrees/.sessions/` and `.specks-worktrees/.artifacts/`
+/// 2. Deleting legacy internal session files at `{worktree}/.specks/session.json`
+/// 3. Removing the worktree directory using git worktree remove (without --force)
+///
+/// The function ensures all session data is cleaned up before git removes the worktree,
+/// so that git worktree remove can succeed without needing --force.
+///
+/// # Arguments
+///
+/// * `worktree_path` - Path to the worktree directory
+/// * `repo_root` - Repository root path
+///
+/// # Returns
+///
+/// * `Ok(())` if removal succeeds
+/// * `Err(SpecksError)` if any step fails
+pub fn remove_worktree(worktree_path: &Path, repo_root: &Path) -> Result<(), SpecksError> {
+    use crate::session::{delete_session, session_id_from_worktree};
+
+    // Extract session ID from worktree path
+    if let Some(session_id) = session_id_from_worktree(worktree_path) {
+        // Delete external session and artifacts
+        delete_session(&session_id, repo_root)?;
+    }
+
+    // Delete legacy internal session file (backward compatibility)
+    let internal_session = worktree_path.join(".specks").join("session.json");
+    if internal_session.exists() {
+        std::fs::remove_file(&internal_session)?;
+    }
+
+    // Delete legacy internal step-artifacts directory (backward compatibility)
+    let internal_artifacts = worktree_path.join(".specks").join("step-artifacts");
+    if internal_artifacts.exists() {
+        std::fs::remove_dir_all(&internal_artifacts)?;
+    }
+
+    // Now remove the worktree using git (without --force since files are cleaned)
+    let git = GitCli::new(repo_root);
+    git.worktree_remove(worktree_path)?;
+
+    Ok(())
+}
+
 /// Clean up worktrees for merged branches
 ///
 /// Checks each worktree branch for merged status per D09 (git-only).
@@ -503,9 +551,9 @@ pub fn cleanup_worktrees(repo_root: &Path, dry_run: bool) -> Result<Vec<String>,
             removed.push(session.branch_name.clone());
 
             if !dry_run {
-                // Remove worktree
+                // Remove worktree using the new remove_worktree function
                 let worktree_path = Path::new(&session.worktree_path);
-                git.worktree_remove(worktree_path)?;
+                remove_worktree(worktree_path, repo_root)?;
 
                 // Delete branch
                 git.delete_branch(&session.branch_name)?;
@@ -618,5 +666,327 @@ mod tests {
         assert!(!is_valid_worktree_path(Path::new(
             ".specks-worktrees/auth-20260208"
         )));
+    }
+
+    #[test]
+    fn test_remove_worktree_with_external_session() {
+        use crate::session::{save_session, Session, SessionStatus, session_file_path, artifacts_dir};
+        use std::process::Command;
+
+        // Create a temporary test git repository
+        let temp_dir = std::env::temp_dir().join(format!("specks-test-remove-external-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        // Create directory structure
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create worktree directory
+        let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
+        std::fs::create_dir_all(&worktree_path).unwrap();
+
+        // Create branch
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["branch", "specks/test-20260208-120000", "main"])
+            .output()
+            .expect("Failed to create branch");
+
+        // Add worktree
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree_path.to_str().unwrap(),
+                "specks/test-20260208-120000",
+            ])
+            .output()
+            .expect("Failed to add worktree");
+
+        // Create session with external storage
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: "specks/test-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: 1,
+            total_steps: 3,
+            beads_root: None,
+        };
+
+        save_session(&session, &temp_dir).unwrap();
+
+        // Create artifacts
+        let artifacts_path = artifacts_dir(&temp_dir, "test-20260208-120000");
+        let step_dir = artifacts_path.join("step-1");
+        std::fs::create_dir_all(&step_dir).unwrap();
+        std::fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
+
+        // Verify session and artifacts exist
+        let session_file = session_file_path(&temp_dir, "test-20260208-120000");
+        assert!(session_file.exists(), "Session file should exist");
+        assert!(artifacts_path.exists(), "Artifacts should exist");
+        assert!(worktree_path.exists(), "Worktree should exist");
+
+        // Remove worktree
+        remove_worktree(&worktree_path, &temp_dir).unwrap();
+
+        // Verify cleanup
+        assert!(!session_file.exists(), "Session file should be deleted");
+        assert!(!artifacts_path.exists(), "Artifacts should be deleted");
+        assert!(!worktree_path.exists(), "Worktree should be deleted");
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_remove_worktree_with_legacy_session() {
+        use std::process::Command;
+
+        // Create a temporary test git repository
+        let temp_dir = std::env::temp_dir().join(format!("specks-test-remove-legacy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        // Create directory structure
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create worktree directory
+        let worktree_path = temp_dir.join(".specks-worktrees/specks__legacy-20260208-120000");
+        std::fs::create_dir_all(&worktree_path).unwrap();
+
+        // Create branch
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["branch", "specks/legacy-20260208-120000", "main"])
+            .output()
+            .expect("Failed to create branch");
+
+        // Add worktree
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree_path.to_str().unwrap(),
+                "specks/legacy-20260208-120000",
+            ])
+            .output()
+            .expect("Failed to add worktree");
+
+        // Create legacy internal session at old location
+        let legacy_specks_dir = worktree_path.join(".specks");
+        std::fs::create_dir_all(&legacy_specks_dir).unwrap();
+        std::fs::write(legacy_specks_dir.join("session.json"), "{}").unwrap();
+
+        // Create legacy step-artifacts directory
+        let legacy_artifacts = legacy_specks_dir.join("step-artifacts");
+        let step_dir = legacy_artifacts.join("step-1");
+        std::fs::create_dir_all(&step_dir).unwrap();
+        std::fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
+
+        // Verify legacy files exist
+        assert!(legacy_specks_dir.join("session.json").exists(), "Legacy session should exist");
+        assert!(legacy_artifacts.exists(), "Legacy artifacts should exist");
+        assert!(worktree_path.exists(), "Worktree should exist");
+
+        // Remove worktree
+        remove_worktree(&worktree_path, &temp_dir).unwrap();
+
+        // Verify cleanup
+        assert!(!worktree_path.exists(), "Worktree should be deleted");
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_remove_worktree_with_both_locations() {
+        use crate::session::{save_session, Session, SessionStatus, session_file_path, artifacts_dir};
+        use std::process::Command;
+
+        // Create a temporary test git repository
+        let temp_dir = std::env::temp_dir().join(format!("specks-test-remove-both-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+
+        // Create directory structure
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create worktree directory
+        let worktree_path = temp_dir.join(".specks-worktrees/specks__both-20260208-120000");
+        std::fs::create_dir_all(&worktree_path).unwrap();
+
+        // Create branch
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args(["branch", "specks/both-20260208-120000", "main"])
+            .output()
+            .expect("Failed to create branch");
+
+        // Add worktree
+        Command::new("git")
+            .current_dir(&temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree_path.to_str().unwrap(),
+                "specks/both-20260208-120000",
+            ])
+            .output()
+            .expect("Failed to add worktree");
+
+        // Create external session
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "both".to_string(),
+            branch_name: "specks/both-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: 1,
+            total_steps: 3,
+            beads_root: None,
+        };
+
+        save_session(&session, &temp_dir).unwrap();
+
+        // Create external artifacts
+        let external_artifacts = artifacts_dir(&temp_dir, "both-20260208-120000");
+        let external_step_dir = external_artifacts.join("step-1");
+        std::fs::create_dir_all(&external_step_dir).unwrap();
+        std::fs::write(external_step_dir.join("architect-output.json"), "{}").unwrap();
+
+        // Also create legacy internal session and artifacts
+        let legacy_specks_dir = worktree_path.join(".specks");
+        std::fs::create_dir_all(&legacy_specks_dir).unwrap();
+        std::fs::write(legacy_specks_dir.join("session.json"), "{}").unwrap();
+
+        let legacy_artifacts = legacy_specks_dir.join("step-artifacts");
+        let legacy_step_dir = legacy_artifacts.join("step-1");
+        std::fs::create_dir_all(&legacy_step_dir).unwrap();
+        std::fs::write(legacy_step_dir.join("architect-output.json"), "{}").unwrap();
+
+        // Verify both exist
+        let session_file = session_file_path(&temp_dir, "both-20260208-120000");
+        assert!(session_file.exists(), "External session should exist");
+        assert!(external_artifacts.exists(), "External artifacts should exist");
+        assert!(legacy_specks_dir.join("session.json").exists(), "Legacy session should exist");
+        assert!(legacy_artifacts.exists(), "Legacy artifacts should exist");
+
+        // Remove worktree
+        remove_worktree(&worktree_path, &temp_dir).unwrap();
+
+        // Verify all cleaned up
+        assert!(!session_file.exists(), "External session should be deleted");
+        assert!(!external_artifacts.exists(), "External artifacts should be deleted");
+        assert!(!worktree_path.exists(), "Worktree should be deleted");
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

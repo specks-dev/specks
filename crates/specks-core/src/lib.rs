@@ -52,5 +52,5 @@ pub use validator::{
 };
 pub use worktree::{
     WorktreeConfig, cleanup_worktrees, create_worktree, derive_speck_slug, generate_branch_name,
-    is_valid_worktree_path, list_worktrees, sanitize_branch_name,
+    is_valid_worktree_path, list_worktrees, remove_worktree, sanitize_branch_name,
 };

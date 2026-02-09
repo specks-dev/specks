@@ -9,6 +9,21 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-3
+date: 2026-02-09T19:05:00Z
+bead: specks-tyo.4
+---
+
+## #step-3: Added remove_worktree() function that cleans external and legacy session/artifacts before calling git worktree remove (without --force)
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/lib.rs
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
 step: #step-2
 date: 2026-02-09T19:01:00Z
 bead: specks-tyo.3
