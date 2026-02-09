@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-8
+date: 2026-02-10T01:45:00Z
+bead: specks-tyo.9
+---
+
+## #step-8: Verified merge command correctly uses specks_core::remove_worktree() at line 886. No --force flags required since orchestration files are cleaned first. All 41 merge tests pass.
+
+**Files changed:**
+
+
+---
+
+---
 step: #step-7
 date: 2026-02-10T01:40:00Z
 bead: specks-tyo.8
