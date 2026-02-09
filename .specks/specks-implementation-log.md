@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-8
+date: 2026-02-09T23:50:00Z
+bead: specks-7t7.9
+---
+
+## #step-8: Add documentation for specks log rotate, specks log prepend, and specks doctor commands with troubleshooting guidance
+
+**Files changed:**
+- CLAUDE.md
+
+---
+
+---
 step: #step-7
 date: 2026-02-09T23:40:00Z
 bead: specks-7t7.8

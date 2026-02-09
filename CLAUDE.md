@@ -113,6 +113,15 @@ specks beads sync specks-1.md  # Sync steps to beads
 specks beads status            # Show bead completion status
 specks beads close bd-xxx      # Close a bead
 
+# Log management commands
+specks log rotate              # Rotate implementation log when over threshold (500 lines or 100KB)
+specks log rotate --force      # Force rotation even if under threshold
+specks log prepend --step <anchor> --speck <path> --summary <text>  # Add entry to log
+
+# Health check command
+specks doctor                  # Run health checks (log size, worktrees, broken refs)
+specks doctor --json           # Output health check results in JSON
+
 # Worktree commands (for isolated implementation environments)
 specks worktree create <speck>      # Create isolated worktree for implementation
 specks worktree list                # List active worktrees
@@ -332,3 +341,54 @@ This happens when a step commit succeeds but the bead close fails. The worktree 
 1. Check the implementation log in the worktree for the bead ID
 2. Close the bead manually: `specks beads close bd-xxx`
 3. If continuing implementation, the next step should proceed normally
+
+#### Implementation log is too large
+
+If the implementation log grows beyond 500 lines or 100KB, it can slow down parsing and git operations. The `specks doctor` command will warn you about large logs:
+
+```bash
+# Check project health including log size
+specks doctor
+
+# If the log is oversized, rotate it to archive
+specks log rotate
+```
+
+When you run `specks log rotate`, the current log is moved to `.specks/archive/implementation-log-YYYY-MM-DD-HHMMSS.md` and a fresh log is created. All historical entries are preserved in the archive.
+
+Note: `specks beads close` automatically rotates oversized logs, so manual rotation is rarely needed.
+
+#### Doctor reports broken references
+
+If `specks doctor` finds broken anchor references in your specks, you need to fix them before implementation:
+
+```bash
+# See which references are broken
+specks doctor --json | jq '.checks[] | select(.name == "broken_refs")'
+
+# Common causes:
+# - Step anchor was renamed but references weren't updated
+# - Decision anchor typo
+# - Anchor was removed but reference remained
+
+# Fix the references in your speck file, then verify
+specks validate .specks/specks-N.md
+```
+
+#### Doctor reports invalid worktree paths
+
+Valid worktree paths must start with `.specks-worktrees/` and exist on disk. If doctor finds invalid paths:
+
+```bash
+# List all worktrees to see what's active
+specks worktree list
+
+# If a worktree is stale or misconfigured, remove it
+git worktree remove .specks-worktrees/specks__<name>-<timestamp>
+git worktree prune
+```
+
+This usually happens if:
+- A worktree directory was deleted manually without using `git worktree remove`
+- Session files reference a worktree that no longer exists
+- Worktree was created outside the standard `.specks-worktrees/` location
