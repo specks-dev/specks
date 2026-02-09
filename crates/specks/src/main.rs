@@ -14,7 +14,9 @@ fn main() -> ExitCode {
     let cli = cli::parse();
 
     let result = match cli.command {
-        Some(Commands::Init { force }) => commands::run_init(force, cli.json, cli.quiet),
+        Some(Commands::Init { force, check }) => {
+            commands::run_init(force, check, cli.json, cli.quiet)
+        }
         Some(Commands::Validate { file, strict }) => {
             commands::run_validate(file, strict, cli.json, cli.quiet)
         }

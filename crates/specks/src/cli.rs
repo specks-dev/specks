@@ -39,12 +39,16 @@ pub enum Commands {
     /// Creates .specks/ directory with skeleton template and config.
     /// Run this once in your project root to start using specks.
     #[command(
-        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Implementation progress tracking"
+        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Implementation progress tracking\n\nWith --check, performs a lightweight verification of initialization status without side effects."
     )]
     Init {
         /// Overwrite existing .specks directory
-        #[arg(long)]
+        #[arg(long, conflicts_with = "check")]
         force: bool,
+
+        /// Check if project is initialized (no side effects)
+        #[arg(long, conflicts_with = "force")]
+        check: bool,
     },
 
     /// Validate speck structure against format conventions
@@ -169,8 +173,9 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "init"]).unwrap();
 
         match cli.command {
-            Some(Commands::Init { force }) => {
+            Some(Commands::Init { force, check }) => {
                 assert!(!force);
+                assert!(!check);
             }
             _ => panic!("Expected Init command"),
         }
@@ -181,11 +186,34 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "init", "--force"]).unwrap();
 
         match cli.command {
-            Some(Commands::Init { force }) => {
+            Some(Commands::Init { force, check }) => {
                 assert!(force);
+                assert!(!check);
             }
             _ => panic!("Expected Init command"),
         }
+    }
+
+    #[test]
+    fn test_init_command_with_check() {
+        let cli = Cli::try_parse_from(["specks", "init", "--check"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Init { force, check }) => {
+                assert!(!force);
+                assert!(check);
+            }
+            _ => panic!("Expected Init command"),
+        }
+    }
+
+    #[test]
+    fn test_init_check_and_force_mutually_exclusive() {
+        let result = Cli::try_parse_from(["specks", "init", "--check", "--force"]);
+        assert!(
+            result.is_err(),
+            "--check and --force should be mutually exclusive"
+        );
     }
 
     #[test]

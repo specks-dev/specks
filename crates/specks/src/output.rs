@@ -110,6 +110,15 @@ pub struct InitData {
     pub files_created: Vec<String>,
 }
 
+/// Data payload for init --check command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InitCheckData {
+    /// Whether the project is initialized
+    pub initialized: bool,
+    /// Path to .specks directory
+    pub path: String,
+}
+
 /// Data payload for validate command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidateData {
