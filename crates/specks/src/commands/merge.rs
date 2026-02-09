@@ -117,10 +117,7 @@ fn find_worktree_for_speck(speck_path: &str) -> Result<(PathBuf, Session), Strin
         }
     }
 
-    Err(format!(
-        "No worktree found for speck: {}",
-        normalized_speck
-    ))
+    Err(format!("No worktree found for speck: {}", normalized_speck))
 }
 
 /// Get pull request information for a branch using gh CLI
@@ -138,9 +135,7 @@ fn get_pr_for_branch(branch: &str) -> Result<PrInfo, String> {
     let gh_check = Command::new("gh").arg("--version").output();
 
     if gh_check.is_err() {
-        return Err(
-            "gh CLI not found. Install from https://cli.github.com/".to_string()
-        );
+        return Err("gh CLI not found. Install from https://cli.github.com/".to_string());
     }
 
     // Query PR information
@@ -343,9 +338,7 @@ fn check_pr_checks(branch: &str) -> Result<(), String> {
             pending.push(name.to_string());
         }
         // Check if failed
-        else if conclusion == "failure"
-            || conclusion == "timed_out"
-            || conclusion == "cancelled"
+        else if conclusion == "failure" || conclusion == "timed_out" || conclusion == "cancelled"
         {
             failing.push(name.to_string());
         }
@@ -702,7 +695,8 @@ pub fn run_merge(
             let stderr = String::from_utf8_lossy(&commit_output.stderr);
 
             // Check if it's an empty commit (no changes to commit)
-            if stderr.contains("nothing to commit") || stderr.contains("no changes added to commit") {
+            if stderr.contains("nothing to commit") || stderr.contains("no changes added to commit")
+            {
                 if !quiet {
                     println!("No infrastructure changes to commit (already committed)");
                 }
@@ -735,7 +729,10 @@ pub fn run_merge(
             }
         } else {
             if !quiet {
-                println!("Committed infrastructure files: {}", infrastructure.join(", "));
+                println!(
+                    "Committed infrastructure files: {}",
+                    infrastructure.join(", ")
+                );
             }
             true
         }
@@ -886,7 +883,10 @@ pub fn run_merge(
         let stderr = String::from_utf8_lossy(&remove_output.stderr);
         if !quiet {
             eprintln!("Warning: Failed to remove worktree: {}", stderr);
-            eprintln!("You may need to manually run: git worktree remove {}", worktree_path.display());
+            eprintln!(
+                "You may need to manually run: git worktree remove {}",
+                worktree_path.display()
+            );
         }
         false
     } else {
@@ -906,13 +906,14 @@ pub fn run_merge(
         let stderr = String::from_utf8_lossy(&delete_output.stderr);
         if !quiet {
             eprintln!("Warning: Failed to delete branch: {}", stderr);
-            eprintln!("You may need to manually run: git branch -D {}", session.branch_name);
+            eprintln!(
+                "You may need to manually run: git branch -D {}",
+                session.branch_name
+            );
         }
         worktree_cleaned = false;
-    } else {
-        if !quiet {
-            println!("Deleted branch: {}", session.branch_name);
-        }
+    } else if !quiet {
+        println!("Deleted branch: {}", session.branch_name);
     }
 
     // Prune stale worktree metadata
@@ -926,10 +927,8 @@ pub fn run_merge(
         if !quiet {
             eprintln!("Warning: Failed to prune worktree metadata: {}", stderr);
         }
-    } else {
-        if !quiet {
-            println!("Pruned worktree metadata");
-        }
+    } else if !quiet {
+        println!("Pruned worktree metadata");
     }
 
     // Step 13: Return success response
@@ -1022,10 +1021,8 @@ mod tests {
     #[test]
     fn test_find_worktree_missing_directory() {
         // Create a temporary directory that definitely won't have worktrees
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-no-worktrees-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-no-worktrees-{}", std::process::id()));
         let original_dir = std::env::current_dir().unwrap();
 
         // Create and change to temp directory
@@ -1035,9 +1032,7 @@ mod tests {
         // Should fail because .specks-worktrees doesn't exist
         let result = find_worktree_for_speck(".specks/specks-test.md");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("No worktrees directory found"));
+        assert!(result.unwrap_err().contains("No worktrees directory found"));
 
         // Cleanup
         std::env::set_current_dir(original_dir).unwrap();
@@ -1047,10 +1042,8 @@ mod tests {
     #[test]
     fn test_find_worktree_no_matching_speck() {
         // Create a temporary test environment
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-no-match-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-no-match-{}", std::process::id()));
         let original_dir = std::env::current_dir().unwrap();
 
         // Create directory structure
@@ -1093,10 +1086,8 @@ mod tests {
     #[test]
     fn test_find_worktree_success() {
         // Create a temporary test environment
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-success-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-success-{}", std::process::id()));
         let original_dir = std::env::current_dir().unwrap();
 
         // Create directory structure
@@ -1144,10 +1135,8 @@ mod tests {
     #[test]
     fn test_find_worktree_path_normalization() {
         // Create a temporary test environment
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-norm-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-norm-{}", std::process::id()));
         let original_dir = std::env::current_dir().unwrap();
 
         // Create directory structure
@@ -1195,10 +1184,8 @@ mod tests {
     #[test]
     fn test_find_worktree_corrupt_session() {
         // Create a temporary test environment
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-corrupt-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-corrupt-{}", std::process::id()));
         let original_dir = std::env::current_dir().unwrap();
 
         // Create directory structure
@@ -1211,11 +1198,7 @@ mod tests {
         fs::create_dir_all(&specks_dir1).unwrap();
 
         // Write corrupt JSON
-        fs::write(
-            specks_dir1.join("session.json"),
-            "{ invalid json here",
-        )
-        .unwrap();
+        fs::write(specks_dir1.join("session.json"), "{ invalid json here").unwrap();
 
         // Create a valid worktree
         let worktree2 = worktrees_dir.join("specks__test-20260209-120000");
@@ -1259,7 +1242,9 @@ mod tests {
     #[test]
     fn test_is_infrastructure_file_skills() {
         assert!(is_infrastructure_file(".claude/skills/planner/SKILL.md"));
-        assert!(is_infrastructure_file(".claude/skills/implementer/SKILL.md"));
+        assert!(is_infrastructure_file(
+            ".claude/skills/implementer/SKILL.md"
+        ));
         assert!(is_infrastructure_file(".claude/skills/foo/bar/baz.txt"));
     }
 
@@ -1324,10 +1309,8 @@ mod tests {
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-categorize-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-categorize-{}", std::process::id()));
         let original_dir = std::env::current_dir().unwrap();
 
         // Cleanup if exists from previous run
@@ -1562,10 +1545,8 @@ mod tests {
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-merge-abort-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-merge-abort-{}", std::process::id()));
         let original_dir = std::env::current_dir().unwrap();
 
         // Cleanup if exists from previous run
@@ -1612,7 +1593,10 @@ mod tests {
         assert!(result.is_ok());
 
         let (infrastructure, other) = result.unwrap();
-        assert!(infrastructure.is_empty(), "Should have no infrastructure files");
+        assert!(
+            infrastructure.is_empty(),
+            "Should have no infrastructure files"
+        );
         assert_eq!(other.len(), 1, "Should have 1 non-infrastructure file");
         assert!(other.contains(&"src/main.rs".to_string()));
 
@@ -1626,10 +1610,8 @@ mod tests {
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-merge-force-{}",
-            std::process::id()
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-merge-force-{}", std::process::id()));
         let original_dir = std::env::current_dir().unwrap();
 
         // Cleanup if exists from previous run
@@ -1702,7 +1684,10 @@ mod tests {
             pr_number: Some(123),
             branch_name: Some("specks/feature-20260209-120000".to_string()),
             infrastructure_committed: Some(true),
-            infrastructure_files: Some(vec!["CLAUDE.md".to_string(), "agents/coder-agent.md".to_string()]),
+            infrastructure_files: Some(vec![
+                "CLAUDE.md".to_string(),
+                "agents/coder-agent.md".to_string(),
+            ]),
             worktree_cleaned: Some(true),
             dry_run: false,
             would_commit: None,
