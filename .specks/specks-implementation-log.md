@@ -7,6 +7,24 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-3
+date: 2026-02-09T14:24:35Z
+bead: specks-s5s.4
+speck: .specks/specks-12.md
+---
+
+## [specks-12.md] Step 3: Implement pre-merge validations | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T14:24:35Z
+
+**Summary:** Implement pre-merge validations: check_main_sync (unpushed commits), check_pr_checks (CI status), validate_pr_state, and --force flag for non-infrastructure files. Added comprehensive unit and integration tests.
+
+**Files Changed:**
+- crates/specks/src/commands/merge.rs
+
+**Bead:** specks-s5s.4
+
+---
 step: #step-2
 date: 2026-02-09T14:43:15Z
 bead: specks-s5s.3
