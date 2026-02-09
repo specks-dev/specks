@@ -38,7 +38,7 @@ allowed-tools: Task, AskUserQuestion, Read, Write, Edit, Bash
        └── status: "ready" (Spec S06: worktree_path, branch_name, base_branch)
               │
               ▼
-       Create worktree session: session.json in {worktree_path}/.specks/
+       Create session: .specks-worktrees/.sessions/<session-id>.json at repo root
               │
               ▼
        ┌─────────────────────────────────────────────────────────────┐
@@ -149,12 +149,13 @@ Task(
 
 ### 3. Create Session
 
-1. Generate session ID: `YYYYMMDD-HHMMSS-impl-<short-uuid>`
-   ```bash
-   date +%Y%m%d-%H%M%S && head -c 3 /dev/urandom | xxd -p
+1. Derive session ID from worktree directory name by stripping the `specks__` prefix:
+   ```
+   Worktree: .specks-worktrees/specks__auth-20260208-143022/
+   Session ID: auth-20260208-143022
    ```
 
-2. Write `{worktree_path}/.specks/session.json`:
+2. Write `.specks-worktrees/.sessions/<session-id>.json` at repo root:
    ```json
    {
      "session_id": "<session-id>",
@@ -178,16 +179,20 @@ Task(
 
    All fields from `worktree_path` onwards are provided by the setup-agent response per Spec S06.
 
+   **IMPORTANT:** Session file is stored at repo root in `.specks-worktrees/.sessions/`, NOT inside the worktree. This keeps orchestration data separate from git-tracked content.
+
 ### 4. For Each Step in `resolved_steps`
 
 Initialize: `revision_feedback = null`, `reviewer_attempts = 0`, `step_summaries = []`
 
 #### 4a. Step Preparation
 
-1. Create step artifact directory: `{worktree_path}/.specks/step-artifacts/step-N/`
-2. Read bead ID from `session.json`: `bead_id = session.bead_mapping[step_anchor]`
+1. Create step artifact directory: `.specks-worktrees/.artifacts/<session-id>/step-N/` at repo root
+2. Read bead ID from session file: `bead_id = session.bead_mapping[step_anchor]`
 3. **Validate bead ID**: If `bead_id` is missing or null, HALT with error: "Setup agent should have populated bead_id for step <step_anchor> but it is missing from session.bead_mapping"
-4. Update `{worktree_path}/.specks/session.json` with `current_step`
+4. Update `.specks-worktrees/.sessions/<session-id>.json` with `current_step`
+
+   **Note:** Artifact directory is at repo root under `.specks-worktrees/.artifacts/`, NOT inside the worktree.
 
 #### 4b. Spawn Architect
 
@@ -199,7 +204,7 @@ Task(
 )
 ```
 
-Save response to `{worktree_path}/.specks/step-artifacts/step-N/architect-output.json`.
+Save response to `.specks-worktrees/.artifacts/<session-id>/step-N/architect-output.json` at repo root.
 
 If critical risks in response, use AskUserQuestion to confirm proceeding.
 
@@ -213,7 +218,7 @@ Task(
 )
 ```
 
-Save response to `{worktree_path}/.specks/step-artifacts/step-N/coder-output.json`.
+Save response to `.specks-worktrees/.artifacts/<session-id>/step-N/coder-output.json` at repo root.
 
 #### 4d. Drift Check
 
@@ -239,7 +244,7 @@ Task(
 )
 ```
 
-Save response to `{worktree_path}/.specks/step-artifacts/step-N/reviewer-output.json`.
+Save response to `.specks-worktrees/.artifacts/<session-id>/step-N/reviewer-output.json` at repo root.
 
 **Reviewer Output Structure:**
 
@@ -305,13 +310,13 @@ Task(
 )
 ```
 
-Save response to `{worktree_path}/.specks/step-artifacts/step-N/committer-output.json`.
+Save response to `.specks-worktrees/.artifacts/<session-id>/step-N/committer-output.json` at repo root.
 
 Extract commit summary and add to `step_summaries` array for later PR creation.
 
 #### 4g. Step Completion
 
-1. Update `{worktree_path}/.specks/session.json`: move step from `steps_remaining` to `steps_completed`
+1. Update `.specks-worktrees/.sessions/<session-id>.json`: move step from `steps_remaining` to `steps_completed`
 2. Update `current_step` to next step (or null if done)
 3. Update `last_updated_at` timestamp
 4. If more steps remain: **GO TO 4a** for next step
@@ -319,7 +324,7 @@ Extract commit summary and add to `step_summaries` array for later PR creation.
 
 ### 5. Session Completion
 
-1. Update `{worktree_path}/.specks/session.json` with `status: "completed"`
+1. Update `.specks-worktrees/.sessions/<session-id>.json` with `status: "completed"`
 
 2. Spawn committer in publish mode to create PR:
 
@@ -376,7 +381,7 @@ From coder-agent output, evaluate `drift_assessment`:
 - `root_bead`: The root bead ID for the entire speck
 - `bead_mapping`: A map from step anchors to bead IDs
 
-The implementer stores this mapping in `{worktree_path}/.specks/session.json` and reads bead IDs from there when needed.
+The implementer stores this mapping in `.specks-worktrees/.sessions/<session-id>.json` at repo root and reads bead IDs from there when needed.
 
 **Close after commit** (handled by committer-agent in commit mode):
 ```bash
@@ -388,24 +393,33 @@ specks beads close <bead_id> --reason "<reason>"
 ## Reference: Worktree Structure
 
 ```
+repo_root/
+├── .specks-worktrees/
+│   ├── .sessions/
+│   │   └── <session-id>.json        # Session metadata and status (external to worktree)
+│   └── .artifacts/
+│       └── <session-id>/            # Per-step agent outputs (external to worktree)
+│           ├── step-0/
+│           │   ├── architect-output.json
+│           │   ├── coder-output.json
+│           │   ├── reviewer-output.json
+│           │   └── committer-output.json
+│           ├── step-1/
+│           │   └── ...
+│           └── step-N/
+│               └── ...
+
 {worktree_path}/
 ├── .specks/
-│   ├── session.json           # Session metadata and status
-│   ├── specks-implementation-log.md  # Updated by committer during commit
-│   └── step-artifacts/        # Per-step agent outputs
-│       ├── step-0/
-│       │   ├── architect-output.json
-│       │   ├── coder-output.json
-│       │   ├── reviewer-output.json
-│       │   └── committer-output.json
-│       ├── step-1/
-│       │   └── ...
-│       └── step-N/
-│           └── ...
-├── src/                       # Implementation files
-├── tests/                     # Test files
+│   └── specks-implementation-log.md  # Updated by committer during commit (tracked content)
+├── src/                              # Implementation files
+├── tests/                            # Test files
 └── ...
 ```
+
+**Important:** Session and artifact files are stored at repo root in `.specks-worktrees/`, NOT inside the worktree. This keeps orchestration data separate from git-tracked content and enables clean worktree removal without `--force`.
+
+The session ID is derived from the worktree directory name: `specks__auth-20260208-143022` → session ID `auth-20260208-143022`.
 
 ---
 
@@ -496,8 +510,8 @@ All agents must return valid JSON conforming to their contracts. When you receiv
 
 If an agent returns invalid JSON or missing required fields:
 
-1. **Write to error.json**: Document the validation failure in `{worktree_path}/.specks/error.json`
-2. **Update session status**: Set `status: "failed"` in session.json
+1. **Write to error.json**: Document the validation failure in `.specks-worktrees/.artifacts/<session-id>/error.json` at repo root
+2. **Update session status**: Set `status: "failed"` in `.specks-worktrees/.sessions/<session-id>.json`
 3. **Halt execution**: Report the validation failure to the user
 4. **Include raw output**: Preserve the agent's raw output for debugging
 
@@ -523,7 +537,7 @@ If an agent returns invalid JSON or missing required fields:
 
 If Task tool fails or returns unparseable JSON:
 
-1. Write to `{worktree_path}/.specks/error.json`:
+1. Write to `.specks-worktrees/.artifacts/<session-id>/error.json` at repo root:
    ```json
    {
      "agent": "<agent-name>",
@@ -534,12 +548,12 @@ If Task tool fails or returns unparseable JSON:
    }
    ```
 
-2. Update `{worktree_path}/.specks/session.json` with `status: "failed"` and `failed_at_step`
+2. Update `.specks-worktrees/.sessions/<session-id>.json` with `status: "failed"` and `failed_at_step`
 
 3. Halt with:
    ```
    Agent [name] failed at step #step-N: [reason]
-   See {worktree_path}/.specks/error.json for details.
+   See .specks-worktrees/.artifacts/<session-id>/error.json for details.
    ```
 
 Do NOT retry automatically - user must intervene.
@@ -559,5 +573,5 @@ Do NOT retry automatically - user must intervene.
 - Session ID
 - Step where failure occurred
 - Error details
-- Path to error.json in worktree
+- Path to error.json at `.specks-worktrees/.artifacts/<session-id>/error.json`
 - Partial progress (steps completed before failure)

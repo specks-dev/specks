@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-6
+date: 2026-02-10T01:35:00Z
+bead: specks-tyo.7
+---
+
+## #step-6: Updated implementer skill documentation to reflect external session storage at .specks-worktrees/.sessions/ and artifact storage at .specks-worktrees/.artifacts/. Session ID derived from worktree directory name.
+
+**Files changed:**
+- skills/implementer/SKILL.md
+
+---
+
+---
 step: #step-5
 date: 2026-02-10T01:30:00Z
 bead: specks-tyo.6
