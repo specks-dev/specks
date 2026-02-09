@@ -263,7 +263,6 @@ pub struct RotateData {
 
 /// Data payload for log prepend command (Spec S02)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // Will be used in step-2 implementation
 pub struct PrependData {
     /// Whether entry was added
     pub entry_added: bool,

@@ -464,6 +464,290 @@ mod tests {
         let timestamp_part = &filename["implementation-log-".len()..filename.len() - 3];
         assert_eq!(timestamp_part.len(), 17);
     }
+
+    #[test]
+    fn test_iso8601_timestamp_format() {
+        let timestamp = generate_iso8601_timestamp().unwrap();
+        // Should match YYYY-MM-DDTHH:MM:SSZ pattern (20 chars total)
+        assert_eq!(timestamp.len(), 20);
+        assert_eq!(&timestamp[4..5], "-");
+        assert_eq!(&timestamp[7..8], "-");
+        assert_eq!(&timestamp[10..11], "T");
+        assert_eq!(&timestamp[13..14], ":");
+        assert_eq!(&timestamp[16..17], ":");
+        assert_eq!(&timestamp[19..20], "Z");
+    }
+
+    #[test]
+    fn test_yaml_entry_generation() {
+        let entry = generate_yaml_entry(
+            "#step-0",
+            ".specks/specks-13.md",
+            "Test summary",
+            Some("bd-123"),
+            "2026-02-09T14:30:00Z",
+        );
+
+        assert!(entry.contains("step: #step-0"));
+        assert!(entry.contains("date: 2026-02-09T14:30:00Z"));
+        assert!(entry.contains("bead: bd-123"));
+        assert!(entry.contains("## #step-0: Test summary"));
+        assert!(entry.contains("- .specks/specks-13.md"));
+    }
+
+    #[test]
+    fn test_yaml_entry_generation_no_bead() {
+        let entry = generate_yaml_entry(
+            "#step-1",
+            ".specks/specks-13.md",
+            "Test summary",
+            None,
+            "2026-02-09T14:30:00Z",
+        );
+
+        assert!(entry.contains("step: #step-1"));
+        assert!(entry.contains("date: 2026-02-09T14:30:00Z"));
+        assert!(!entry.contains("bead:"));
+        assert!(entry.contains("## #step-1: Test summary"));
+    }
+
+    #[test]
+    fn test_find_insertion_point() {
+        let content = "# Specks Implementation Log\n\nHeader content.\n\n---\n\nExisting entry\n";
+        let pos = find_insertion_point(content);
+
+        // Should insert after the "---\n\n" separator
+        let expected_pos = "# Specks Implementation Log\n\nHeader content.\n\n---\n\n".len();
+        assert_eq!(pos, expected_pos);
+    }
+
+    #[test]
+    fn test_find_insertion_point_empty_log() {
+        let content = "# Specks Implementation Log\n\n---\n\n";
+        let pos = find_insertion_point(content);
+
+        // Should insert after the "---\n\n" separator
+        let expected_pos = "# Specks Implementation Log\n\n---\n\n".len();
+        assert_eq!(pos, expected_pos);
+    }
+
+    #[test]
+    fn test_log_prepend_full_flow() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        std::env::set_current_dir(temp_path).unwrap();
+        fs::create_dir_all(".specks").unwrap();
+
+        // Create initial log with header
+        let log_path = temp_path.join(".specks/specks-implementation-log.md");
+        let initial_content = r#"# Specks Implementation Log
+
+This file documents the implementation progress for this project.
+
+**Format:** Each entry records a completed step with tasks, files, and verification results.
+
+Entries are sorted newest-first.
+
+---
+
+"#;
+        fs::write(&log_path, initial_content).unwrap();
+
+        // Run prepend
+        let result = run_log_prepend(
+            "#step-0".to_string(),
+            ".specks/specks-13.md".to_string(),
+            "Test implementation".to_string(),
+            Some("bd-123".to_string()),
+            false,
+            true,
+        );
+        assert!(result.is_ok());
+
+        // Verify entry was added
+        let new_content = fs::read_to_string(&log_path).unwrap();
+        assert!(new_content.contains("step: #step-0"));
+        assert!(new_content.contains("bead: bd-123"));
+        assert!(new_content.contains("## #step-0: Test implementation"));
+        assert!(new_content.contains("- .specks/specks-13.md"));
+
+        // Verify entry is after the separator
+        let separator_pos = new_content.find("---\n\n").unwrap();
+        let entry_pos = new_content.find("step: #step-0").unwrap();
+        assert!(entry_pos > separator_pos);
+    }
+
+    #[test]
+    fn test_log_prepend_multiple_entries() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        std::env::set_current_dir(temp_path).unwrap();
+        fs::create_dir_all(".specks").unwrap();
+
+        // Create initial log
+        let log_path = temp_path.join(".specks/specks-implementation-log.md");
+        let initial_content = "# Specks Implementation Log\n\n---\n\n";
+        fs::write(&log_path, initial_content).unwrap();
+
+        // Add first entry
+        run_log_prepend(
+            "#step-0".to_string(),
+            ".specks/specks-13.md".to_string(),
+            "First entry".to_string(),
+            None,
+            false,
+            true,
+        )
+        .unwrap();
+
+        // Add second entry
+        run_log_prepend(
+            "#step-1".to_string(),
+            ".specks/specks-13.md".to_string(),
+            "Second entry".to_string(),
+            None,
+            false,
+            true,
+        )
+        .unwrap();
+
+        // Verify both entries exist and second is first
+        let new_content = fs::read_to_string(&log_path).unwrap();
+        let step0_pos = new_content.find("step: #step-0").unwrap();
+        let step1_pos = new_content.find("step: #step-1").unwrap();
+        assert!(step1_pos < step0_pos, "Newest entry should be first");
+    }
+
+    #[test]
+    fn test_log_prepend_nonexistent_log() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        std::env::set_current_dir(temp_path).unwrap();
+        fs::create_dir_all(".specks").unwrap();
+
+        // Run prepend without log file
+        let result = run_log_prepend(
+            "#step-0".to_string(),
+            ".specks/specks-13.md".to_string(),
+            "Test".to_string(),
+            None,
+            false,
+            true,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+}
+
+/// Generate ISO 8601 timestamp (YYYY-MM-DDTHH:MM:SSZ)
+fn generate_iso8601_timestamp() -> Result<String, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("System time error: {}", e))?;
+
+    let secs = duration.as_secs();
+
+    // Convert to date/time components
+    const SECONDS_PER_DAY: u64 = 86400;
+    const DAYS_TO_EPOCH: i64 = 719162; // Days from 0000-01-01 to 1970-01-01
+
+    let days_since_epoch = (secs / SECONDS_PER_DAY) as i64;
+    let seconds_today = secs % SECONDS_PER_DAY;
+
+    let hours = seconds_today / 3600;
+    let minutes = (seconds_today % 3600) / 60;
+    let seconds = seconds_today % 60;
+
+    // Calculate year, month, day
+    let total_days = DAYS_TO_EPOCH + days_since_epoch;
+
+    let mut year = (total_days / 365) as i32;
+    let mut remaining_days = total_days - year_to_days(year);
+
+    while remaining_days < 0 {
+        year -= 1;
+        remaining_days = total_days - year_to_days(year);
+    }
+    while remaining_days >= days_in_year(year) {
+        remaining_days -= days_in_year(year);
+        year += 1;
+    }
+
+    let is_leap = is_leap_year(year);
+    let mut month = 1;
+    let mut day = remaining_days + 1;
+
+    let days_in_months = if is_leap {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    for (m, &days) in days_in_months.iter().enumerate() {
+        if day <= days as i64 {
+            month = m + 1;
+            break;
+        }
+        day -= days as i64;
+    }
+
+    Ok(format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        year, month, day, hours, minutes, seconds
+    ))
+}
+
+/// Generate YAML frontmatter entry for the implementation log
+fn generate_yaml_entry(
+    step: &str,
+    speck: &str,
+    summary: &str,
+    bead: Option<&str>,
+    timestamp: &str,
+) -> String {
+    let mut entry = String::new();
+    entry.push_str("---\n");
+    entry.push_str(&format!("step: {}\n", step));
+    entry.push_str(&format!("date: {}\n", timestamp));
+    if let Some(bead_id) = bead {
+        entry.push_str(&format!("bead: {}\n", bead_id));
+    }
+    entry.push_str("---\n");
+    entry.push('\n');
+    entry.push_str(&format!("## {}: {}\n", step, summary));
+    entry.push('\n');
+    entry.push_str("**Files changed:**\n");
+    entry.push_str(&format!("- {}\n", speck));
+    entry.push('\n');
+    entry.push_str("---\n");
+    entry.push('\n');
+    entry
+}
+
+/// Find the insertion point after the header section
+fn find_insertion_point(content: &str) -> usize {
+    // Look for the pattern "---\n\n" which marks the end of the header
+    // The insertion point is right after the second newline
+
+    // Search for "---\n\n" pattern
+    if let Some(pos) = content.find("---\n\n") {
+        // Return position after "---\n\n" (5 bytes)
+        return pos + 5;
+    }
+
+    // Fallback: look for just "---\n" if double newline not found
+    if let Some(pos) = content.find("---\n") {
+        // Return position after "---\n" (4 bytes)
+        return pos + 4;
+    }
+
+    // If no separator found, insert at the end
+    content.len()
 }
 
 /// Run the log prepend command
@@ -483,15 +767,68 @@ pub fn run_log_prepend(
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
-    // Avoid unused parameter warnings
-    let _ = (step, speck, summary, bead);
+    use crate::output::{JsonResponse, PrependData};
+    use std::fs;
+    use std::path::Path;
 
-    if !quiet && !json_output {
-        println!("Log prepend not yet implemented");
+    let log_path = Path::new(".specks/specks-implementation-log.md");
+
+    // Check if log file exists
+    if !log_path.exists() {
+        return Err("Implementation log does not exist. Run 'specks init' first.".to_string());
     }
 
+    // Read the current log
+    let content = fs::read_to_string(log_path)
+        .map_err(|e| format!("Failed to read implementation log: {}", e))?;
+
+    // Generate timestamp
+    let timestamp = generate_iso8601_timestamp()?;
+
+    // Generate YAML entry
+    let entry = generate_yaml_entry(
+        &step,
+        &speck,
+        &summary,
+        bead.as_deref(),
+        &timestamp,
+    );
+
+    // Find insertion point
+    let insertion_point = find_insertion_point(&content);
+
+    // Build new content
+    let mut new_content = String::new();
+    new_content.push_str(&content[..insertion_point]);
+    new_content.push_str(&entry);
+    new_content.push_str(&content[insertion_point..]);
+
+    // Write atomically by writing to a temp file then renaming
+    let temp_path = log_path.with_extension("md.tmp");
+    fs::write(&temp_path, &new_content)
+        .map_err(|e| format!("Failed to write temp log file: {}", e))?;
+    fs::rename(&temp_path, log_path)
+        .map_err(|e| format!("Failed to update log file: {}", e))?;
+
+    // Build response data
+    let data = PrependData {
+        entry_added: true,
+        step: Some(step.clone()),
+        speck: Some(speck.clone()),
+        timestamp: Some(timestamp.clone()),
+    };
+
     if json_output {
-        println!(r#"{{"status":"ok","entry_added":false,"reason":"not_implemented"}}"#);
+        let response = JsonResponse::ok("log prepend", data);
+        println!("{}", serde_json::to_string_pretty(&response).unwrap());
+    } else if !quiet {
+        println!("Entry prepended to implementation log");
+        println!("  Step: {}", step);
+        println!("  Speck: {}", speck);
+        println!("  Timestamp: {}", timestamp);
+        if let Some(bead_id) = bead {
+            println!("  Bead: {}", bead_id);
+        }
     }
 
     Ok(0)
