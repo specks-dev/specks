@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-5
+date: 2026-02-10T00:30:00Z
+bead: specks-7t7.6
+---
+
+## #step-5: Update committer-agent.md with log size checking workflow, thresholds, output contract fields, and rotation examples
+
+**Files changed:**
+- agents/committer-agent.md
+
+---
+
+---
 step: #step-4
 date: 2026-02-10T00:27:00Z
 bead: specks-7t7.5

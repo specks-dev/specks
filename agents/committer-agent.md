@@ -117,6 +117,8 @@ The output depends on the operation mode:
     "timestamp": "string",
     "summary": "string"
   } | null,
+  "log_rotated": false,
+  "archived_path": "string | null",
   "needs_reconcile": false,
   "aborted": false,
   "reason": "string | null",
@@ -135,6 +137,8 @@ The output depends on the operation mode:
 | `bead_id` | Bead ID that was closed |
 | `log_updated` | True if implementation log was updated |
 | `log_entry_added` | Object containing step, timestamp, and summary of added log entry (null if no log_entry provided) |
+| `log_rotated` | True if log was rotated before commit |
+| `archived_path` | Path to archived log file if rotation occurred |
 | `needs_reconcile` | True if commit succeeded but bead close failed |
 | `aborted` | True if operation was aborted |
 | `reason` | Reason for abort if aborted |
@@ -254,6 +258,42 @@ The committer-agent is responsible for updating the implementation log before co
 5. **Report success**: Set `log_updated: true` and include the added entry in `log_entry_added`
 
 This consolidates the logger-agent's responsibilities into the committer-agent, eliminating the need for a separate agent and ensuring atomic commits.
+
+## Log Size Check Before Commit
+
+Before prepending a log entry, the committer-agent must check if the implementation log exceeds size thresholds. If rotation is needed, it should rotate the log and stage both the archived file and the fresh log.
+
+**Thresholds:**
+- **Line count**: 500 lines
+- **Byte size**: 100KB (102400 bytes)
+
+**Rotation triggers when either threshold is exceeded.**
+
+**Rotation workflow:**
+
+1. Read current implementation log
+2. Count lines and check byte size
+3. If over threshold:
+   - Generate archive filename: `.specks/archive/implementation-log-YYYY-MM-DD-HHMMSS.md`
+   - Create `.specks/archive/` directory if missing
+   - Move current log to archive (preserve all content)
+   - Create fresh log with header template:
+     ```markdown
+     # Implementation Log
+
+     This log tracks completed implementation work.
+
+     ```
+   - Add both archived file and fresh log to `files_to_stage`
+   - Set `log_rotated: true` and include `archived_path` in output
+4. If under threshold or rotation disabled:
+   - Proceed normally with log prepend
+   - Set `log_rotated: false`
+
+**Error handling:**
+- If rotation fails: set `needs_reconcile: true`, include warning, but continue with commit
+- If log read fails: treat as missing log, create new one
+- If archive directory creation fails: abort commit
 
 ## Log Entry Format
 
@@ -380,17 +420,19 @@ This approach:
 
 ### Commit Mode
 
-1. **Verify files exist**: Before staging, confirm all files in `files_to_stage` exist in worktree.
+1. **Check log size before prepending**: Before updating the log, check if it exceeds 500 lines OR 100KB. If so, rotate first.
 
-2. **Handle manual policy correctly**: If `manual` and not `confirmed`, only stage files and write message to `git-commit-message.txt`.
+2. **Verify files exist**: Before staging, confirm all files in `files_to_stage` exist in worktree.
 
-3. **Close bead after commit**: Only close the bead if the commit succeeded.
+3. **Handle manual policy correctly**: If `manual` and not `confirmed`, only stage files and write message to `git-commit-message.txt`.
 
-4. **Report all outcomes**: Include all warnings and partial successes in output.
+4. **Close bead after commit**: Only close the bead if the commit succeeded.
 
-5. **HALT on critical failures**: If bead close fails after commit, set `needs_reconcile: true` and `aborted: true`.
+5. **Report all outcomes**: Include all warnings and partial successes in output.
 
-6. **No AI attribution**: NEVER include Co-Authored-By lines or any AI/agent attribution in commit messages.
+6. **HALT on critical failures**: If bead close fails after commit, set `needs_reconcile: true` and `aborted: true`.
+
+7. **No AI attribution**: NEVER include Co-Authored-By lines or any AI/agent attribution in commit messages.
 
 ### Publish Mode
 
@@ -451,11 +493,12 @@ This approach:
 ```
 
 **Process:**
-1. Prepend log entry to `.specks/specks-implementation-log.md` using Edit tool
-2. Stage all files: `git -C {worktree_path} add src/api/client.rs src/api/config.rs .specks/specks-implementation-log.md`
-3. Commit: `git -C {worktree_path} commit -m "feat(api): add retry logic with exponential backoff"`
-4. Get hash: `git -C {worktree_path} rev-parse HEAD` → "abc1234"
-5. Close bead: `specks beads close bd-a1b2c3 --reason "Step 2 complete: retry logic implemented"`
+1. Check log size: 312 lines, 67KB (under threshold)
+2. Prepend log entry to `.specks/specks-implementation-log.md` using Edit tool
+3. Stage all files: `git -C {worktree_path} add src/api/client.rs src/api/config.rs .specks/specks-implementation-log.md`
+4. Commit: `git -C {worktree_path} commit -m "feat(api): add retry logic with exponential backoff"`
+5. Get hash: `git -C {worktree_path} rev-parse HEAD` → "abc1234"
+6. Close bead: `specks beads close bd-a1b2c3 --reason "Step 2 complete: retry logic implemented"`
 
 **Output:**
 ```json
@@ -473,6 +516,72 @@ This approach:
     "timestamp": "2026-02-08T14:30:22Z",
     "summary": "Add retry logic with exponential backoff"
   },
+  "log_rotated": false,
+  "archived_path": null,
+  "needs_reconcile": false,
+  "aborted": false,
+  "reason": null,
+  "warnings": []
+}
+```
+
+### Commit Mode: Auto Policy with Log Rotation
+
+**Input:**
+```json
+{
+  "operation": "commit",
+  "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
+  "speck_path": ".specks/specks-5.md",
+  "step_anchor": "#step-8",
+  "proposed_message": "feat(api): add rate limiting",
+  "files_to_stage": ["src/api/limits.rs", ".specks/specks-implementation-log.md"],
+  "commit_policy": "auto",
+  "confirmed": false,
+  "bead_id": "bd-xyz789",
+  "close_reason": "Step 8 complete: rate limiting implemented",
+  "log_entry": {
+    "summary": "Add rate limiting with token bucket algorithm",
+    "tasks_completed": [
+      {"task": "Created RateLimiter struct", "status": "Done"},
+      {"task": "Added token bucket algorithm", "status": "Done"}
+    ],
+    "tests_run": ["cargo nextest run api:: - all tests passed"],
+    "checkpoints_verified": ["Rate limiting working correctly"]
+  }
+}
+```
+
+**Process:**
+1. Check log size: 523 lines, 98KB (exceeds 500 line threshold)
+2. Rotate log:
+   - Create `.specks/archive/` if missing
+   - Move current log to `.specks/archive/implementation-log-2026-02-08-143022.md`
+   - Create fresh log with header template
+3. Prepend log entry to fresh `.specks/specks-implementation-log.md`
+4. Stage all files: `git -C {worktree_path} add src/api/limits.rs .specks/specks-implementation-log.md .specks/archive/implementation-log-2026-02-08-143022.md`
+5. Commit: `git -C {worktree_path} commit -m "feat(api): add rate limiting"`
+6. Get hash: `git -C {worktree_path} rev-parse HEAD` → "def5678"
+7. Close bead: `specks beads close bd-xyz789 --reason "Step 8 complete: rate limiting implemented"`
+
+**Output:**
+```json
+{
+  "operation": "commit",
+  "commit_message": "feat(api): add rate limiting",
+  "files_staged": ["src/api/limits.rs", ".specks/specks-implementation-log.md", ".specks/archive/implementation-log-2026-02-08-143022.md"],
+  "committed": true,
+  "commit_hash": "def5678",
+  "bead_closed": true,
+  "bead_id": "bd-xyz789",
+  "log_updated": true,
+  "log_entry_added": {
+    "step": "#step-8",
+    "timestamp": "2026-02-08T14:30:22Z",
+    "summary": "Add rate limiting with token bucket algorithm"
+  },
+  "log_rotated": true,
+  "archived_path": ".specks/archive/implementation-log-2026-02-08-143022.md",
   "needs_reconcile": false,
   "aborted": false,
   "reason": null,
@@ -505,10 +614,11 @@ This approach:
 ```
 
 **Process:**
-1. Prepend log entry to `.specks/specks-implementation-log.md` using Edit tool
-2. Stage files: `git -C {worktree_path} add src/api/client.rs`
-3. Write message to `{worktree_path}/git-commit-message.txt`
-4. Do NOT commit (manual + not confirmed)
+1. Check log size: 234 lines, 45KB (under threshold)
+2. Prepend log entry to `.specks/specks-implementation-log.md` using Edit tool
+3. Stage files: `git -C {worktree_path} add src/api/client.rs`
+4. Write message to `{worktree_path}/git-commit-message.txt`
+5. Do NOT commit (manual + not confirmed)
 
 **Output:**
 ```json
@@ -526,6 +636,8 @@ This approach:
     "timestamp": "2026-02-08T14:30:22Z",
     "summary": "Add retry logic"
   },
+  "log_rotated": false,
+  "archived_path": null,
   "needs_reconcile": false,
   "aborted": false,
   "reason": null,
