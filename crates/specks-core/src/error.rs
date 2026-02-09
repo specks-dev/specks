@@ -181,6 +181,14 @@ pub enum SpecksError {
     /// E034: Worktree cleanup failed
     #[error("E034: Worktree cleanup failed: {reason}")]
     WorktreeCleanupFailed { reason: String },
+
+    /// E035: Beads sync failed during worktree creation
+    #[error("E035: Beads sync failed: {reason}")]
+    BeadsSyncFailed { reason: String },
+
+    /// E036: Bead commit failed during worktree creation
+    #[error("E036: Bead commit failed: {reason}")]
+    BeadCommitFailed { reason: String },
 }
 
 impl SpecksError {
@@ -224,6 +232,8 @@ impl SpecksError {
             SpecksError::SpeckHasNoSteps => "E032",
             SpecksError::WorktreeCreationFailed { .. } => "E033",
             SpecksError::WorktreeCleanupFailed { .. } => "E034",
+            SpecksError::BeadsSyncFailed { .. } => "E035",
+            SpecksError::BeadCommitFailed { .. } => "E036",
         }
     }
 
@@ -299,6 +309,8 @@ impl SpecksError {
             SpecksError::SpeckHasNoSteps => 8,           // Speck has no steps (exit code 8 per T02)
             SpecksError::WorktreeCreationFailed { .. } => 1, // Worktree creation failed
             SpecksError::WorktreeCleanupFailed { .. } => 1, // Worktree cleanup failed
+            SpecksError::BeadsSyncFailed { .. } => 10,       // Beads sync failed (exit code 10 per S02)
+            SpecksError::BeadCommitFailed { .. } => 11,      // Bead commit failed (exit code 11 per S02)
         }
     }
 }

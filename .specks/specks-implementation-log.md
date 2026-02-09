@@ -7,6 +7,28 @@ This file documents the implementation progress for the specks project.
 Entries are sorted newest-first.
 
 ---
+step: #step-2
+date: 2026-02-09T03:00:03Z
+bead: specks-0yy.3
+speck: .specks/specks-11.md
+---
+
+## [specks-11.md] Step 2: Add --sync-beads flag to specks worktree create for atomic bead sync and commit with rollback on failure | COMPLETE | 2026-02-09
+
+**Completed:** 2026-02-09T03:00:03Z
+
+**Summary:** Add --sync-beads flag to specks worktree create for atomic bead sync and commit with rollback on failure
+
+**Files Changed:**
+- crates/specks-core/src/error.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/commands/beads/sync.rs
+- crates/specks/src/main.rs
+
+**Bead:** specks-0yy.3
+
+---
 step: #step-1
 date: 2026-02-09T03:00:03Z
 bead: specks-0yy.2

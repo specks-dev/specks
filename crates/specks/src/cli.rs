@@ -107,7 +107,7 @@ pub enum Commands {
     /// Create, list, and clean up git worktrees for speck implementations.
     #[command(
         subcommand,
-        long_about = "Worktree commands for isolated implementation environments.\n\nProvides git worktree integration for speck implementations:\n  - Each speck gets its own branch and worktree\n  - Isolated working directory prevents conflicts\n  - Clean up merged worktrees after PR completion\n\nSubcommands:\n  create  Create worktree and branch for a speck\n  list    Show all active worktrees\n  cleanup Remove worktrees for merged branches\n\nTypical workflow:\n  1. specks worktree create .specks/specks-auth.md\n  2. (implement in worktree, create PR, merge)\n  3. specks worktree cleanup --merged"
+        long_about = "Worktree commands for isolated implementation environments.\n\nProvides git worktree integration for speck implementations:\n  - Each speck gets its own branch and worktree\n  - Isolated working directory prevents conflicts\n  - Clean up merged worktrees after PR completion\n\nSubcommands:\n  create  Create worktree and branch for a speck (optionally sync beads)\n  list    Show all active worktrees\n  cleanup Remove worktrees for merged branches\n\nTypical workflow:\n  1. specks worktree create .specks/specks-auth.md --sync-beads\n  2. (implement in worktree, create PR, merge)\n  3. specks worktree cleanup --merged"
     )]
     Worktree(WorktreeCommands),
 
