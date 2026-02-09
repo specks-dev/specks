@@ -412,8 +412,6 @@ pub fn run_merge(
 
             if json {
                 println!("{}", serde_json::to_string_pretty(&data).unwrap());
-            } else if !quiet {
-                eprintln!("Error: {}", e);
             }
             return Err(e);
         }
@@ -439,8 +437,6 @@ pub fn run_merge(
 
         if json {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        } else if !quiet {
-            eprintln!("Error: {}", e);
         }
         return Err(e);
     }
@@ -467,8 +463,6 @@ pub fn run_merge(
 
             if json {
                 println!("{}", serde_json::to_string_pretty(&data).unwrap());
-            } else if !quiet {
-                eprintln!("Error: {}", e);
             }
             return Err(e);
         }
@@ -494,8 +488,6 @@ pub fn run_merge(
 
         if json {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        } else if !quiet {
-            eprintln!("Error: {}", e);
         }
         return Err(e);
     }
@@ -520,8 +512,6 @@ pub fn run_merge(
 
         if json {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        } else if !quiet {
-            eprintln!("Error: {}", e);
         }
         return Err(e);
     }
@@ -548,8 +538,6 @@ pub fn run_merge(
 
             if json {
                 println!("{}", serde_json::to_string_pretty(&data).unwrap());
-            } else if !quiet {
-                eprintln!("Error: {}", e);
             }
             return Err(e);
         }
@@ -580,8 +568,6 @@ pub fn run_merge(
 
         if json {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        } else if !quiet {
-            eprintln!("Error: {}", error_msg);
         }
         return Err(error_msg);
     }
@@ -677,8 +663,6 @@ pub fn run_merge(
 
                 if json {
                     println!("{}", serde_json::to_string_pretty(&data).unwrap());
-                } else if !quiet {
-                    eprintln!("Error: {}", error_msg);
                 }
                 return Err(error_msg);
             }
@@ -722,8 +706,6 @@ pub fn run_merge(
 
                 if json {
                     println!("{}", serde_json::to_string_pretty(&data).unwrap());
-                } else if !quiet {
-                    eprintln!("Error: {}", error_msg);
                 }
                 return Err(error_msg);
             }
@@ -769,8 +751,6 @@ pub fn run_merge(
 
             if json {
                 println!("{}", serde_json::to_string_pretty(&data).unwrap());
-            } else if !quiet {
-                eprintln!("Error: {}", error_msg);
             }
             return Err(error_msg);
         }
@@ -816,8 +796,6 @@ pub fn run_merge(
 
         if json {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        } else if !quiet {
-            eprintln!("Error: {}", error_msg);
         }
         return Err(error_msg);
     }
@@ -858,8 +836,6 @@ pub fn run_merge(
 
         if json {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        } else if !quiet {
-            eprintln!("Error: {}", error_msg);
         }
         return Err(error_msg);
     }
