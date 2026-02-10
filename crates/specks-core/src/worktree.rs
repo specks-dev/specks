@@ -425,6 +425,40 @@ impl<'a> GitCli<'a> {
         Ok(())
     }
 
+    /// Find the worktree path for a given branch using `git worktree list --porcelain`
+    ///
+    /// Returns `Some(path)` if the branch is checked out in a worktree,
+    /// `None` otherwise.
+    fn worktree_path_for_branch(&self, branch: &str) -> Option<PathBuf> {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(self.repo_root)
+            .args(["worktree", "list", "--porcelain"])
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut current_path: Option<PathBuf> = None;
+
+        for line in stdout.lines() {
+            if let Some(path_str) = line.strip_prefix("worktree ") {
+                current_path = Some(PathBuf::from(path_str));
+            } else if let Some(branch_ref) = line.strip_prefix("branch refs/heads/") {
+                if branch_ref == branch {
+                    return current_path;
+                }
+            } else if line.is_empty() {
+                current_path = None;
+            }
+        }
+
+        None
+    }
+
     /// Check if branch is ancestor of base (for merge detection per D09)
     fn is_ancestor(&self, branch: &str, base: &str) -> bool {
         Command::new("git")
@@ -766,9 +800,8 @@ pub fn cleanup_stale_branches(
     repo_root: &Path,
     sessions: &[Session],
     dry_run: bool,
-    force: bool,
 ) -> Result<StaleBranchCleanupResult, SpecksError> {
-    cleanup_stale_branches_with_pr_checker(repo_root, sessions, dry_run, force, |branch| {
+    cleanup_stale_branches_with_pr_checker(repo_root, sessions, dry_run, |branch| {
         get_pr_state(branch)
     })
 }
@@ -781,7 +814,6 @@ pub(crate) fn cleanup_stale_branches_with_pr_checker(
     repo_root: &Path,
     sessions: &[Session],
     dry_run: bool,
-    force: bool,
     pr_checker: impl Fn(&str) -> PrState,
 ) -> Result<StaleBranchCleanupResult, SpecksError> {
     let git = GitCli::new(repo_root);
@@ -795,59 +827,41 @@ pub(crate) fn cleanup_stale_branches_with_pr_checker(
     let mut skipped = Vec::new();
 
     for branch in all_branches {
-        // Skip branches that have worktrees
+        // Skip branches that have worktrees (session-backed)
         if branches_with_worktrees.contains(&branch) {
             continue;
         }
 
         if dry_run {
-            // In dry-run mode, predict whether the branch would be deleted without
-            // actually running `git branch -d` (which is a destructive operation).
-            // Instead, check if the branch is fully merged into the base using
-            // `merge-base --is-ancestor`, which is the same check `git branch -d`
-            // performs internally.
+            // Check if merged via git ancestry
             let is_merged =
                 git.is_ancestor(&branch, "main") || git.is_ancestor(&branch, "origin/main");
 
             if is_merged {
-                // Branch is fully merged, safe delete would succeed
                 removed.push(branch.clone());
                 continue;
             }
 
-            // Branch is not fully merged — check if we would escalate
-            if force {
-                // Force mode: would force delete
-                removed.push(branch.clone());
-            } else {
-                // Not force mode: check PR state
-                let pr_state = pr_checker(&branch);
-                match pr_state {
-                    PrState::Merged => {
-                        // PR is merged, would force delete
-                        removed.push(branch.clone());
-                    }
-                    PrState::Unknown => {
-                        skipped.push((
-                            branch.clone(),
-                            "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
-                                .to_string(),
-                        ));
-                    }
-                    PrState::NotFound | PrState::Open | PrState::Closed => {
-                        skipped.push((
-                            branch.clone(),
-                            format!(
-                                "Unmerged; PR state is {:?} (use --force to override)",
-                                pr_state
-                            ),
-                        ));
-                    }
+            // Not merged via git - check PR state
+            let pr_state = pr_checker(&branch);
+            match pr_state {
+                PrState::Merged => {
+                    removed.push(branch.clone());
+                }
+                PrState::Unknown => {
+                    // gh unavailable - fall back to git ancestry (already checked above, so not merged)
+                    // Stale branch with no worktree and unknown state - clean it
+                    removed.push(branch.clone());
+                }
+                PrState::NotFound | PrState::Open | PrState::Closed => {
+                    skipped.push((
+                        branch.clone(),
+                        format!("Unmerged; PR state is {:?}", pr_state),
+                    ));
                 }
             }
         } else {
-            // Not dry-run mode: actually delete branches
-            // Try safe delete first
+            // Try safe delete first (succeeds if branch is merged)
             let safe_delete = Command::new("git")
                 .arg("-C")
                 .arg(repo_root)
@@ -858,48 +872,51 @@ pub(crate) fn cleanup_stale_branches_with_pr_checker(
                 })?;
 
             if safe_delete.status.success() {
-                // Safe delete succeeded
                 removed.push(branch.clone());
                 continue;
             }
 
-            // Safe delete failed - check if we should escalate to force delete
-            if force {
-                // Force mode: unconditionally force delete
-                match git.delete_branch(&branch) {
-                    Ok(()) => removed.push(branch.clone()),
-                    Err(e) => skipped.push((branch.clone(), format!("Force delete failed: {}", e))),
-                }
-            } else {
-                // Not force mode: check PR state before escalating
-                let pr_state = pr_checker(&branch);
-                match pr_state {
-                    PrState::Merged => {
-                        // PR is merged, safe to force delete
+            // Safe delete failed (not merged) - check if branch has a worktree
+            // (session-less worktree that wasn't in our sessions list)
+            if let Some(wt_path) = git.worktree_path_for_branch(&branch) {
+                // Remove the worktree first, then delete the branch
+                match git.worktree_force_remove(&wt_path) {
+                    Ok(()) => {
+                        if let Some(session_id) = crate::session::session_id_from_worktree(&wt_path)
+                        {
+                            let _ = crate::session::delete_session(&session_id, repo_root);
+                        }
                         match git.delete_branch(&branch) {
                             Ok(()) => removed.push(branch.clone()),
-                            Err(e) => skipped
-                                .push((branch.clone(), format!("Force delete failed: {}", e))),
+                            Err(e) => skipped.push((
+                                branch.clone(),
+                                format!("Removed worktree but branch delete failed: {}", e),
+                            )),
                         }
                     }
-                    PrState::Unknown => {
-                        // gh CLI not available or failed
-                        skipped.push((
-                            branch.clone(),
-                            "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
-                                .to_string(),
-                        ));
+                    Err(e) => {
+                        skipped.push((branch.clone(), format!("Cannot remove worktree: {}", e)))
                     }
-                    PrState::NotFound | PrState::Open | PrState::Closed => {
-                        // Not merged, skip
-                        skipped.push((
-                            branch.clone(),
-                            format!(
-                                "Unmerged; PR state is {:?} (use --force to override)",
-                                pr_state
-                            ),
-                        ));
+                }
+                continue;
+            }
+
+            // No worktree - check PR state to decide whether to force-delete
+            let pr_state = pr_checker(&branch);
+            match pr_state {
+                PrState::Merged | PrState::Unknown => {
+                    // PR merged (squash merge git can't detect), or gh unavailable.
+                    // Stale branch with no worktree - clean it.
+                    match git.delete_branch(&branch) {
+                        Ok(()) => removed.push(branch.clone()),
+                        Err(e) => skipped.push((branch.clone(), format!("Delete failed: {}", e))),
                     }
+                }
+                PrState::NotFound | PrState::Open | PrState::Closed => {
+                    skipped.push((
+                        branch.clone(),
+                        format!("Unmerged; PR state is {:?}", pr_state),
+                    ));
                 }
             }
         }
@@ -955,6 +972,61 @@ pub fn remove_worktree(worktree_path: &Path, repo_root: &Path) -> Result<(), Spe
     Ok(())
 }
 
+/// Clean up orphaned session files and artifact directories.
+///
+/// Scans `.specks-worktrees/.sessions/` for session files and `.specks-worktrees/.artifacts/`
+/// for artifact directories that don't have a corresponding worktree directory.
+/// Removes any orphaned entries found.
+fn cleanup_orphaned_sessions(repo_root: &Path, dry_run: bool) {
+    use crate::session::{artifacts_dir, delete_session, sessions_dir};
+
+    let sessions_path = sessions_dir(repo_root);
+    if !sessions_path.exists() {
+        return;
+    }
+
+    let worktrees_dir = repo_root.join(".specks-worktrees");
+
+    // Collect session IDs from .sessions/*.json files
+    let session_ids: Vec<String> = std::fs::read_dir(&sessions_path)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            name.strip_suffix(".json").map(|s| s.to_string())
+        })
+        .collect();
+
+    for session_id in &session_ids {
+        let worktree_dir = worktrees_dir.join(format!("specks__{}", session_id));
+        if !worktree_dir.exists() {
+            // Orphaned session - worktree directory is gone
+            if !dry_run {
+                let _ = delete_session(session_id, repo_root);
+            }
+        }
+    }
+
+    // Also check for orphaned artifact directories without session files
+    let artifacts_base = repo_root.join(".specks-worktrees").join(".artifacts");
+    if artifacts_base.exists() {
+        if let Ok(entries) = std::fs::read_dir(&artifacts_base) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let worktree_dir = worktrees_dir.join(format!("specks__{}", name));
+                if !worktree_dir.exists() {
+                    // Orphaned artifacts - no corresponding worktree
+                    if !dry_run {
+                        let artifact_path = artifacts_dir(repo_root, &name);
+                        let _ = std::fs::remove_dir_all(&artifact_path);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Clean up worktrees based on cleanup mode
 ///
 /// Implements comprehensive cleanup with drift detection per Table T01.
@@ -965,11 +1037,8 @@ pub fn cleanup_worktrees(
     repo_root: &Path,
     mode: CleanupMode,
     dry_run: bool,
-    force: bool,
 ) -> Result<CleanupResult, SpecksError> {
-    cleanup_worktrees_with_pr_checker(repo_root, mode, dry_run, force, |branch| {
-        get_pr_state(branch)
-    })
+    cleanup_worktrees_with_pr_checker(repo_root, mode, dry_run, get_pr_state)
 }
 
 /// Clean up worktrees with an injectable PR state checker.
@@ -980,7 +1049,6 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
     repo_root: &Path,
     mode: CleanupMode,
     dry_run: bool,
-    force: bool,
     pr_checker: impl Fn(&str) -> PrState,
 ) -> Result<CleanupResult, SpecksError> {
     let git = GitCli::new(repo_root);
@@ -1011,57 +1079,24 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
             CleanupMode::Merged => {
                 match pr_state {
                     PrState::Merged => true,
-                    PrState::NotFound => {
-                        // No PR - check git ancestry for non-PR merges
+                    PrState::NotFound | PrState::Unknown => {
+                        // No PR or gh unavailable - fall back to git ancestry
                         git.is_ancestor(&session.branch_name, &session.base_branch)
-                    }
-                    PrState::Unknown => {
-                        if force {
-                            // Force mode: treat unknown as potentially merged, check git ancestry
-                            git.is_ancestor(&session.branch_name, &session.base_branch)
-                        } else {
-                            result.skipped.push((
-                                session.branch_name.clone(),
-                                "PR state unknown (use --force to override)".to_string(),
-                            ));
-                            false
-                        }
                     }
                     PrState::Open | PrState::Closed => false,
                 }
             }
             CleanupMode::Orphaned => {
                 match pr_state {
-                    PrState::NotFound => true,
-                    PrState::Unknown => {
-                        if force {
-                            true // Force mode: treat unknown as no PR
-                        } else {
-                            result.skipped.push((
-                                session.branch_name.clone(),
-                                "PR state unknown (use --force to override)".to_string(),
-                            ));
-                            false
-                        }
-                    }
+                    // No PR, or gh unavailable (assume no PR)
+                    PrState::NotFound | PrState::Unknown => true,
                     PrState::Merged | PrState::Open | PrState::Closed => false,
                 }
             }
             CleanupMode::All => {
                 match pr_state {
-                    PrState::Merged => true,
-                    PrState::Closed => true, // All mode includes closed PRs
-                    PrState::NotFound => true,
-                    PrState::Unknown => {
-                        if force {
-                            true
-                        } else {
-                            result.skipped.push((
-                                session.branch_name.clone(),
-                                "PR state unknown (use --force to override)".to_string(),
-                            ));
-                            false
-                        }
+                    PrState::Merged | PrState::Closed | PrState::NotFound | PrState::Unknown => {
+                        true
                     }
                     PrState::Open => false, // Don't clean open PRs even in All mode
                 }
@@ -1074,85 +1109,46 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
 
         if should_clean {
             // Categorize removal based on mode and PR state
-            // When in Merged mode with NotFound PR, the branch was detected as merged via git ancestry
             let category = match mode {
-                CleanupMode::Merged => {
-                    // In Merged mode, anything we're removing is considered merged
-                    // (either via PR or git ancestry detection)
-                    &mut result.merged_removed
-                }
-                CleanupMode::Orphaned => {
-                    // In Orphaned mode, everything is orphaned
-                    &mut result.orphaned_removed
-                }
-                CleanupMode::All => {
-                    // In All mode, categorize by PR state
-                    match pr_state {
-                        PrState::Merged => &mut result.merged_removed,
-                        PrState::NotFound => &mut result.orphaned_removed,
-                        PrState::Closed => &mut result.merged_removed,
-                        _ => &mut result.orphaned_removed,
-                    }
-                }
-                CleanupMode::Stale => {
-                    // Stale mode only handles branches without worktrees
-                    &mut result.stale_branches_removed
-                }
+                CleanupMode::Merged => &mut result.merged_removed,
+                CleanupMode::Orphaned => &mut result.orphaned_removed,
+                CleanupMode::All => match pr_state {
+                    PrState::Merged | PrState::Closed => &mut result.merged_removed,
+                    _ => &mut result.orphaned_removed,
+                },
+                CleanupMode::Stale => &mut result.stale_branches_removed,
             };
 
             category.push(session.branch_name.clone());
 
             if !dry_run {
-                // Check for dirty worktree
                 let worktree_path = Path::new(&session.worktree_path);
 
-                // Try to remove worktree
-                match remove_worktree(worktree_path, repo_root) {
-                    Ok(()) => {
-                        // Successfully removed, now delete branch
-                        if let Err(e) = git.delete_branch(&session.branch_name) {
-                            eprintln!(
-                                "Warning: removed worktree but failed to delete branch {}: {}",
-                                session.branch_name, e
-                            );
+                // Try normal removal first, escalate to force if needed
+                let removed = match remove_worktree(worktree_path, repo_root) {
+                    Ok(()) => true,
+                    Err(_) => {
+                        // Dirty worktree or other issue - force remove
+                        match git.worktree_force_remove(worktree_path) {
+                            Ok(()) => true,
+                            Err(e) => {
+                                result.skipped.push((
+                                    session.branch_name.clone(),
+                                    format!("Removal failed: {}", e),
+                                ));
+                                category.pop();
+                                false
+                            }
                         }
                     }
-                    Err(e) => {
-                        if force {
-                            // Force mode: try force removal via git worktree remove --force
-                            eprintln!(
-                                "Warning: worktree removal failed, attempting force removal: {}",
-                                e
-                            );
-                            let worktree_path = Path::new(&session.worktree_path);
-                            match git.worktree_force_remove(worktree_path) {
-                                Ok(()) => {
-                                    // Force removal succeeded, delete branch
-                                    if let Err(e2) = git.delete_branch(&session.branch_name) {
-                                        eprintln!(
-                                            "Warning: force-removed worktree but failed to delete branch {}: {}",
-                                            session.branch_name, e2
-                                        );
-                                    }
-                                }
-                                Err(e2) => {
-                                    result.skipped.push((
-                                        session.branch_name.clone(),
-                                        format!("Force removal also failed: {}", e2),
-                                    ));
-                                    // Remove from category since we didn't actually remove it
-                                    category.pop();
-                                }
-                            }
-                        } else {
-                            // Not force mode: skip with warning
-                            result.skipped.push((
-                                session.branch_name.clone(),
-                                "Dirty worktree (use --force to override)".to_string(),
-                            ));
-                            // Remove from category since we didn't actually remove it
-                            category.pop();
-                        }
+                };
+
+                if removed {
+                    if let Err(e) = git.delete_branch(&session.branch_name) {
+                        eprintln!(
+                            "Warning: removed worktree but failed to delete branch {}: {}",
+                            session.branch_name, e
+                        );
                     }
                 }
             }
@@ -1161,16 +1157,15 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
 
     // Handle stale branch cleanup if mode includes it
     if matches!(mode, CleanupMode::Stale | CleanupMode::All) {
-        let (removed, skipped) = cleanup_stale_branches_with_pr_checker(
-            repo_root,
-            &sessions,
-            dry_run,
-            force,
-            &pr_checker,
-        )?;
+        let (removed, skipped) =
+            cleanup_stale_branches_with_pr_checker(repo_root, &sessions, dry_run, &pr_checker)?;
         result.stale_branches_removed.extend(removed);
         result.skipped.extend(skipped);
     }
+
+    // Clean up orphaned session files and artifacts
+    // (session/artifact files whose worktree directory no longer exists)
+    cleanup_orphaned_sessions(repo_root, dry_run);
 
     // Final prune to clean up any stale metadata
     if !dry_run {
@@ -2279,7 +2274,7 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in Merged mode
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true, false).unwrap();
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true).unwrap();
 
         // Should not remove worktree without PR
         assert_eq!(result.merged_removed.len(), 0);
@@ -2368,7 +2363,7 @@ mod tests {
 
         // Run cleanup in Orphaned mode (dry run) with mock PR checker
         let result =
-            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, false, |_| {
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, |_| {
                 PrState::NotFound
             })
             .unwrap();
@@ -2459,7 +2454,7 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in Orphaned mode
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true).unwrap();
 
         // Should skip InProgress session
         assert_eq!(result.orphaned_removed.len(), 0);
@@ -2548,7 +2543,7 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in All mode with force
-        let result = cleanup_worktrees(temp_dir, CleanupMode::All, true, true).unwrap();
+        let result = cleanup_worktrees(temp_dir, CleanupMode::All, true).unwrap();
 
         // Should skip InProgress session even with --force
         assert_eq!(result.merged_removed.len(), 0);
@@ -2661,11 +2656,10 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in Merged mode (dry run) with mock PR checker
-        let result =
-            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, false, |_| {
-                PrState::NotFound
-            })
-            .unwrap();
+        let result = cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, |_| {
+            PrState::NotFound
+        })
+        .unwrap();
 
         // Should identify NeedsReconcile worktree with merged branch
         assert_eq!(result.merged_removed.len(), 1);
@@ -2757,7 +2751,7 @@ mod tests {
 
         // Run cleanup in Orphaned mode (dry run) with mock PR checker
         let result =
-            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, false, |_| {
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, |_| {
                 PrState::NotFound
             })
             .unwrap();
@@ -2864,18 +2858,17 @@ mod tests {
         // Mock PR checker returns Closed for this branch
 
         // Run cleanup in Merged mode (dry run) with Closed PR
-        let result =
-            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, false, |_| {
-                PrState::Closed
-            })
-            .unwrap();
+        let result = cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, |_| {
+            PrState::Closed
+        })
+        .unwrap();
 
         // Closed PR is not treated as merged
         assert_eq!(result.merged_removed.len(), 0);
 
         // Run cleanup in Orphaned mode (dry run) with Closed PR
         let result =
-            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, false, |_| {
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, |_| {
                 PrState::Closed
             })
             .unwrap();
@@ -2885,8 +2878,10 @@ mod tests {
     }
 
     #[test]
-    fn test_cleanup_skips_unknown_pr_state() {
-        // Test: Unknown PR state is skipped without --force
+    fn test_cleanup_unknown_pr_state_uses_fallback() {
+        // Test: Unknown PR state (gh unavailable) uses fallback behavior per mode
+        // - Merged mode: falls back to git ancestry check
+        // - Orphaned mode: treats as no PR → cleanable
         use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
@@ -2978,27 +2973,25 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in Merged mode without force (dry run) with Unknown PR state
-        let result =
-            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, false, |_| {
-                PrState::Unknown
-            })
-            .unwrap();
+        // Merged mode (dry run): Unknown falls back to git ancestry.
+        // Branch diverges from main, so it's NOT considered merged.
+        let result = cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, |_| {
+            PrState::Unknown
+        })
+        .unwrap();
 
-        // Unknown PR state without force: skipped
         assert_eq!(result.merged_removed.len(), 0);
-        assert_eq!(result.skipped.len(), 1);
+        assert_eq!(result.skipped.len(), 0);
 
-        // Run cleanup in Orphaned mode without force (dry run) with Unknown PR state
+        // Orphaned mode (dry run): Unknown treated as no PR → cleanable
         let result =
-            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, false, |_| {
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, |_| {
                 PrState::Unknown
             })
             .unwrap();
 
-        // Unknown PR state without force: skipped, not removed
-        assert_eq!(result.orphaned_removed.len(), 0);
-        assert_eq!(result.skipped.len(), 1);
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.skipped.len(), 0);
     }
 
     #[test]
@@ -3083,11 +3076,10 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in All mode (dry run) with Closed PR state
-        let result =
-            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::All, true, false, |_| {
-                PrState::Closed
-            })
-            .unwrap();
+        let result = cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::All, true, |_| {
+            PrState::Closed
+        })
+        .unwrap();
 
         // All mode includes closed PRs, categorized as merged_removed
         assert_eq!(result.merged_removed.len(), 1);
@@ -3095,8 +3087,8 @@ mod tests {
     }
 
     #[test]
-    fn test_cleanup_skips_dirty_worktree() {
-        // Test: Worktrees with uncommitted changes are skipped without --force
+    fn test_cleanup_force_removes_dirty_worktree() {
+        // Test: Dirty worktrees are force-removed (escalate from normal → force)
         use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
@@ -3179,26 +3171,21 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in Orphaned mode (not dry run) with mock PR checker
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::Orphaned,
-            false,
-            false,
-            |_| PrState::NotFound,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, false, |_| {
+                PrState::NotFound
+            })
+            .unwrap();
 
-        // Dirty worktree should be skipped (git worktree remove will fail)
-        assert_eq!(result.skipped.len(), 1);
-        assert!(
-            result.skipped[0].1.contains("Dirty worktree")
-                || result.skipped[0].1.contains("Failed to remove")
-        );
+        // Dirty worktree is force-removed (escalated from normal removal)
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.skipped.len(), 0);
+        assert!(!worktree1.exists());
     }
 
     #[test]
-    fn test_cleanup_force_overrides_unknown_pr() {
-        // Test: --force flag overrides unknown PR state
+    fn test_cleanup_unknown_pr_falls_back_gracefully() {
+        // Test: unknown PR state (gh unavailable) falls back gracefully
         use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
@@ -3277,11 +3264,10 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in Orphaned mode with force (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, true).unwrap();
+        // Run cleanup in Orphaned mode (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true).unwrap();
 
-        // With force, unknown PR state should be treated as no PR (orphaned)
-        // Since we don't have gh CLI, this will be treated as NotFound anyway
+        // Unknown PR state (gh unavailable) treated as no PR → orphaned
         assert_eq!(result.orphaned_removed.len(), 1);
         assert_eq!(result.orphaned_removed[0], "specks/force-20260208-120000");
     }
@@ -3397,8 +3383,7 @@ mod tests {
 
         let sessions = vec![]; // No sessions, so all branches are stale
 
-        let (removed, _skipped) =
-            cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false).unwrap();
 
         // Should remove the branch via safe delete (it's based on current branch)
         assert_eq!(removed.len(), 1);
@@ -3473,8 +3458,7 @@ mod tests {
 
         let sessions = vec![session];
 
-        let (removed, _skipped) =
-            cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false).unwrap();
 
         // Should NOT remove the branch because it has a worktree
         assert_eq!(removed.len(), 0);
@@ -3552,15 +3536,13 @@ mod tests {
         // Test verifies safe delete fallback behavior with mock PR checker
         let sessions = vec![]; // No sessions, so all branches are stale
 
-        // Without force flag: safe delete will fail (branch not merged),
-        // PR checker returns NotFound, so branch is skipped
+        // PR checker returns NotFound: unmerged branch with no PR → skip
         let (_removed, skipped) =
-            cleanup_stale_branches_with_pr_checker(temp_dir, &sessions, false, false, |_| {
+            cleanup_stale_branches_with_pr_checker(temp_dir, &sessions, false, |_| {
                 PrState::NotFound
             })
             .unwrap();
 
-        // Branch should be skipped because it's unmerged
         assert_eq!(
             skipped.len(),
             1,
@@ -3569,17 +3551,15 @@ mod tests {
         );
         assert_eq!(skipped[0].0, "specks/unmerged-20260208-120000");
         assert!(
-            skipped[0].1.contains("Unmerged") && skipped[0].1.contains("--force"),
-            "Expected skip reason to mention unmerged and --force, got: {}",
+            skipped[0].1.contains("Unmerged"),
+            "Expected skip reason to mention unmerged, got: {}",
             skipped[0].1
         );
 
-        // With force flag: should force delete regardless of merge state
+        // PR checker returns Merged: squash-merged branch → force delete
         let (removed, _skipped) =
-            cleanup_stale_branches_with_pr_checker(temp_dir, &sessions, false, true, |_| {
-                PrState::NotFound
-            })
-            .unwrap();
+            cleanup_stale_branches_with_pr_checker(temp_dir, &sessions, false, |_| PrState::Merged)
+                .unwrap();
         assert_eq!(removed.len(), 1);
         assert_eq!(removed[0], "specks/unmerged-20260208-120000");
     }
@@ -3658,20 +3638,25 @@ mod tests {
         // Test graceful degradation when gh CLI check returns non-merged state:
         // - Safe delete (-d) will fail (branch has unmerged commits)
         // - get_pr_state returns either PrState::Unknown (gh absent) or PrState::NotFound (gh present, no PR)
-        // - Should skip with appropriate message
-        let (removed, skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+        // - Unknown → stale branch with no worktree, just delete it
+        // - NotFound → skip (confirmed unmerged, has no PR but might have a reason to exist)
+        let (removed, skipped) = cleanup_stale_branches(temp_dir, &sessions, false).unwrap();
 
-        // Branch should be skipped (not removed)
-        assert_eq!(removed.len(), 0);
-        assert_eq!(skipped.len(), 1);
-        assert_eq!(skipped[0].0, "specks/unmerged-feature");
-        // Skip reason varies based on gh CLI availability:
-        // - If gh available: "Unmerged; PR state is NotFound (use --force to override)"
-        // - If gh unavailable: "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
-        assert!(
-            skipped[0].1.contains("Unmerged") && skipped[0].1.contains("--force"),
-            "Expected skip reason to mention unmerged and --force, got: {}",
-            skipped[0].1
+        // Result depends on gh CLI availability:
+        // - gh unavailable (Unknown): branch is deleted (stale with no worktree = dead weight)
+        // - gh available (NotFound): branch is skipped (confirmed unmerged with no PR)
+        assert_eq!(
+            removed.len() + skipped.len(),
+            1,
+            "branch should be either removed or skipped"
         );
+        if !skipped.is_empty() {
+            assert_eq!(skipped[0].0, "specks/unmerged-feature");
+            assert!(
+                skipped[0].1.contains("Unmerged"),
+                "Expected skip reason to mention unmerged, got: {}",
+                skipped[0].1
+            );
+        }
     }
 }

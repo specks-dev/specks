@@ -52,7 +52,7 @@ pub enum WorktreeCommands {
     ///
     /// Cleans up worktrees based on PR state and session status.
     #[command(
-        long_about = "Remove worktrees based on cleanup mode.\n\nModes:\n  --merged: Remove worktrees with merged PRs\n  --orphaned: Remove worktrees with no PR (not InProgress)\n  --stale: Remove specks/* branches without worktrees\n  --all: Remove all eligible worktrees (merged + orphaned + closed + stale branches)\n\nUse --dry-run to preview what would be removed.\nUse --force to override PR state unknown skips and force-delete stale branches.\n\nInProgress sessions are always protected."
+        long_about = "Remove worktrees based on cleanup mode.\n\nModes:\n  --merged: Remove worktrees with merged PRs\n  --orphaned: Remove worktrees with no PR (not InProgress)\n  --stale: Remove specks/* branches without worktrees\n  --all: Remove all eligible worktrees (merged + orphaned + closed + stale branches)\n\nUse --dry-run to preview what would be removed.\n\nInProgress sessions are always protected."
     )]
     Cleanup {
         /// Only remove merged worktrees
@@ -74,10 +74,6 @@ pub enum WorktreeCommands {
         /// Show what would be removed without removing
         #[arg(long)]
         dry_run: bool,
-
-        /// Force removal even when PR state is unknown
-        #[arg(long)]
-        force: bool,
     },
 
     /// Remove a specific worktree
@@ -579,14 +575,12 @@ pub fn run_worktree_list_with_root(
 }
 
 /// Run worktree cleanup command
-#[allow(clippy::too_many_arguments)]
 pub fn run_worktree_cleanup(
     merged: bool,
     orphaned: bool,
     stale: bool,
     all: bool,
     dry_run: bool,
-    force: bool,
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
@@ -596,7 +590,6 @@ pub fn run_worktree_cleanup(
         stale,
         all,
         dry_run,
-        force,
         json_output,
         quiet,
         None,
@@ -611,7 +604,6 @@ pub fn run_worktree_cleanup_with_root(
     stale: bool,
     all: bool,
     dry_run: bool,
-    force: bool,
     json_output: bool,
     quiet: bool,
     override_root: Option<&Path>,
@@ -635,7 +627,7 @@ pub fn run_worktree_cleanup_with_root(
         CleanupMode::Merged
     };
 
-    match cleanup_worktrees(&repo_root, mode, dry_run, force) {
+    match cleanup_worktrees(&repo_root, mode, dry_run) {
         Ok(result) => {
             if json_output {
                 let data = CleanupData {
@@ -1310,7 +1302,7 @@ mod integration_tests {
 
         // Dry run should detect merged worktree but not remove it
         // Use force=true since gh CLI is not available in test environment
-        let result = cleanup_worktrees(&repo_path, CleanupMode::Merged, true, true)
+        let result = cleanup_worktrees(&repo_path, CleanupMode::Merged, true)
             .expect("cleanup_worktrees dry run should succeed");
 
         assert_eq!(

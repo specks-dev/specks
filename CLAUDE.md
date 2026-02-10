@@ -10,6 +10,10 @@ Specks transforms ideas into working software through orchestrated LLM agents. A
 
 **Exception:** The `committer-agent` is explicitly given the job to make commits during the implementer workflow.
 
+## Plan Mode Policy
+
+**DO NOT automatically enter plan mode.** Never use `EnterPlanMode` unless the user explicitly asks for it. Just do the work directly.
+
 ## Crate Structure
 
 ```

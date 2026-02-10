@@ -80,9 +80,8 @@ fn main() -> ExitCode {
                 stale,
                 all,
                 dry_run,
-                force,
             } => commands::run_worktree_cleanup(
-                merged, orphaned, stale, all, dry_run, force, cli.json, cli.quiet,
+                merged, orphaned, stale, all, dry_run, cli.json, cli.quiet,
             ),
             WorktreeCommands::Remove { target, force } => {
                 commands::run_worktree_remove(target, force, cli.json, cli.quiet)
