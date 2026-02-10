@@ -82,7 +82,10 @@ fn main() -> ExitCode {
                 force,
             } => commands::run_worktree_cleanup(
                 merged, orphaned, all, dry_run, force, cli.json, cli.quiet,
-            )
+            ),
+            WorktreeCommands::Remove { target, force } => {
+                commands::run_worktree_remove(target, force, cli.json, cli.quiet)
+            }
         },
         Some(Commands::Merge {
             speck,

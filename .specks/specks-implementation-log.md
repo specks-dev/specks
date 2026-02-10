@@ -10,10 +10,28 @@ Entries are sorted newest-first.
 
 ---
 <<<<<<< HEAD
+<<<<<<< HEAD
 step: #step-4
 date: 2026-02-10T16:15:30Z
 bead: specks-dqg.5
 =======
+=======
+step: #step-3
+date: 2026-02-10T23:02:30Z
+bead: specks-dqg.4
+---
+
+## #step-3: Added specks worktree remove command supporting identification by speck path, branch name, or worktree path. Implements ambiguity handling per D10 (fail fast with candidate list), --force flag for dirty worktrees, and full cleanup of session, artifacts, directory, and branch.
+
+**Files changed:**
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/commands/mod.rs
+- crates/specks/src/main.rs
+
+---
+
+---
+>>>>>>> 62409a8 (feat(worktree): add specks worktree remove command)
 step: #step-2
 date: 2026-02-10T23:01:58Z
 bead: specks-dqg.3
