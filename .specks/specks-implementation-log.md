@@ -10,6 +10,133 @@ Entries are sorted newest-first.
 
 ---
 step: #step-8
+date: 2026-02-10T01:45:00Z
+bead: specks-tyo.9
+---
+
+## #step-8: Verified merge command correctly uses specks_core::remove_worktree() at line 886. No --force flags required since orchestration files are cleaned first. All 41 merge tests pass.
+
+**Files changed:**
+
+
+---
+
+---
+step: #step-7
+date: 2026-02-10T01:40:00Z
+bead: specks-tyo.8
+---
+
+## #step-7: Updated implementer-setup-agent documentation to reflect external session storage at .specks-worktrees/.sessions/ and added documentation for --reuse-existing flag for idempotent worktree creation.
+
+**Files changed:**
+- agents/implementer-setup-agent.md
+
+---
+
+---
+step: #step-6
+date: 2026-02-10T01:35:00Z
+bead: specks-tyo.7
+---
+
+## #step-6: Updated implementer skill documentation to reflect external session storage at .specks-worktrees/.sessions/ and artifact storage at .specks-worktrees/.artifacts/. Session ID derived from worktree directory name.
+
+**Files changed:**
+- skills/implementer/SKILL.md
+
+---
+
+---
+step: #step-5
+date: 2026-02-10T01:30:00Z
+bead: specks-tyo.6
+---
+
+## #step-5: Added --reuse-existing flag to worktree create command. Flag enables idempotent worktree creation by returning existing worktree if one exists for the speck. JSON and text output indicate when worktree was reused.
+
+**Files changed:**
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/main.rs
+- crates/specks-core/src/worktree.rs
+
+---
+
+---
+step: #step-4
+date: 2026-02-09T19:10:00Z
+bead: specks-tyo.5
+---
+
+## #step-4: Added reuse_existing flag to WorktreeConfig for idempotent worktree creation, prefers most recent worktree by timestamp. Added reused field to Session for output reporting.
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+- crates/specks-core/src/worktree.rs
+- crates/specks/src/commands/merge.rs
+- crates/specks/src/commands/worktree.rs
+
+---
+
+---
+step: #step-3
+date: 2026-02-09T19:05:00Z
+bead: specks-tyo.4
+---
+
+## #step-3: Added remove_worktree() function that cleans external and legacy session/artifacts before calling git worktree remove (without --force)
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/lib.rs
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
+step: #step-2
+date: 2026-02-09T19:01:00Z
+bead: specks-tyo.3
+---
+
+## #step-2: Added delete_session() function to remove session files and artifacts directories, with graceful handling of missing files
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+
+---
+
+---
+step: #step-1
+date: 2026-02-09T19:00:00Z
+bead: specks-tyo.2
+---
+
+## #step-1: Updated load_session() and save_session() to support external storage at .specks-worktrees/.sessions/ with backward compatibility fallback
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/lib.rs
+- crates/specks/tests/worktree_integration_tests.rs
+
+---
+
+---
+step: #step-0
+date: 2026-02-09T17:30:00Z
+bead: specks-tyo.1
+---
+
+## #step-0: Added four helper functions for computing external session storage paths: session_id_from_worktree, sessions_dir, artifacts_dir, session_file_path
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+
+---
+
+---
+step: #step-8
 date: 2026-02-09T23:50:00Z
 bead: specks-7t7.9
 ---

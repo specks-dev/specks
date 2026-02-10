@@ -189,9 +189,16 @@ fn test_worktree_lifecycle() {
     );
 
     // Find the created worktree (should be only one)
+    // Filter for actual worktrees (starting with specks__), excluding .sessions and .artifacts
     let worktree_entries: Vec<_> = fs::read_dir(&worktrees_dir)
         .expect("failed to read worktrees dir")
         .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .map(|s| s.starts_with("specks__"))
+                .unwrap_or(false)
+        })
         .collect();
     assert_eq!(
         worktree_entries.len(),
@@ -206,11 +213,17 @@ fn test_worktree_lifecycle() {
         "worktree name should be filesystem-safe"
     );
 
-    // Step 3: Verify session.json exists and contains correct data
-    let session_file = worktree_path.join(".specks").join("session.json");
+    // Step 3: Verify session.json exists in external storage
+    let worktree_name = worktree_path.file_name().unwrap().to_str().unwrap();
+    let session_id = worktree_name.strip_prefix("specks__").unwrap();
+    let session_file = temp
+        .path()
+        .join(".specks-worktrees")
+        .join(".sessions")
+        .join(format!("{}.json", session_id));
     assert!(
         session_file.is_file(),
-        "session.json should exist in worktree"
+        "session.json should exist in external storage"
     );
 
     let session_contents = fs::read_to_string(&session_file).expect("failed to read session.json");
@@ -266,17 +279,19 @@ fn test_worktree_lifecycle() {
     // Step 6: Simulate merge by fast-forward merging branch to main
     let branch_name = session["branch_name"].as_str().unwrap();
 
-    // Commit the session.json in the worktree (simulating what implementer does)
+    // Commit a dummy file in the worktree (simulating what implementer does)
+    // Note: session.json is now in external storage, not in the worktree
+    fs::write(worktree_path.join("test.txt"), "test").expect("failed to write test file");
     Command::new("git")
         .args([
             "-C",
             worktree_path.to_str().unwrap(),
             "add",
-            ".specks/session.json",
+            "test.txt",
         ])
         .current_dir(temp.path())
         .output()
-        .expect("failed to stage session.json");
+        .expect("failed to stage test file");
 
     Command::new("git")
         .args([
@@ -284,11 +299,11 @@ fn test_worktree_lifecycle() {
             worktree_path.to_str().unwrap(),
             "commit",
             "-m",
-            "Add session",
+            "Add test file",
         ])
         .current_dir(temp.path())
         .output()
-        .expect("failed to commit session.json");
+        .expect("failed to commit test file");
 
     // Switch to main
     Command::new("git")
@@ -468,26 +483,39 @@ fn test_worktree_cleanup_dry_run() {
     let worktree_entries: Vec<_> = fs::read_dir(&worktrees_dir)
         .expect("failed to read worktrees dir")
         .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .map(|s| s.starts_with("specks__"))
+                .unwrap_or(false)
+        })
         .collect();
     let worktree_path = worktree_entries[0].path();
 
-    // Get branch name from session
-    let session_file = worktree_path.join(".specks").join("session.json");
+    // Get branch name from session in external storage
+    let worktree_name = worktree_path.file_name().unwrap().to_str().unwrap();
+    let session_id = worktree_name.strip_prefix("specks__").unwrap();
+    let session_file = temp
+        .path()
+        .join(".specks-worktrees")
+        .join(".sessions")
+        .join(format!("{}.json", session_id));
     let session_contents = fs::read_to_string(&session_file).expect("failed to read session.json");
     let session: serde_json::Value = serde_json::from_str(&session_contents).unwrap();
     let branch_name = session["branch_name"].as_str().unwrap();
 
-    // Commit the session.json in the worktree
+    // Commit a dummy file in the worktree (session.json is now external)
+    fs::write(worktree_path.join("test.txt"), "test").expect("failed to write test file");
     Command::new("git")
         .args([
             "-C",
             worktree_path.to_str().unwrap(),
             "add",
-            ".specks/session.json",
+            "test.txt",
         ])
         .current_dir(temp.path())
         .output()
-        .expect("failed to stage session.json");
+        .expect("failed to stage test file");
 
     Command::new("git")
         .args([
@@ -495,11 +523,11 @@ fn test_worktree_cleanup_dry_run() {
             worktree_path.to_str().unwrap(),
             "commit",
             "-m",
-            "Add session",
+            "Add test file",
         ])
         .current_dir(temp.path())
         .output()
-        .expect("failed to commit session.json");
+        .expect("failed to commit test file");
 
     // Merge the branch
     Command::new("git")

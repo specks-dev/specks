@@ -59,6 +59,9 @@ pub struct PrInfo {
 /// Searches all session.json files in .specks-worktrees/ directories
 /// and returns the session that matches the given speck path.
 ///
+/// When multiple worktrees exist for the same speck, prefers the one
+/// that has an open PR (indicating it's the complete/active worktree).
+///
 /// # Arguments
 /// * `speck_path` - Path to the speck file (can be relative or absolute)
 ///
@@ -87,6 +90,9 @@ fn find_worktree_for_speck(speck_path: &str) -> Result<(PathBuf, Session), Strin
     let entries = fs::read_dir(worktrees_dir)
         .map_err(|e| format!("Failed to read worktrees directory: {}", e))?;
 
+    // Collect all matching worktrees
+    let mut matching_worktrees: Vec<(PathBuf, Session)> = Vec::new();
+
     for entry in entries {
         let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let worktree_path = entry.path();
@@ -113,11 +119,33 @@ fn find_worktree_for_speck(speck_path: &str) -> Result<(PathBuf, Session), Strin
 
         // Check if this session matches our speck
         if session.speck_path == normalized_speck {
-            return Ok((worktree_path, session));
+            matching_worktrees.push((worktree_path, session));
         }
     }
 
-    Err(format!("No worktree found for speck: {}", normalized_speck))
+    if matching_worktrees.is_empty() {
+        return Err(format!("No worktree found for speck: {}", normalized_speck));
+    }
+
+    // If only one match, return it
+    if matching_worktrees.len() == 1 {
+        return Ok(matching_worktrees.into_iter().next().unwrap());
+    }
+
+    // Multiple worktrees exist - find the one with an open PR
+    for (worktree_path, session) in &matching_worktrees {
+        if let Ok(pr_info) = get_pr_for_branch(&session.branch_name) {
+            if pr_info.state == "OPEN" {
+                return Ok((worktree_path.clone(), session.clone()));
+            }
+        }
+    }
+
+    // No worktree has an open PR - return the most recent one (last in sorted order)
+    // Sort by worktree path which includes timestamp
+    let mut sorted = matching_worktrees;
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(sorted.into_iter().last().unwrap())
 }
 
 /// Get pull request information for a branch using gh CLI
@@ -849,27 +877,29 @@ pub fn run_merge(
         println!("Cleaning up worktree...");
     }
 
-    // Remove the worktree directory using git worktree remove
-    let remove_output = Command::new("git")
-        .args(["worktree", "remove", worktree_path.to_str().unwrap()])
-        .output()
-        .map_err(|e| format!("Failed to execute git worktree remove: {}", e))?;
+    // Get repo root (current directory, since merge runs from repo root)
+    let repo_root = std::env::current_dir()
+        .map_err(|e| format!("Failed to get current directory: {}", e))?;
 
-    let mut worktree_cleaned = if !remove_output.status.success() {
-        let stderr = String::from_utf8_lossy(&remove_output.stderr);
-        if !quiet {
-            eprintln!("Warning: Failed to remove worktree: {}", stderr);
-            eprintln!(
-                "You may need to manually run: git worktree remove {}",
-                worktree_path.display()
-            );
+    // Remove the worktree using specks_core::remove_worktree
+    // This cleans up session/artifacts before calling git worktree remove
+    let mut worktree_cleaned = match specks_core::remove_worktree(&worktree_path, &repo_root) {
+        Ok(_) => {
+            if !quiet {
+                println!("Removed worktree directory");
+            }
+            true
         }
-        false
-    } else {
-        if !quiet {
-            println!("Removed worktree directory");
+        Err(e) => {
+            if !quiet {
+                eprintln!("Warning: Failed to remove worktree: {}", e);
+                eprintln!(
+                    "You may need to manually run: specks worktree cleanup or git worktree remove {}",
+                    worktree_path.display()
+                );
+            }
+            false
         }
-        true
     };
 
     // Delete the branch
@@ -1047,6 +1077,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1092,6 +1123,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1142,6 +1174,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1199,6 +1232,7 @@ mod tests {
             current_step: 0,
             total_steps: 3,
             beads_root: None,
+            reused: false,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
