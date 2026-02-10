@@ -5,7 +5,7 @@
 
 use crate::error::SpecksError;
 use crate::parser::parse_speck;
-use crate::session::{Session, SessionStatus, now_iso8601, save_session, load_session};
+use crate::session::{Session, SessionStatus, load_session, now_iso8601, save_session};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -159,7 +159,9 @@ fn find_existing_worktree(config: &WorktreeConfig) -> Result<Option<Session>, Sp
     let all_worktrees = list_worktrees(&config.repo_root)?;
 
     // Normalize config speck_path for comparison
-    let config_speck_canonical = config.repo_root.join(&config.speck_path)
+    let config_speck_canonical = config
+        .repo_root
+        .join(&config.speck_path)
         .canonicalize()
         .unwrap_or_else(|_| config.repo_root.join(&config.speck_path));
 
@@ -169,7 +171,9 @@ fn find_existing_worktree(config: &WorktreeConfig) -> Result<Option<Session>, Sp
         .filter(|session| {
             // Compare canonical paths to handle relative vs absolute
             let session_speck_path = Path::new(&session.speck_path);
-            let session_speck_canonical = config.repo_root.join(session_speck_path)
+            let session_speck_canonical = config
+                .repo_root
+                .join(session_speck_path)
                 .canonicalize()
                 .unwrap_or_else(|_| config.repo_root.join(session_speck_path));
 
@@ -209,19 +213,17 @@ fn find_existing_worktree(config: &WorktreeConfig) -> Result<Option<Session>, Sp
 /// If timestamp cannot be extracted, returns empty string (sorts first).
 fn extract_timestamp_from_worktree_path(worktree_path: &str) -> String {
     let path = Path::new(worktree_path);
-    let dir_name = path.file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
+    let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
     // Expected format: specks__<slug>-<timestamp>
     // Find the last hyphen followed by timestamp pattern (YYYYMMDD-HHMMSS)
     if let Some(pos) = dir_name.rfind('-') {
         // Check if what follows looks like a timestamp (HHMMSS)
-        let maybe_time = &dir_name[pos+1..];
+        let maybe_time = &dir_name[pos + 1..];
         if maybe_time.len() == 6 && maybe_time.chars().all(|c| c.is_ascii_digit()) {
             // Find the date part (YYYYMMDD) before this
             if let Some(date_end) = dir_name[..pos].rfind('-') {
-                let maybe_date = &dir_name[date_end+1..pos];
+                let maybe_date = &dir_name[date_end + 1..pos];
                 if maybe_date.len() == 8 && maybe_date.chars().all(|c| c.is_ascii_digit()) {
                     // Found valid timestamp: YYYYMMDD-HHMMSS
                     return format!("{}-{}", maybe_date, maybe_time);
@@ -769,11 +771,16 @@ mod tests {
 
     #[test]
     fn test_remove_worktree_with_external_session() {
-        use crate::session::{save_session, Session, SessionStatus, session_file_path, artifacts_dir};
+        use crate::session::{
+            Session, SessionStatus, artifacts_dir, save_session, session_file_path,
+        };
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!("specks-test-remove-external-{}", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "specks-test-remove-external-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
 
         // Create directory structure
@@ -882,7 +889,8 @@ mod tests {
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!("specks-test-remove-legacy-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-remove-legacy-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
 
         // Create directory structure
@@ -956,7 +964,10 @@ mod tests {
         std::fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
 
         // Verify legacy files exist
-        assert!(legacy_specks_dir.join("session.json").exists(), "Legacy session should exist");
+        assert!(
+            legacy_specks_dir.join("session.json").exists(),
+            "Legacy session should exist"
+        );
         assert!(legacy_artifacts.exists(), "Legacy artifacts should exist");
         assert!(worktree_path.exists(), "Worktree should exist");
 
@@ -972,11 +983,14 @@ mod tests {
 
     #[test]
     fn test_remove_worktree_with_both_locations() {
-        use crate::session::{save_session, Session, SessionStatus, session_file_path, artifacts_dir};
+        use crate::session::{
+            Session, SessionStatus, artifacts_dir, save_session, session_file_path,
+        };
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!("specks-test-remove-both-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-remove-both-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
 
         // Create directory structure
@@ -1075,8 +1089,14 @@ mod tests {
         // Verify both exist
         let session_file = session_file_path(&temp_dir, "both-20260208-120000");
         assert!(session_file.exists(), "External session should exist");
-        assert!(external_artifacts.exists(), "External artifacts should exist");
-        assert!(legacy_specks_dir.join("session.json").exists(), "Legacy session should exist");
+        assert!(
+            external_artifacts.exists(),
+            "External artifacts should exist"
+        );
+        assert!(
+            legacy_specks_dir.join("session.json").exists(),
+            "Legacy session should exist"
+        );
         assert!(legacy_artifacts.exists(), "Legacy artifacts should exist");
 
         // Remove worktree
@@ -1084,7 +1104,10 @@ mod tests {
 
         // Verify all cleaned up
         assert!(!session_file.exists(), "External session should be deleted");
-        assert!(!external_artifacts.exists(), "External artifacts should be deleted");
+        assert!(
+            !external_artifacts.exists(),
+            "External artifacts should be deleted"
+        );
         assert!(!worktree_path.exists(), "Worktree should be deleted");
 
         // Clean up
@@ -1148,7 +1171,8 @@ mod tests {
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!("specks-test-reuse-finds-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-reuse-finds-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         // Create directory structure
@@ -1250,7 +1274,8 @@ mod tests {
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!("specks-test-reuse-creates-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-reuse-creates-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         // Create directory structure
@@ -1341,7 +1366,8 @@ mod tests {
         use std::process::Command;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!("specks-test-no-reuse-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("specks-test-no-reuse-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&temp_dir);
 
         // Create directory structure

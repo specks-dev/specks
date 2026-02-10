@@ -152,17 +152,21 @@ fn year_to_days(year: i32) -> i64 {
 /// then falls back to internal storage at `{worktree_path}/.specks/session.json`.
 ///
 /// If `repo_root` is None, only checks internal storage (backward compatibility).
-pub fn load_session(worktree_path: &Path, repo_root: Option<&Path>) -> Result<Session, SpecksError> {
+pub fn load_session(
+    worktree_path: &Path,
+    repo_root: Option<&Path>,
+) -> Result<Session, SpecksError> {
     // Try external storage first if repo_root is provided
     if let Some(root) = repo_root {
         if let Some(session_id) = session_id_from_worktree(worktree_path) {
             let external_path = session_file_path(root, &session_id);
             if external_path.exists() {
                 let content = fs::read_to_string(&external_path)?;
-                let session: Session = serde_json::from_str(&content).map_err(|e| SpecksError::Parse {
-                    message: format!("Failed to parse session.json: {}", e),
-                    line: None,
-                })?;
+                let session: Session =
+                    serde_json::from_str(&content).map_err(|e| SpecksError::Parse {
+                        message: format!("Failed to parse session.json: {}", e),
+                        line: None,
+                    })?;
                 return Ok(session);
             }
         }
@@ -194,14 +198,12 @@ pub fn save_session(session: &Session, repo_root: &Path) -> Result<(), SpecksErr
     let worktree_path = Path::new(&session.worktree_path);
 
     // Extract session ID from worktree path
-    let session_id = session_id_from_worktree(worktree_path).ok_or_else(|| {
-        SpecksError::Parse {
-            message: format!(
-                "Cannot extract session ID from worktree path: {}",
-                worktree_path.display()
-            ),
-            line: None,
-        }
+    let session_id = session_id_from_worktree(worktree_path).ok_or_else(|| SpecksError::Parse {
+        message: format!(
+            "Cannot extract session ID from worktree path: {}",
+            worktree_path.display()
+        ),
+        line: None,
     })?;
 
     // Create .specks-worktrees/.sessions directory if it doesn't exist

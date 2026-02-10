@@ -283,12 +283,7 @@ fn test_worktree_lifecycle() {
     // Note: session.json is now in external storage, not in the worktree
     fs::write(worktree_path.join("test.txt"), "test").expect("failed to write test file");
     Command::new("git")
-        .args([
-            "-C",
-            worktree_path.to_str().unwrap(),
-            "add",
-            "test.txt",
-        ])
+        .args(["-C", worktree_path.to_str().unwrap(), "add", "test.txt"])
         .current_dir(temp.path())
         .output()
         .expect("failed to stage test file");
@@ -507,12 +502,7 @@ fn test_worktree_cleanup_dry_run() {
     // Commit a dummy file in the worktree (session.json is now external)
     fs::write(worktree_path.join("test.txt"), "test").expect("failed to write test file");
     Command::new("git")
-        .args([
-            "-C",
-            worktree_path.to_str().unwrap(),
-            "add",
-            "test.txt",
-        ])
+        .args(["-C", worktree_path.to_str().unwrap(), "add", "test.txt"])
         .current_dir(temp.path())
         .output()
         .expect("failed to stage test file");

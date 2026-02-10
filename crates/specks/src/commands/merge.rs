@@ -878,8 +878,8 @@ pub fn run_merge(
     }
 
     // Get repo root (current directory, since merge runs from repo root)
-    let repo_root = std::env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {}", e))?;
+    let repo_root =
+        std::env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?;
 
     // Remove the worktree using specks_core::remove_worktree
     // This cleans up session/artifacts before calling git worktree remove

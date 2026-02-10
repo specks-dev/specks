@@ -746,7 +746,8 @@ mod integration_tests {
             reuse_existing: true,
         };
 
-        let session2 = create_worktree(&config2).expect("second create_worktree with reuse should succeed");
+        let session2 =
+            create_worktree(&config2).expect("second create_worktree with reuse should succeed");
 
         // Verify we got back the same worktree
         assert_eq!(session1.worktree_path, session2.worktree_path);
@@ -779,7 +780,10 @@ mod integration_tests {
         };
 
         let result = create_worktree(&config2);
-        assert!(result.is_err(), "second create_worktree without reuse should fail");
+        assert!(
+            result.is_err(),
+            "second create_worktree without reuse should fail"
+        );
 
         match result {
             Err(specks_core::error::SpecksError::WorktreeAlreadyExists) => {
@@ -802,10 +806,14 @@ mod integration_tests {
             reuse_existing: true,
         };
 
-        let session = create_worktree(&config).expect("create_worktree with reuse should create new when none exists");
+        let session = create_worktree(&config)
+            .expect("create_worktree with reuse should create new when none exists");
 
         // Verify a new worktree was created
-        assert!(!session.reused, "session should not be marked as reused when creating new");
+        assert!(
+            !session.reused,
+            "session should not be marked as reused when creating new"
+        );
         assert_eq!(session.total_steps, 1);
         assert_eq!(session.base_branch, "main");
     }
