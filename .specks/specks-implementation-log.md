@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-7
+date: 2026-02-10T03:34:38Z
+bead: specks-15g.8
+---
+
+## #step-7: Deduplicated timestamp generation by reusing session::now_iso8601() with format conversion. Removed ~70 lines of duplicate date/time calculation logic.
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+
+---
+
+---
 step: #step-6
 date: 2026-02-10T03:09:22Z
 bead: specks-15g.7
