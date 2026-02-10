@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-0
+date: 2026-02-10T02:46:23Z
+bead: specks-15g.1
+---
+
+## #step-0: Implemented atomic session writes using temp file + fsync + rename pattern for crash safety
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+
+---
+
+---
 step: #step-8
 date: 2026-02-10T01:45:00Z
 bead: specks-tyo.9
