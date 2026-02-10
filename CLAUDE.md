@@ -218,7 +218,7 @@ Sub-agents are invoked via Task tool and return JSON results. Each has specific 
 | **implementer-setup-agent** | Create worktree, sync beads, resolve steps | Read, Grep, Glob, Bash, Write, Edit |
 | **architect-agent** | Read-only codebase analysis, produces implementation strategy per step | Bash, Read, Grep, Glob, WebFetch, WebSearch |
 | **coder-agent** | Implements strategy from architect with drift detection | Read, Grep, Glob, Write, Edit, Bash, WebFetch, WebSearch |
-| **reviewer-agent** | Verifies completed step matches plan and audits code quality, security, error handling | Read, Grep, Glob, Edit, Bash |
+| **reviewer-agent** | Reviews code, verifies plan conformance, checks build/test reports | Read, Grep, Glob, Write |
 | **committer-agent** | Stage, commit, close beads, push, create PR | Read, Grep, Glob, Write, Edit, Bash |
 
 All agents use the **persistent agent pattern** — spawned once and resumed for subsequent invocations. Planning agents (clarifier, author, critic) persist across revision loops. Implementation agents (architect, coder, reviewer, committer) persist across steps. This eliminates cold-start exploration, lets agents accumulate knowledge, and enables targeted revisions. Auto-compaction handles context overflow.

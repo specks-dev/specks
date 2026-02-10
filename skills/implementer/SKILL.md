@@ -476,6 +476,7 @@ When you receive an agent response:
   "files_modified": array (required),
   "tests_run": boolean (required),
   "tests_passed": boolean (required),
+  "build_and_test_report": object (required: build, test, lint, checkpoints),
   "drift_assessment": object (required: drift_severity, expected_files, actual_changes, unexpected_changes, drift_budget, qualitative_assessment)
 }
 ```
@@ -488,7 +489,7 @@ When you receive an agent response:
   "artifacts_produced": boolean (required),
   "issues": array (required),
   "drift_notes": string or null (required),
-  "audit_categories": object (required: structure, error_handling, security — each PASS/WARN/FAIL),
+  "review_categories": object (required: structure, error_handling, security — each PASS/WARN/FAIL),
   "recommendation": enum (required: APPROVE, REVISE, ESCALATE)
 }
 ```
