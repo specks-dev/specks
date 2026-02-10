@@ -9,6 +9,120 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-7
+date: 2026-02-10T03:34:38Z
+bead: specks-15g.8
+---
+
+## #step-7: Deduplicated timestamp generation by reusing session::now_iso8601() with format conversion. Removed ~70 lines of duplicate date/time calculation logic.
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+
+---
+
+---
+step: #step-6
+date: 2026-02-10T03:09:22Z
+bead: specks-15g.7
+---
+
+## #step-6: Verified check_pr_checks() uses gh pr checks --json for robust parsing (implemented in step-1 alongside GitHub API merge detection)
+
+
+
+**Tests:**
+
+**Checkpoints:**
+
+
+---
+
+---
+step: #step-5
+date: 2026-02-10T03:06:00Z
+bead: specks-15g.6
+---
+
+## #step-5: Added run_command_with_context() helper for enhanced error messages with command string, exit code, and stderr. Added eprintln! warnings for rollback failures instead of silent error handling.
+
+**Files changed:**
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
+step: #step-4
+date: 2026-02-10T03:01:00Z
+bead: specks-15g.5
+---
+
+## #step-4: Added specks session reconcile command for manual recovery of sessions stuck in NeedsReconcile state with --dry-run and --json support
+
+**Files changed:**
+- crates/specks/src/commands/session.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/mod.rs
+- crates/specks/src/main.rs
+- crates/specks/src/output.rs
+
+---
+
+---
+step: #step-3
+date: 2026-02-10T02:56:23Z
+bead: specks-15g.4
+---
+
+## #step-3: Added second check_main_sync() call immediately before git push with code comment documenting race window limitation
+
+**Files changed:**
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
+step: #step-2
+date: 2026-02-10T02:52:00Z
+bead: specks-15g.3
+---
+
+## #step-2: Added is_main_worktree() validation that checks .git is directory and current branch is main/master before merge operations
+
+**Files changed:**
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
+step: #step-1
+date: 2026-02-10T02:49:00Z
+bead: specks-15g.2
+---
+
+## #step-1: Added GitHub API-based merge detection using gh pr view --json for reliable squash merge detection in cleanup_worktrees()
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/session.rs
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
+step: #step-0
+date: 2026-02-10T02:46:23Z
+bead: specks-15g.1
+---
+
+## #step-0: Implemented atomic session writes using temp file + fsync + rename pattern for crash safety
+
+**Files changed:**
+- crates/specks-core/src/session.rs
+
+---
+
+---
 step: #step-8
 date: 2026-02-10T01:45:00Z
 bead: specks-tyo.9

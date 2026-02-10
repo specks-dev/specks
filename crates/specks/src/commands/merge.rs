@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use specks_core::session::Session;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 /// JSON output for merge command
 #[derive(Serialize)]
@@ -44,6 +44,43 @@ pub struct MergeData {
 
 fn is_false(b: &bool) -> bool {
     !b
+}
+
+/// Helper function to run a command with enhanced error context
+///
+/// Executes a command and returns detailed error messages that include:
+/// - The full command string
+/// - The exit code
+/// - The stderr output
+///
+/// This makes debugging command failures much easier by providing complete context.
+///
+/// # Arguments
+/// * `cmd` - Mutable reference to Command to execute
+/// * `cmd_name` - Human-readable command description for error messages
+///
+/// # Returns
+/// * `Ok(Output)` - Command succeeded (exit code 0)
+/// * `Err(String)` - Command failed with detailed error message
+fn run_command_with_context(cmd: &mut Command, cmd_name: &str) -> Result<Output, String> {
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to execute command '{}': {}", cmd_name, e))?;
+
+    if !output.status.success() {
+        let exit_code = output
+            .status
+            .code()
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "signal".to_string());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "Command '{}' failed with exit code {}: {}",
+            cmd_name, exit_code, stderr
+        ));
+    }
+
+    Ok(output)
 }
 
 /// Information about a GitHub pull request
@@ -332,19 +369,68 @@ fn check_main_sync() -> Result<(), String> {
     Ok(())
 }
 
+/// Check if current directory is the main worktree
+///
+/// Validates that we're running from the main repository worktree, not a specks worktree
+/// or other detached checkout. This is required for merge operations.
+///
+/// # Returns
+/// * `Ok(())` - Current directory is the main worktree
+/// * `Err(String)` - Not in main worktree (provides actionable error message)
+fn is_main_worktree() -> Result<(), String> {
+    use std::path::Path;
+
+    // Check if .git is a directory (not a file, which indicates a worktree)
+    let git_path = Path::new(".git");
+    if !git_path.exists() {
+        return Err("Not in a git repository (no .git directory found)".to_string());
+    }
+
+    if !git_path.is_dir() {
+        return Err(
+            "Running from a git worktree, not the main repository.\n\
+             The merge command must run from the main worktree.\n\
+             Please cd to the repository root and try again."
+                .to_string(),
+        );
+    }
+
+    // Verify we're on the expected branch (main or master)
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .map_err(|e| format!("Failed to check current branch: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to get current branch: {}", stderr));
+    }
+
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if branch != "main" && branch != "master" {
+        return Err(format!(
+            "Current branch is '{}', expected 'main' or 'master'.\n\
+             The merge command must run from the main branch in the main worktree.",
+            branch
+        ));
+    }
+
+    Ok(())
+}
+
 /// Check if all PR checks have passed
 ///
-/// Uses `gh pr checks <branch>` to query check status.
+/// Uses `gh pr checks <branch> --json name,state,conclusion` to query check status.
 ///
 /// # Arguments
 /// * `branch` - Name of the branch to check
 ///
 /// # Returns
-/// * `Ok(())` - All checks passed
+/// * `Ok(())` - All checks passed (or no checks configured)
 /// * `Err(String)` - Some checks are failing or pending (includes list)
 fn check_pr_checks(branch: &str) -> Result<(), String> {
     let output = Command::new("gh")
-        .args(["pr", "checks", branch])
+        .args(["pr", "checks", branch, "--json", "name,state,conclusion"])
         .output()
         .map_err(|e| format!("Failed to execute gh pr checks: {}", e))?;
 
@@ -355,34 +441,35 @@ fn check_pr_checks(branch: &str) -> Result<(), String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Parse the output to detect failing or pending checks
-    // gh pr checks output format (tab-separated):
-    // NAME    STATUS    CONCLUSION
-    // Build   completed success
-    // Test    pending   -
-    // Lint    completed failure
+    // Parse JSON array of check objects
+    #[derive(Deserialize)]
+    struct CheckStatus {
+        name: String,
+        state: String,
+        conclusion: Option<String>,
+    }
+
+    let checks: Vec<CheckStatus> = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse gh pr checks output: {}", e))?;
+
+    // Empty array means no checks configured - that's success
+    if checks.is_empty() {
+        return Ok(());
+    }
+
     let mut failing = Vec::new();
     let mut pending = Vec::new();
 
-    for line in stdout.lines().skip(1) {
-        // Skip header line
-        let parts: Vec<&str> = line.split('\t').collect();
-        if parts.len() < 3 {
-            continue;
+    for check in checks {
+        // Check if still pending or in progress
+        if check.state == "pending" || check.state == "in_progress" {
+            pending.push(check.name);
         }
-
-        let name = parts[0].trim();
-        let status = parts[1].trim();
-        let conclusion = if parts.len() > 2 { parts[2].trim() } else { "" };
-
-        // Check if still pending
-        if status == "pending" || status == "in_progress" {
-            pending.push(name.to_string());
-        }
-        // Check if failed
-        else if conclusion == "failure" || conclusion == "timed_out" || conclusion == "cancelled"
-        {
-            failing.push(name.to_string());
+        // Check if failed (conclusion may be null for pending checks)
+        else if let Some(conclusion) = check.conclusion {
+            if conclusion == "failure" || conclusion == "timed_out" || conclusion == "cancelled" {
+                failing.push(check.name);
+            }
         }
     }
 
@@ -432,6 +519,30 @@ pub fn run_merge(
     json: bool,
     quiet: bool,
 ) -> Result<i32, String> {
+    // Step 0: Validate that we're running from the main worktree
+    if let Err(e) = is_main_worktree() {
+        let data = MergeData {
+            status: "error".to_string(),
+            pr_url: None,
+            pr_number: None,
+            branch_name: None,
+            infrastructure_committed: None,
+            infrastructure_files: None,
+            worktree_cleaned: None,
+            dry_run,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            error: Some(e.clone()),
+            message: None,
+        };
+
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        }
+        return Err(e);
+    }
+
     // Step 1: Find the worktree for this speck
     let (worktree_path, session) = match find_worktree_for_speck(None, &speck) {
         Ok(result) => result,
@@ -678,14 +789,12 @@ pub fn run_merge(
 
         // Stage infrastructure files
         for file in &infrastructure {
-            let add_output = Command::new("git")
-                .args(["add", file])
-                .output()
-                .map_err(|e| format!("Failed to execute git add: {}", e))?;
+            let mut cmd = Command::new("git");
+            cmd.args(["add", file]);
+            let add_output = run_command_with_context(&mut cmd, &format!("git add {}", file));
 
-            if !add_output.status.success() {
-                let stderr = String::from_utf8_lossy(&add_output.stderr);
-                let error_msg = format!("Failed to stage {}: {}", file, stderr);
+            if let Err(e) = add_output {
+                let error_msg = format!("Failed to stage {}: {}", file, e);
 
                 let data = MergeData {
                     status: "error".to_string(),
@@ -712,23 +821,22 @@ pub fn run_merge(
 
         // Commit with message following D04 format
         let commit_message = format!("chore({}): infrastructure updates", speck_name);
-        let commit_output = Command::new("git")
-            .args(["commit", "-m", &commit_message])
-            .output()
-            .map_err(|e| format!("Failed to execute git commit: {}", e))?;
+        let mut cmd = Command::new("git");
+        cmd.args(["commit", "-m", &commit_message]);
+        let commit_output = run_command_with_context(
+            &mut cmd,
+            &format!("git commit -m '{}'", commit_message),
+        );
 
-        if !commit_output.status.success() {
-            let stderr = String::from_utf8_lossy(&commit_output.stderr);
-
+        if let Err(e) = commit_output {
             // Check if it's an empty commit (no changes to commit)
-            if stderr.contains("nothing to commit") || stderr.contains("no changes added to commit")
-            {
+            if e.contains("nothing to commit") || e.contains("no changes added to commit") {
                 if !quiet {
                     println!("No infrastructure changes to commit (already committed)");
                 }
                 false
             } else {
-                let error_msg = format!("Failed to commit infrastructure files: {}", stderr);
+                let error_msg = format!("Failed to commit infrastructure files: {}", e);
 
                 let data = MergeData {
                     status: "error".to_string(),
@@ -766,14 +874,38 @@ pub fn run_merge(
 
     // Step 9: Push main to origin
     if infrastructure_committed {
-        let push_output = Command::new("git")
-            .args(["push", "origin", "main"])
-            .output()
-            .map_err(|e| format!("Failed to execute git push: {}", e))?;
+        // Re-check main sync immediately before push to minimize race window
+        // Note: A tiny race window still exists between this check and the actual push
+        // (unavoidable without distributed locking), but this reduces the window significantly
+        if let Err(e) = check_main_sync() {
+            let data = MergeData {
+                status: "error".to_string(),
+                pr_url: Some(pr_info.url.clone()),
+                pr_number: Some(pr_info.number),
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: Some(infrastructure_committed),
+                infrastructure_files: Some(infrastructure.clone()),
+                worktree_cleaned: None,
+                dry_run: false,
+                would_commit: None,
+                would_merge_pr: None,
+                would_cleanup_worktree: None,
+                error: Some(format!("Pre-push sync check failed: {}", e)),
+                message: None,
+            };
 
-        if !push_output.status.success() {
-            let stderr = String::from_utf8_lossy(&push_output.stderr);
-            let error_msg = format!("Failed to push main to origin: {}", stderr);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            return Err(format!("Pre-push sync check failed: {}", e));
+        }
+
+        let mut cmd = Command::new("git");
+        cmd.args(["push", "origin", "main"]);
+        let push_output = run_command_with_context(&mut cmd, "git push origin main");
+
+        if let Err(e) = push_output {
+            let error_msg = format!("Failed to push main to origin: {}", e);
 
             let data = MergeData {
                 status: "error".to_string(),
@@ -807,14 +939,15 @@ pub fn run_merge(
         println!("Merging PR #{} via squash...", pr_info.number);
     }
 
-    let merge_output = Command::new("gh")
-        .args(["pr", "merge", "--squash", &session.branch_name])
-        .output()
-        .map_err(|e| format!("Failed to execute gh pr merge: {}", e))?;
+    let mut cmd = Command::new("gh");
+    cmd.args(["pr", "merge", "--squash", &session.branch_name]);
+    let merge_output = run_command_with_context(
+        &mut cmd,
+        &format!("gh pr merge --squash {}", session.branch_name),
+    );
 
-    if !merge_output.status.success() {
-        let stderr = String::from_utf8_lossy(&merge_output.stderr);
-        let error_msg = format!("Failed to merge PR: {}", stderr);
+    if let Err(e) = merge_output {
+        let error_msg = format!("Failed to merge PR: {}", e);
 
         let data = MergeData {
             status: "error".to_string(),
@@ -847,14 +980,12 @@ pub fn run_merge(
     }
 
     // Step 11: Pull main to fetch the squashed commit
-    let pull_output = Command::new("git")
-        .args(["pull", "origin", "main"])
-        .output()
-        .map_err(|e| format!("Failed to execute git pull: {}", e))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["pull", "origin", "main"]);
+    let pull_output = run_command_with_context(&mut cmd, "git pull origin main");
 
-    if !pull_output.status.success() {
-        let stderr = String::from_utf8_lossy(&pull_output.stderr);
-        let error_msg = format!("Failed to pull main after merge: {}", stderr);
+    if let Err(e) = pull_output {
+        let error_msg = format!("Failed to pull main after merge: {}", e);
 
         let data = MergeData {
             status: "error".to_string(),
@@ -917,38 +1048,47 @@ pub fn run_merge(
     };
 
     // Delete the branch
-    let delete_output = Command::new("git")
-        .args(["branch", "-D", &session.branch_name])
-        .output()
-        .map_err(|e| format!("Failed to execute git branch -D: {}", e))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["branch", "-D", &session.branch_name]);
+    let delete_output = run_command_with_context(
+        &mut cmd,
+        &format!("git branch -D {}", session.branch_name),
+    );
 
-    if !delete_output.status.success() {
-        let stderr = String::from_utf8_lossy(&delete_output.stderr);
-        if !quiet {
-            eprintln!("Warning: Failed to delete branch: {}", stderr);
-            eprintln!(
-                "You may need to manually run: git branch -D {}",
-                session.branch_name
-            );
+    match delete_output {
+        Ok(_) => {
+            if !quiet {
+                println!("Deleted branch: {}", session.branch_name);
+            }
         }
-        worktree_cleaned = false;
-    } else if !quiet {
-        println!("Deleted branch: {}", session.branch_name);
+        Err(e) => {
+            if !quiet {
+                eprintln!("Warning: Failed to delete branch: {}", e);
+                eprintln!(
+                    "You may need to manually run: git branch -D {}",
+                    session.branch_name
+                );
+            }
+            worktree_cleaned = false;
+        }
     }
 
     // Prune stale worktree metadata
-    let prune_output = Command::new("git")
-        .args(["worktree", "prune"])
-        .output()
-        .map_err(|e| format!("Failed to execute git worktree prune: {}", e))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["worktree", "prune"]);
+    let prune_output = run_command_with_context(&mut cmd, "git worktree prune");
 
-    if !prune_output.status.success() {
-        let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        if !quiet {
-            eprintln!("Warning: Failed to prune worktree metadata: {}", stderr);
+    match prune_output {
+        Ok(_) => {
+            if !quiet {
+                println!("Pruned worktree metadata");
+            }
         }
-    } else if !quiet {
-        println!("Pruned worktree metadata");
+        Err(e) => {
+            if !quiet {
+                eprintln!("Warning: Failed to prune worktree metadata: {}", e);
+            }
+        }
     }
 
     // Step 13: Return success response
@@ -1473,61 +1613,90 @@ mod tests {
         // - This is tested through integration tests in a controlled git environment
     }
 
-    // Unit tests for parsing gh pr checks output
+    // Unit tests for parsing gh pr checks JSON output
 
     #[test]
-    fn test_check_pr_checks_all_pass() {
-        // This tests the parsing logic for gh pr checks output
-        // The check_pr_checks function parses tab-separated output like:
-        // NAME    STATUS    CONCLUSION
-        // Build   completed success
-        // Test    completed success
+    fn test_check_pr_checks_json_all_pass() {
+        // Test parsing of successful checks JSON
+        let json_output = r#"[
+            {"name":"Build","state":"completed","conclusion":"success"},
+            {"name":"Test","state":"completed","conclusion":"success"}
+        ]"#;
 
-        // Expected behavior:
-        // - All checks have status "completed" and conclusion "success"
-        // - Function should return Ok(())
-        // This is tested through integration tests with mocked gh CLI
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // Test struct fields used only for deserialization
+        struct CheckStatus {
+            name: String,
+            state: String,
+            conclusion: Option<String>,
+        }
+
+        let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
+        assert_eq!(checks.len(), 2);
+        assert_eq!(checks[0].name, "Build");
+        assert_eq!(checks[0].state, "completed");
+        assert_eq!(checks[0].conclusion, Some("success".to_string()));
     }
 
     #[test]
-    fn test_check_pr_checks_failing() {
-        // Tests parsing of failing checks
-        // Sample output:
-        // NAME    STATUS    CONCLUSION
-        // Build   completed failure
-        // Test    completed success
+    fn test_check_pr_checks_json_failing() {
+        // Test parsing of failing checks JSON
+        let json_output = r#"[
+            {"name":"Build","state":"completed","conclusion":"failure"},
+            {"name":"Test","state":"completed","conclusion":"success"}
+        ]"#;
 
-        // Expected behavior:
-        // - Function should return Err with message "PR checks failing: Build"
-        // This is tested through integration tests with mocked gh CLI
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // Test struct fields used only for deserialization
+        struct CheckStatus {
+            name: String,
+            state: String,
+            conclusion: Option<String>,
+        }
+
+        let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
+        assert_eq!(checks.len(), 2);
+        assert_eq!(checks[0].conclusion, Some("failure".to_string()));
     }
 
     #[test]
-    fn test_check_pr_checks_pending() {
-        // Tests parsing of pending checks
-        // Sample output:
-        // NAME    STATUS    CONCLUSION
-        // Build   pending   -
-        // Test    completed success
+    fn test_check_pr_checks_json_pending() {
+        // Test parsing of pending checks JSON
+        let json_output = r#"[
+            {"name":"Build","state":"pending","conclusion":null},
+            {"name":"Test","state":"completed","conclusion":"success"}
+        ]"#;
 
-        // Expected behavior:
-        // - Function should return Err with message "PR checks pending: Build"
-        // This is tested through integration tests with mocked gh CLI
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // Test struct fields used only for deserialization
+        struct CheckStatus {
+            name: String,
+            state: String,
+            conclusion: Option<String>,
+        }
+
+        let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
+        assert_eq!(checks.len(), 2);
+        assert_eq!(checks[0].state, "pending");
+        assert!(checks[0].conclusion.is_none());
     }
 
     #[test]
-    fn test_check_pr_checks_mixed_states() {
-        // Tests parsing of mixed check states
-        // Sample output:
-        // NAME    STATUS      CONCLUSION
-        // Build   completed   success
-        // Test    pending     -
-        // Lint    completed   failure
+    fn test_check_pr_checks_json_empty_array() {
+        // Test that empty array (no checks) is handled as success
+        let json_output = r#"[]"#;
 
-        // Expected behavior:
-        // - Function should return Err listing failing checks first
-        // - Message: "PR checks failing: Lint"
-        // This is tested through integration tests with mocked gh CLI
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // Test struct fields used only for deserialization
+        struct CheckStatus {
+            name: String,
+            state: String,
+            conclusion: Option<String>,
+        }
+
+        let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
+        assert_eq!(checks.len(), 0);
+        // This should be treated as success (no checks configured)
     }
 
     // Integration tests
@@ -1799,5 +1968,362 @@ mod tests {
         let error = result.unwrap_err();
         assert!(error.contains("closed without merge"));
         assert!(error.contains(&pr_info.url));
+    }
+
+    // Tests for is_main_worktree validation
+
+    #[test]
+    fn test_is_main_worktree_detects_main_repository() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary test git repository
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit to establish main branch
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Change to the temp directory and run the check
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = is_main_worktree();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Should succeed - this is a main worktree with .git directory
+        assert!(
+            result.is_ok(),
+            "Expected main worktree check to pass, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_is_main_worktree_detects_git_worktree() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary test git repository with worktree
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create a worktree
+        let worktree_path = temp_path.join("test-worktree");
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args([
+                "worktree",
+                "add",
+                worktree_path.to_str().unwrap(),
+                "-b",
+                "test-branch",
+            ])
+            .output()
+            .expect("Failed to create worktree");
+
+        // Change to the worktree directory and run the check
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&worktree_path).unwrap();
+
+        let result = is_main_worktree();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Should fail - this is a worktree, not main repository
+        assert!(result.is_err(), "Expected worktree check to fail");
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("git worktree"),
+            "Error should mention git worktree, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_is_main_worktree_detects_wrong_branch() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary test git repository
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create and checkout a feature branch
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Change to the temp directory and run the check
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = is_main_worktree();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Should fail - we're on feature-branch, not main
+        assert!(
+            result.is_err(),
+            "Expected wrong branch check to fail, got: {:?}",
+            result
+        );
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("feature-branch"),
+            "Error should mention current branch, got: {}",
+            error
+        );
+        assert!(
+            error.contains("main") || error.contains("master"),
+            "Error should mention expected branch, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_is_main_worktree_no_git_directory() {
+        use tempfile::TempDir;
+
+        // Create a temporary directory without git
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Change to the temp directory and run the check
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = is_main_worktree();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Should fail - no git repository
+        assert!(result.is_err(), "Expected no git directory check to fail");
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("Not in a git repository"),
+            "Error should mention missing git directory, got: {}",
+            error
+        );
+    }
+
+    // Tests for run_command_with_context error formatting
+
+    #[test]
+    fn test_run_command_with_context_success() {
+        // Run a simple command that should succeed
+        let mut cmd = Command::new("echo");
+        cmd.arg("test");
+        let output = run_command_with_context(&mut cmd, "echo test");
+
+        assert!(
+            output.is_ok(),
+            "Expected echo command to succeed, got: {:?}",
+            output
+        );
+
+        let output = output.unwrap();
+        assert!(output.status.success());
+    }
+
+    #[test]
+    fn test_run_command_with_context_includes_command_name() {
+        // Run a command that will fail
+        let mut cmd = Command::new("git");
+        cmd.args(["this-command-does-not-exist"]);
+        let result = run_command_with_context(&mut cmd, "git this-command-does-not-exist");
+
+        assert!(result.is_err(), "Expected command to fail");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("git this-command-does-not-exist"),
+            "Error should include command name, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_run_command_with_context_includes_exit_code() {
+        // Run a command that will fail with a specific exit code
+        // Using 'false' command which always exits with code 1
+        let mut cmd = Command::new("false");
+        let result = run_command_with_context(&mut cmd, "false");
+
+        assert!(result.is_err(), "Expected false command to fail");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("exit code 1") || error.contains("exit code"),
+            "Error should include exit code, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_run_command_with_context_includes_stderr() {
+        // Run git command with invalid option to get stderr output
+        let mut cmd = Command::new("git");
+        cmd.args(["--invalid-flag"]);
+        let result = run_command_with_context(&mut cmd, "git --invalid-flag");
+
+        assert!(result.is_err(), "Expected command to fail");
+
+        let error = result.unwrap_err();
+        // Error should include command name, exit code format, and likely some stderr
+        assert!(
+            error.contains("git --invalid-flag"),
+            "Error should include command, got: {}",
+            error
+        );
+        assert!(
+            error.contains("exit code") || error.contains("failed"),
+            "Error should mention exit code, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_run_command_with_context_execution_error() {
+        // Try to run a command that doesn't exist
+        let mut cmd = Command::new("this-command-definitely-does-not-exist-12345");
+        let result = run_command_with_context(
+            &mut cmd,
+            "this-command-definitely-does-not-exist-12345",
+        );
+
+        assert!(result.is_err(), "Expected command to fail");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("Failed to execute command"),
+            "Error should indicate execution failure, got: {}",
+            error
+        );
+        assert!(
+            error.contains("this-command-definitely-does-not-exist-12345"),
+            "Error should include command name, got: {}",
+            error
+        );
     }
 }

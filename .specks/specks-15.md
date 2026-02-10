@@ -14,6 +14,7 @@
 | Tracking issue/PR | TBD |
 | Last updated | 2026-02-09 |
 | Beads Root | *(written by `specks beads sync`)* |
+| Beads Root | `specks-15g` |
 
 ---
 
@@ -341,6 +342,8 @@ specks worktree cleanup    # Now uses GitHub API for squash detection
 
 #### Step 0: Add atomic session write function {#step-0}
 
+**Bead:** `specks-15g.1`
+
 **Commit:** `feat(session): add atomic session file writes`
 
 **References:** [D02] Atomic session writes via temp file + rename, (#semantics)
@@ -376,6 +379,8 @@ specks worktree cleanup    # Now uses GitHub API for squash detection
 #### Step 1: Add GitHub API merge detection {#step-1}
 
 **Depends on:** #step-0
+
+**Bead:** `specks-15g.2`
 
 **Commit:** `feat(worktree): use GitHub API for squash merge detection`
 
@@ -414,6 +419,8 @@ specks worktree cleanup    # Now uses GitHub API for squash detection
 
 **Depends on:** #step-1
 
+**Bead:** `specks-15g.3`
+
 **Commit:** `feat(merge): validate running from main worktree`
 
 **References:** [D04] Validate main worktree before merge operations, (#inputs-outputs)
@@ -449,6 +456,8 @@ specks worktree cleanup    # Now uses GitHub API for squash detection
 
 **Depends on:** #step-2
 
+**Bead:** `specks-15g.4`
+
 **Commit:** `fix(merge): re-verify sync before push to reduce race window`
 
 **References:** [D06] Race condition mitigation for check_main_sync, (#semantics)
@@ -479,6 +488,8 @@ specks worktree cleanup    # Now uses GitHub API for squash detection
 #### Step 4: Add session reconcile command {#step-4}
 
 **Depends on:** #step-3
+
+**Bead:** `specks-15g.5`
 
 **Commit:** `feat(cli): add specks session reconcile command`
 
@@ -518,6 +529,8 @@ specks worktree cleanup    # Now uses GitHub API for squash detection
 
 **Depends on:** #step-4
 
+**Bead:** `specks-15g.6`
+
 **Commit:** `fix(merge): improve error messages and rollback handling`
 
 **References:** [D08] Log warnings instead of silently ignoring rollback errors, [D10] Include command context in shell error messages, (#terminology)
@@ -552,6 +565,8 @@ specks worktree cleanup    # Now uses GitHub API for squash detection
 
 **Depends on:** #step-5
 
+**Bead:** `specks-15g.7`
+
 **Commit:** `fix(merge): use JSON output for gh pr checks parsing`
 
 **References:** [D05] Use gh pr checks --json for robust parsing, (#public-api)
@@ -585,6 +600,8 @@ specks worktree cleanup    # Now uses GitHub API for squash detection
 #### Step 7: Deduplicate timestamp code {#step-7}
 
 **Depends on:** #step-6
+
+**Bead:** `specks-15g.8`
 
 **Commit:** `refactor(core): deduplicate timestamp generation`
 
