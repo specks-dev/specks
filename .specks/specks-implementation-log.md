@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-2
+date: 2026-02-10T02:52:00Z
+bead: specks-15g.3
+---
+
+## #step-2: Added is_main_worktree() validation that checks .git is directory and current branch is main/master before merge operations
+
+**Files changed:**
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
 step: #step-1
 date: 2026-02-10T02:49:00Z
 bead: specks-15g.2

@@ -332,6 +332,55 @@ fn check_main_sync() -> Result<(), String> {
     Ok(())
 }
 
+/// Check if current directory is the main worktree
+///
+/// Validates that we're running from the main repository worktree, not a specks worktree
+/// or other detached checkout. This is required for merge operations.
+///
+/// # Returns
+/// * `Ok(())` - Current directory is the main worktree
+/// * `Err(String)` - Not in main worktree (provides actionable error message)
+fn is_main_worktree() -> Result<(), String> {
+    use std::path::Path;
+
+    // Check if .git is a directory (not a file, which indicates a worktree)
+    let git_path = Path::new(".git");
+    if !git_path.exists() {
+        return Err("Not in a git repository (no .git directory found)".to_string());
+    }
+
+    if !git_path.is_dir() {
+        return Err(
+            "Running from a git worktree, not the main repository.\n\
+             The merge command must run from the main worktree.\n\
+             Please cd to the repository root and try again."
+                .to_string(),
+        );
+    }
+
+    // Verify we're on the expected branch (main or master)
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .map_err(|e| format!("Failed to check current branch: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to get current branch: {}", stderr));
+    }
+
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if branch != "main" && branch != "master" {
+        return Err(format!(
+            "Current branch is '{}', expected 'main' or 'master'.\n\
+             The merge command must run from the main branch in the main worktree.",
+            branch
+        ));
+    }
+
+    Ok(())
+}
+
 /// Check if all PR checks have passed
 ///
 /// Uses `gh pr checks <branch> --json name,state,conclusion` to query check status.
@@ -433,6 +482,30 @@ pub fn run_merge(
     json: bool,
     quiet: bool,
 ) -> Result<i32, String> {
+    // Step 0: Validate that we're running from the main worktree
+    if let Err(e) = is_main_worktree() {
+        let data = MergeData {
+            status: "error".to_string(),
+            pr_url: None,
+            pr_number: None,
+            branch_name: None,
+            infrastructure_committed: None,
+            infrastructure_files: None,
+            worktree_cleaned: None,
+            dry_run,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            error: Some(e.clone()),
+            message: None,
+        };
+
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        }
+        return Err(e);
+    }
+
     // Step 1: Find the worktree for this speck
     let (worktree_path, session) = match find_worktree_for_speck(None, &speck) {
         Ok(result) => result,
@@ -1829,5 +1902,262 @@ mod tests {
         let error = result.unwrap_err();
         assert!(error.contains("closed without merge"));
         assert!(error.contains(&pr_info.url));
+    }
+
+    // Tests for is_main_worktree validation
+
+    #[test]
+    fn test_is_main_worktree_detects_main_repository() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary test git repository
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit to establish main branch
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Change to the temp directory and run the check
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = is_main_worktree();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Should succeed - this is a main worktree with .git directory
+        assert!(
+            result.is_ok(),
+            "Expected main worktree check to pass, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_is_main_worktree_detects_git_worktree() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary test git repository with worktree
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create a worktree
+        let worktree_path = temp_path.join("test-worktree");
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args([
+                "worktree",
+                "add",
+                worktree_path.to_str().unwrap(),
+                "-b",
+                "test-branch",
+            ])
+            .output()
+            .expect("Failed to create worktree");
+
+        // Change to the worktree directory and run the check
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&worktree_path).unwrap();
+
+        let result = is_main_worktree();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Should fail - this is a worktree, not main repository
+        assert!(result.is_err(), "Expected worktree check to fail");
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("git worktree"),
+            "Error should mention git worktree, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_is_main_worktree_detects_wrong_branch() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary test git repository
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create and checkout a feature branch
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Change to the temp directory and run the check
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = is_main_worktree();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Should fail - we're on feature-branch, not main
+        assert!(
+            result.is_err(),
+            "Expected wrong branch check to fail, got: {:?}",
+            result
+        );
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("feature-branch"),
+            "Error should mention current branch, got: {}",
+            error
+        );
+        assert!(
+            error.contains("main") || error.contains("master"),
+            "Error should mention expected branch, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_is_main_worktree_no_git_directory() {
+        use tempfile::TempDir;
+
+        // Create a temporary directory without git
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Change to the temp directory and run the check
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = is_main_worktree();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Should fail - no git repository
+        assert!(result.is_err(), "Expected no git directory check to fail");
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("Not in a git repository"),
+            "Error should mention missing git directory, got: {}",
+            error
+        );
     }
 }
