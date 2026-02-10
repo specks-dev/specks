@@ -7,8 +7,8 @@
 //! - Cleans up worktree
 
 use serde::{Deserialize, Serialize};
-use specks_core::session::Session;
 use specks_core::list_worktrees;
+use specks_core::session::Session;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -128,8 +128,8 @@ fn find_worktree_for_speck(
         .unwrap_or_else(|| PathBuf::from("."));
 
     // Use list_worktrees() from specks-core
-    let all_sessions = list_worktrees(&repo_root)
-        .map_err(|e| format!("Failed to list worktrees: {}", e))?;
+    let all_sessions =
+        list_worktrees(&repo_root).map_err(|e| format!("Failed to list worktrees: {}", e))?;
 
     // Filter sessions that match the speck path
     let matching_worktrees: Vec<Session> = all_sessions
@@ -147,7 +147,8 @@ fn find_worktree_for_speck(
                     .to_string()
             } else {
                 // Already relative - normalize ./ prefix
-                session.speck_path
+                session
+                    .speck_path
                     .strip_prefix("./")
                     .unwrap_or(&session.speck_path)
                     .to_string()

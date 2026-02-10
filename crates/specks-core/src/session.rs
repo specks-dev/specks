@@ -1520,10 +1520,16 @@ mod tests {
 
         let session: Session = serde_json::from_str(json).unwrap();
         assert_eq!(session.session_id, Some("15-20250210-024623".to_string()));
-        assert_eq!(session.current_step, CurrentStep::Anchor("#step-3".to_string()));
+        assert_eq!(
+            session.current_step,
+            CurrentStep::Anchor("#step-3".to_string())
+        );
         assert_eq!(session.beads_root, Some("specks-15g".to_string()));
         assert!(session.bead_mapping.is_some());
-        assert_eq!(session.bead_mapping.as_ref().unwrap().get("#step-3"), Some(&"specks-15g.4".to_string()));
+        assert_eq!(
+            session.bead_mapping.as_ref().unwrap().get("#step-3"),
+            Some(&"specks-15g.4".to_string())
+        );
     }
 
     #[test]

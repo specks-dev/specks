@@ -379,10 +379,8 @@ fn check_stale_branches() -> HealthCheck {
     };
 
     // Build set of branches with worktrees
-    let active_branches: std::collections::HashSet<_> = worktrees
-        .iter()
-        .map(|s| s.branch_name.clone())
-        .collect();
+    let active_branches: std::collections::HashSet<_> =
+        worktrees.iter().map(|s| s.branch_name.clone()).collect();
 
     // Find branches without worktrees
     let stale: Vec<_> = branches
@@ -417,7 +415,10 @@ fn check_stale_branches() -> HealthCheck {
         HealthCheck {
             name: "stale_branches".to_string(),
             status: "fail".to_string(),
-            message: format!("{} stale branches without worktrees (clean up recommended)", stale_count),
+            message: format!(
+                "{} stale branches without worktrees (clean up recommended)",
+                stale_count
+            ),
             details: Some(details),
         }
     }
@@ -479,7 +480,10 @@ fn check_orphaned_worktrees() -> HealthCheck {
         HealthCheck {
             name: "orphaned_worktrees".to_string(),
             status: "fail".to_string(),
-            message: format!("{} orphaned worktrees without PRs (clean up recommended)", orphaned_count),
+            message: format!(
+                "{} orphaned worktrees without PRs (clean up recommended)",
+                orphaned_count
+            ),
             details: Some(details),
         }
     }
@@ -542,10 +546,8 @@ fn check_sessionless_worktrees() -> HealthCheck {
     };
 
     // Build set of worktree paths with valid sessions
-    let session_paths: std::collections::HashSet<_> = sessions
-        .iter()
-        .map(|s| s.worktree_path.clone())
-        .collect();
+    let session_paths: std::collections::HashSet<_> =
+        sessions.iter().map(|s| s.worktree_path.clone()).collect();
 
     // Find git worktrees without sessions
     let sessionless: Vec<_> = git_worktrees
@@ -570,7 +572,10 @@ fn check_sessionless_worktrees() -> HealthCheck {
         HealthCheck {
             name: "sessionless_worktrees".to_string(),
             status: "fail".to_string(),
-            message: format!("{} worktree(s) found without parseable sessions", sessionless_count),
+            message: format!(
+                "{} worktree(s) found without parseable sessions",
+                sessionless_count
+            ),
             details: Some(details),
         }
     }

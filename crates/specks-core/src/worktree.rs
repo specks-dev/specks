@@ -5,7 +5,9 @@
 
 use crate::error::SpecksError;
 use crate::parser::parse_speck;
-use crate::session::{CurrentStep, Session, SessionStatus, load_session, now_iso8601, save_session};
+use crate::session::{
+    CurrentStep, Session, SessionStatus, load_session, now_iso8601, save_session,
+};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -34,6 +36,9 @@ pub struct CleanupResult {
     /// Worktrees skipped with reason
     pub skipped: Vec<(String, String)>,
 }
+
+/// Result type for stale branch cleanup: (removed branches, skipped branches with reasons)
+pub type StaleBranchCleanupResult = (Vec<String>, Vec<(String, String)>);
 
 /// Configuration for worktree creation
 #[derive(Debug, Clone)]
@@ -498,7 +503,9 @@ fn is_pr_merged(branch: &str) -> Result<bool, String> {
     match get_pr_state(branch) {
         PrState::Merged => Ok(true),
         PrState::Open | PrState::Closed | PrState::NotFound => Ok(false),
-        PrState::Unknown => Err("gh CLI not found or failed. Install from https://cli.github.com/".to_string()),
+        PrState::Unknown => {
+            Err("gh CLI not found or failed. Install from https://cli.github.com/".to_string())
+        }
     }
 }
 
@@ -743,15 +750,13 @@ pub fn cleanup_stale_branches(
     sessions: &[Session],
     dry_run: bool,
     force: bool,
-) -> Result<(Vec<String>, Vec<(String, String)>), SpecksError> {
+) -> Result<StaleBranchCleanupResult, SpecksError> {
     let git = GitCli::new(repo_root);
     let all_branches = list_specks_branches(repo_root)?;
 
     // Build set of branch names that have worktrees
-    let branches_with_worktrees: std::collections::HashSet<String> = sessions
-        .iter()
-        .map(|s| s.branch_name.clone())
-        .collect();
+    let branches_with_worktrees: std::collections::HashSet<String> =
+        sessions.iter().map(|s| s.branch_name.clone()).collect();
 
     let mut removed = Vec::new();
     let mut skipped = Vec::new();
@@ -832,9 +837,7 @@ pub fn cleanup_stale_branches(
                 // Force mode: unconditionally force delete
                 match git.delete_branch(&branch) {
                     Ok(()) => removed.push(branch.clone()),
-                    Err(e) => {
-                        skipped.push((branch.clone(), format!("Force delete failed: {}", e)))
-                    }
+                    Err(e) => skipped.push((branch.clone(), format!("Force delete failed: {}", e))),
                 }
             } else {
                 // Not force mode: check PR state before escalating
@@ -844,9 +847,8 @@ pub fn cleanup_stale_branches(
                         // PR is merged, safe to force delete
                         match git.delete_branch(&branch) {
                             Ok(()) => removed.push(branch.clone()),
-                            Err(e) => {
-                                skipped.push((branch.clone(), format!("Force delete failed: {}", e)))
-                            }
+                            Err(e) => skipped
+                                .push((branch.clone(), format!("Force delete failed: {}", e))),
                         }
                     }
                     PrState::Unknown => {
@@ -3093,7 +3095,10 @@ mod tests {
 
         // Dirty worktree should be skipped (git worktree remove will fail)
         assert_eq!(result.skipped.len(), 1);
-        assert!(result.skipped[0].1.contains("Dirty worktree") || result.skipped[0].1.contains("Failed to remove"));
+        assert!(
+            result.skipped[0].1.contains("Dirty worktree")
+                || result.skipped[0].1.contains("Failed to remove")
+        );
     }
 
     #[test]
@@ -3297,7 +3302,8 @@ mod tests {
 
         let sessions = vec![]; // No sessions, so all branches are stale
 
-        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+        let (removed, _skipped) =
+            cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
 
         // Should remove the branch via safe delete (it's based on current branch)
         assert_eq!(removed.len(), 1);
@@ -3372,7 +3378,8 @@ mod tests {
 
         let sessions = vec![session];
 
-        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+        let (removed, _skipped) =
+            cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
 
         // Should NOT remove the branch because it has a worktree
         assert_eq!(removed.len(), 0);
@@ -3456,10 +3463,16 @@ mod tests {
 
         // Without force flag: safe delete will fail (branch not merged),
         // and PR state will be checked (either NotFound or Unknown depending on gh CLI availability)
-        let (_removed, skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+        let (_removed, skipped) =
+            cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
 
         // Branch should be skipped because it's unmerged
-        assert_eq!(skipped.len(), 1, "Expected 1 skipped branch, got: {:?}", skipped);
+        assert_eq!(
+            skipped.len(),
+            1,
+            "Expected 1 skipped branch, got: {:?}",
+            skipped
+        );
         assert_eq!(skipped[0].0, "specks/unmerged-20260208-120000");
         // Skip reason varies based on gh CLI availability:
         // - If gh available: "Unmerged; PR state is NotFound (use --force to override)"

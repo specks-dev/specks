@@ -7,7 +7,10 @@ use clap::Subcommand;
 use serde::Serialize;
 use specks_core::{
     session::{Session, delete_session, session_id_from_worktree},
-    worktree::{CleanupMode, WorktreeConfig, cleanup_worktrees, create_worktree, list_worktrees, remove_worktree},
+    worktree::{
+        CleanupMode, WorktreeConfig, cleanup_worktrees, create_worktree, list_worktrees,
+        remove_worktree,
+    },
 };
 use std::path::{Path, PathBuf};
 
@@ -500,16 +503,22 @@ pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> 
 
                                 if let Some(num) = step_num {
                                     // Calculate total from steps_completed + steps_remaining
-                                    let total = session.steps_completed.as_ref().map(|c| c.len()).unwrap_or(0)
-                                        + session.steps_remaining.as_ref().map(|r| r.len()).unwrap_or(0);
+                                    let total = session
+                                        .steps_completed
+                                        .as_ref()
+                                        .map(|c| c.len())
+                                        .unwrap_or(0)
+                                        + session
+                                            .steps_remaining
+                                            .as_ref()
+                                            .map(|r| r.len())
+                                            .unwrap_or(0);
                                     format!("step {}/{}", num, total)
                                 } else {
                                     format!("at {}", anchor)
                                 }
                             }
-                            specks_core::session::CurrentStep::Done => {
-                                "completed".to_string()
-                            }
+                            specks_core::session::CurrentStep::Done => "completed".to_string(),
                         };
 
                         println!("  Status: {:?} ({})", session.status, progress_str);
@@ -531,6 +540,7 @@ pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> 
 }
 
 /// Run worktree cleanup command
+#[allow(clippy::too_many_arguments)]
 pub fn run_worktree_cleanup(
     merged: bool,
     orphaned: bool,
@@ -691,10 +701,7 @@ pub fn run_worktree_remove(
     // If multiple matches by speck path, error with candidate list (D10)
     if matching_sessions.len() > 1 {
         if json_output {
-            eprintln!(
-                r#"{{"error": "Multiple worktrees found for {}"}}"#,
-                target
-            );
+            eprintln!(r#"{{"error": "Multiple worktrees found for {}"}}"#, target);
         } else if !quiet {
             eprintln!("Error: Multiple worktrees found for {}\n", target);
             for session in &matching_sessions {
@@ -1202,14 +1209,22 @@ mod integration_tests {
             .current_dir(&repo_path)
             .output()
             .expect("failed to checkout main");
-        assert!(checkout_output.status.success(), "checkout should succeed: {}", String::from_utf8_lossy(&checkout_output.stderr));
+        assert!(
+            checkout_output.status.success(),
+            "checkout should succeed: {}",
+            String::from_utf8_lossy(&checkout_output.stderr)
+        );
 
         let merge_output = Command::new("git")
             .args(["merge", &session.branch_name])
             .current_dir(&repo_path)
             .output()
             .expect("failed to merge");
-        assert!(merge_output.status.success(), "merge should succeed: {}", String::from_utf8_lossy(&merge_output.stderr));
+        assert!(
+            merge_output.status.success(),
+            "merge should succeed: {}",
+            String::from_utf8_lossy(&merge_output.stderr)
+        );
 
         // Dry run should detect merged worktree but not remove it
         // Use force=true since gh CLI is not available in test environment
@@ -1274,7 +1289,13 @@ mod integration_tests {
 
         // Verify branch is removed
         let branch_exists = Command::new("git")
-            .args(["-C", &repo_path.to_string_lossy(), "rev-parse", "--verify", &session.branch_name])
+            .args([
+                "-C",
+                &repo_path.to_string_lossy(),
+                "rev-parse",
+                "--verify",
+                &session.branch_name,
+            ])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
@@ -1433,7 +1454,13 @@ mod integration_tests {
         // Create a second worktree for the same speck by creating a second git branch manually
         let branch_name_2 = "specks/test-second";
         Command::new("git")
-            .args(["-C", &repo_path.to_string_lossy(), "branch", branch_name_2, "main"])
+            .args([
+                "-C",
+                &repo_path.to_string_lossy(),
+                "branch",
+                branch_name_2,
+                "main",
+            ])
             .output()
             .expect("failed to create second branch");
 
@@ -1490,10 +1517,7 @@ mod integration_tests {
 
         // Verify both worktrees still exist
         let worktree_path1 = PathBuf::from(&session1.worktree_path);
-        assert!(
-            worktree_path1.exists(),
-            "first worktree should still exist"
-        );
+        assert!(worktree_path1.exists(), "first worktree should still exist");
         assert!(
             worktree_path_2.exists(),
             "second worktree should still exist"

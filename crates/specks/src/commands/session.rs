@@ -125,10 +125,7 @@ fn run_reconcile(
                     .get(step_anchor)
                     .cloned()
                     .ok_or_else(|| {
-                        format!(
-                            "Step anchor '{}' not found in bead_mapping",
-                            step_anchor
-                        )
+                        format!("Step anchor '{}' not found in bead_mapping", step_anchor)
                     })
                     .map_err(|msg| {
                         output_error(json_output, "E042", &msg, &session_id, 42).unwrap_err()
