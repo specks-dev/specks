@@ -427,8 +427,9 @@ impl<'a> GitCli<'a> {
 
     /// Find the worktree path for a given branch using `git worktree list --porcelain`
     ///
-    /// Returns `Some(path)` if the branch is checked out in a worktree,
-    /// `None` otherwise.
+    /// Returns `Some(path)` if the branch is checked out in a non-main worktree,
+    /// `None` otherwise. The main worktree (repo root) is never returned since
+    /// it cannot be removed.
     fn worktree_path_for_branch(&self, branch: &str) -> Option<PathBuf> {
         let output = Command::new("git")
             .arg("-C")
@@ -441,6 +442,9 @@ impl<'a> GitCli<'a> {
             return None;
         }
 
+        // Canonicalize repo_root for reliable comparison (handles symlinks like /tmp → /private/tmp)
+        let canonical_root = self.repo_root.canonicalize().ok();
+
         let stdout = String::from_utf8_lossy(&output.stdout);
         let mut current_path: Option<PathBuf> = None;
 
@@ -449,6 +453,12 @@ impl<'a> GitCli<'a> {
                 current_path = Some(PathBuf::from(path_str));
             } else if let Some(branch_ref) = line.strip_prefix("branch refs/heads/") {
                 if branch_ref == branch {
+                    // Skip the main worktree — it can never be removed
+                    if let (Some(wt_path), Some(root)) = (&current_path, &canonical_root) {
+                        if wt_path.canonicalize().ok().as_ref() == Some(root) {
+                            return None;
+                        }
+                    }
                     return current_path;
                 }
             } else if line.is_empty() {
@@ -3574,7 +3584,7 @@ mod tests {
         // Initialize git repo
         Command::new("git")
             .current_dir(temp_dir)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .unwrap();
         Command::new("git")
