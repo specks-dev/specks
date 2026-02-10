@@ -9,6 +9,23 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-6
+date: 2026-02-10T03:09:22Z
+bead: specks-15g.7
+---
+
+## #step-6: Verified check_pr_checks() uses gh pr checks --json for robust parsing (implemented in step-1 alongside GitHub API merge detection)
+
+
+
+**Tests:**
+
+**Checkpoints:**
+
+
+---
+
+---
 step: #step-5
 date: 2026-02-10T03:06:00Z
 bead: specks-15g.6
