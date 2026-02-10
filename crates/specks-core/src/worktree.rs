@@ -94,7 +94,10 @@ fn format_compact_timestamp(iso8601: &str) -> Result<String, SpecksError> {
     let second = &iso8601[17..19];
 
     // Combine into compact format
-    Ok(format!("{}{}{}-{}{}{}", year, month, day, hour, minute, second))
+    Ok(format!(
+        "{}{}{}-{}{}{}",
+        year, month, day, hour, minute, second
+    ))
 }
 
 /// Generate UTC timestamp in YYYYMMDD-HHMMSS format per Spec S05
@@ -439,8 +442,7 @@ fn is_pr_merged(branch: &str) -> Result<bool, String> {
     Ok(pr_state.state == "MERGED")
 }
 
-impl<'a> GitCli<'a> {
-}
+impl<'a> GitCli<'a> {}
 
 /// Create a worktree for speck implementation
 ///

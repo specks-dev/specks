@@ -387,12 +387,10 @@ fn is_main_worktree() -> Result<(), String> {
     }
 
     if !git_path.is_dir() {
-        return Err(
-            "Running from a git worktree, not the main repository.\n\
+        return Err("Running from a git worktree, not the main repository.\n\
              The merge command must run from the main worktree.\n\
              Please cd to the repository root and try again."
-                .to_string(),
-        );
+            .to_string());
     }
 
     // Verify we're on the expected branch (main or master)
@@ -823,10 +821,8 @@ pub fn run_merge(
         let commit_message = format!("chore({}): infrastructure updates", speck_name);
         let mut cmd = Command::new("git");
         cmd.args(["commit", "-m", &commit_message]);
-        let commit_output = run_command_with_context(
-            &mut cmd,
-            &format!("git commit -m '{}'", commit_message),
-        );
+        let commit_output =
+            run_command_with_context(&mut cmd, &format!("git commit -m '{}'", commit_message));
 
         if let Err(e) = commit_output {
             // Check if it's an empty commit (no changes to commit)
@@ -1050,10 +1046,8 @@ pub fn run_merge(
     // Delete the branch
     let mut cmd = Command::new("git");
     cmd.args(["branch", "-D", &session.branch_name]);
-    let delete_output = run_command_with_context(
-        &mut cmd,
-        &format!("git branch -D {}", session.branch_name),
-    );
+    let delete_output =
+        run_command_with_context(&mut cmd, &format!("git branch -D {}", session.branch_name));
 
     match delete_output {
         Ok(_) => {
@@ -2307,10 +2301,8 @@ mod tests {
     fn test_run_command_with_context_execution_error() {
         // Try to run a command that doesn't exist
         let mut cmd = Command::new("this-command-definitely-does-not-exist-12345");
-        let result = run_command_with_context(
-            &mut cmd,
-            "this-command-definitely-does-not-exist-12345",
-        );
+        let result =
+            run_command_with_context(&mut cmd, "this-command-definitely-does-not-exist-12345");
 
         assert!(result.is_err(), "Expected command to fail");
 

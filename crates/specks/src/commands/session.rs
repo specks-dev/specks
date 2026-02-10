@@ -5,9 +5,8 @@
 
 use clap::Subcommand;
 use specks_core::{
-    find_project_root,
-    session::{save_session, session_file_path, SessionStatus},
-    BeadsCli, Config,
+    BeadsCli, Config, find_project_root,
+    session::{SessionStatus, save_session, session_file_path},
 };
 
 use crate::output::{JsonIssue, JsonResponse, SessionReconcileData};
@@ -79,14 +78,11 @@ fn run_reconcile(
     }
 
     // Read session file manually to get the worktree path
-    let session_content = std::fs::read_to_string(&session_path).map_err(|e| {
-        format!("Failed to read session file: {}", e)
-    })?;
+    let session_content = std::fs::read_to_string(&session_path)
+        .map_err(|e| format!("Failed to read session file: {}", e))?;
 
-    let mut session: specks_core::session::Session =
-        serde_json::from_str(&session_content).map_err(|e| {
-            format!("Failed to parse session file: {}", e)
-        })?;
+    let mut session: specks_core::session::Session = serde_json::from_str(&session_content)
+        .map_err(|e| format!("Failed to parse session file: {}", e))?;
 
     // Verify session is in NeedsReconcile state
     if session.status != SessionStatus::NeedsReconcile {
@@ -135,7 +131,10 @@ fn run_reconcile(
         } else if !quiet {
             println!("Dry run - would perform:");
             println!("  1. Close bead: {}", bead_id);
-            println!("  2. Update session status: {} -> Completed", session.status);
+            println!(
+                "  2. Update session status: {} -> Completed",
+                session.status
+            );
         }
         return Ok(0);
     }
