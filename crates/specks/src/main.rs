@@ -84,13 +84,15 @@ fn main() -> ExitCode {
             force,
         }) => commands::run_merge(speck, dry_run, force, cli.json, cli.quiet),
         Some(Commands::Log(log_cmd)) => match log_cmd {
-            LogCommands::Rotate { force } => commands::run_log_rotate(force, cli.json, cli.quiet),
+            LogCommands::Rotate { force } => {
+                commands::run_log_rotate(None, force, cli.json, cli.quiet)
+            }
             LogCommands::Prepend {
                 step,
                 speck,
                 summary,
                 bead,
-            } => commands::run_log_prepend(step, speck, summary, bead, cli.json, cli.quiet),
+            } => commands::run_log_prepend(None, step, speck, summary, bead, cli.json, cli.quiet),
         },
         Some(Commands::Doctor) => commands::run_doctor(cli.json, cli.quiet),
         Some(Commands::Version { verbose }) => commands::run_version(verbose, cli.json, cli.quiet),

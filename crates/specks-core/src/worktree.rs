@@ -465,13 +465,17 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         return Err(SpecksError::SpeckHasNoSteps);
     }
 
-    // If reuse_existing is true, check for existing worktrees
-    if config.reuse_existing {
-        if let Some(existing_session) = find_existing_worktree(config)? {
+    // Check for existing worktrees for this speck
+    if let Some(existing_session) = find_existing_worktree(config)? {
+        if config.reuse_existing {
+            // Reuse the existing worktree
             return Ok(existing_session);
+        } else {
+            // Fail because a worktree already exists and we're not allowed to reuse
+            return Err(SpecksError::WorktreeAlreadyExists);
         }
-        // No existing worktree found, proceed to create new one
     }
+    // No existing worktree found, proceed to create new one
 
     // Generate branch name and worktree directory
     let slug = derive_speck_slug(&config.speck_path);

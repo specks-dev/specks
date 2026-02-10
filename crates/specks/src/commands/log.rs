@@ -129,15 +129,24 @@ fn year_to_days(year: i32) -> i64 {
 /// Run the log rotate command
 ///
 /// # Arguments
+/// * `root` - Optional root directory (uses current directory if None)
 /// * `force` - Rotate even if below thresholds
 /// * `json_output` - Output in JSON format
 /// * `quiet` - Suppress non-error output
-pub fn run_log_rotate(force: bool, json_output: bool, quiet: bool) -> Result<i32, String> {
+pub fn run_log_rotate(
+    root: Option<&std::path::Path>,
+    force: bool,
+    json_output: bool,
+    quiet: bool,
+) -> Result<i32, String> {
     use crate::output::{JsonResponse, RotateData};
     use std::fs;
-    use std::path::Path;
+    use std::path::PathBuf;
 
-    let log_path = Path::new(".specks/specks-implementation-log.md");
+    let base = root
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let log_path = base.join(".specks/specks-implementation-log.md");
 
     // Check if log file exists
     if !log_path.exists() {
@@ -159,7 +168,7 @@ pub fn run_log_rotate(force: bool, json_output: bool, quiet: bool) -> Result<i32
     }
 
     // Read the log file to check thresholds
-    let content = fs::read_to_string(log_path)
+    let content = fs::read_to_string(&log_path)
         .map_err(|e| format!("Failed to read implementation log: {}", e))?;
 
     let line_count = content.lines().count();
@@ -199,9 +208,9 @@ pub fn run_log_rotate(force: bool, json_output: bool, quiet: bool) -> Result<i32
     };
 
     // Create archive directory if it doesn't exist
-    let archive_dir = Path::new(".specks/archive");
+    let archive_dir = base.join(".specks/archive");
     if !archive_dir.exists() {
-        fs::create_dir_all(archive_dir)
+        fs::create_dir_all(&archive_dir)
             .map_err(|e| format!("Failed to create archive directory: {}", e))?;
     }
 
@@ -211,7 +220,7 @@ pub fn run_log_rotate(force: bool, json_output: bool, quiet: bool) -> Result<i32
     let archive_path = archive_dir.join(&archive_filename);
 
     // Atomic rename from log to archive
-    fs::rename(log_path, &archive_path)
+    fs::rename(&log_path, &archive_path)
         .map_err(|e| format!("Failed to move log to archive: {}", e))?;
 
     // Create fresh log with header template
@@ -227,7 +236,7 @@ Entries are sorted newest-first.
 
 "#;
 
-    fs::write(log_path, IMPLEMENTATION_LOG_HEADER)
+    fs::write(&log_path, IMPLEMENTATION_LOG_HEADER)
         .map_err(|e| format!("Failed to create fresh log file: {}", e))?;
 
     // Build response data
@@ -271,15 +280,11 @@ mod tests {
 
     #[test]
     fn test_log_rotation_line_threshold() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        // Change to temp directory
-        std::env::set_current_dir(temp_path).unwrap();
-
         // Create .specks directory
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Create log with > 500 lines (exceeds LOG_LINE_THRESHOLD)
         let log_path = temp_path.join(".specks/specks-implementation-log.md");
@@ -290,7 +295,7 @@ mod tests {
         fs::write(&log_path, content).unwrap();
 
         // Run rotation (should rotate)
-        let result = run_log_rotate(false, false, true);
+        let result = run_log_rotate(Some(temp_path), false, false, true);
         assert!(result.is_ok());
 
         // Verify archive was created
@@ -307,22 +312,15 @@ mod tests {
         let new_content = fs::read_to_string(&log_path).unwrap();
         assert!(new_content.contains("# Specks Implementation Log"));
         assert!(new_content.len() < 500); // Fresh log is much smaller
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_rotation_byte_threshold() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        // Change to temp directory
-        std::env::set_current_dir(temp_path).unwrap();
-
         // Create .specks directory
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Create log with > 100KB (exceeds LOG_BYTE_THRESHOLD)
         let log_path = temp_path.join(".specks/specks-implementation-log.md");
@@ -335,28 +333,21 @@ mod tests {
         fs::write(&log_path, content).unwrap();
 
         // Run rotation (should rotate)
-        let result = run_log_rotate(false, false, true);
+        let result = run_log_rotate(Some(temp_path), false, false, true);
         assert!(result.is_ok());
 
         // Verify archive was created
         let archive_dir = temp_path.join(".specks/archive");
         assert!(archive_dir.exists());
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_rotation_under_thresholds() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        // Change to temp directory
-        std::env::set_current_dir(temp_path).unwrap();
-
         // Create .specks directory
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Create small log (under both thresholds)
         let log_path = temp_path.join(".specks/specks-implementation-log.md");
@@ -368,7 +359,7 @@ mod tests {
         fs::write(&log_path, content).unwrap();
 
         // Run rotation without force (should NOT rotate)
-        let result = run_log_rotate(false, false, true);
+        let result = run_log_rotate(Some(temp_path), false, false, true);
         assert!(result.is_ok());
 
         // Verify archive was NOT created
@@ -379,29 +370,22 @@ mod tests {
         assert!(log_path.exists());
         let new_content = fs::read_to_string(&log_path).unwrap();
         assert!(new_content.contains("Line 99"));
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_rotation_force() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        // Change to temp directory
-        std::env::set_current_dir(temp_path).unwrap();
-
         // Create .specks directory
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Create small log (under both thresholds)
         let log_path = temp_path.join(".specks/specks-implementation-log.md");
         fs::write(&log_path, "Small log\n").unwrap();
 
         // Run rotation WITH force (should rotate even though under thresholds)
-        let result = run_log_rotate(true, false, true);
+        let result = run_log_rotate(Some(temp_path), true, false, true);
         assert!(result.is_ok());
 
         // Verify archive was created
@@ -417,44 +401,32 @@ mod tests {
         assert!(log_path.exists());
         let new_content = fs::read_to_string(&log_path).unwrap();
         assert!(new_content.contains("# Specks Implementation Log"));
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_rotation_nonexistent_log() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        // Change to temp directory
-        std::env::set_current_dir(temp_path).unwrap();
-
         // Create .specks directory but NO log
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Run rotation (should succeed but not rotate)
-        let result = run_log_rotate(false, false, true);
+        let result = run_log_rotate(Some(temp_path), false, false, true);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0);
 
         // Verify no archive created
         let archive_dir = temp_path.join(".specks/archive");
         assert!(!archive_dir.exists());
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_archive_filename_format() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        std::env::set_current_dir(temp_path).unwrap();
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Create log that exceeds threshold
         let log_path = temp_path.join(".specks/specks-implementation-log.md");
@@ -465,7 +437,7 @@ mod tests {
         fs::write(&log_path, content).unwrap();
 
         // Run rotation
-        run_log_rotate(false, false, true).unwrap();
+        run_log_rotate(Some(temp_path), false, false, true).unwrap();
 
         // Check archive filename matches pattern implementation-log-YYYY-MM-DD-HHMMSS.md
         let archive_dir = temp_path.join(".specks/archive");
@@ -481,9 +453,6 @@ mod tests {
         // Check timestamp format: YYYY-MM-DD-HHMMSS (17 chars between prefix and .md)
         let timestamp_part = &filename["implementation-log-".len()..filename.len() - 3];
         assert_eq!(timestamp_part.len(), 17);
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
@@ -554,12 +523,10 @@ mod tests {
 
     #[test]
     fn test_log_prepend_full_flow() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        std::env::set_current_dir(temp_path).unwrap();
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Create initial log with header
         let log_path = temp_path.join(".specks/specks-implementation-log.md");
@@ -578,6 +545,7 @@ Entries are sorted newest-first.
 
         // Run prepend
         let result = run_log_prepend(
+            Some(temp_path),
             "#step-0".to_string(),
             ".specks/specks-13.md".to_string(),
             "Test implementation".to_string(),
@@ -598,19 +566,14 @@ Entries are sorted newest-first.
         let separator_pos = new_content.find("---\n\n").unwrap();
         let entry_pos = new_content.find("step: #step-0").unwrap();
         assert!(entry_pos > separator_pos);
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_prepend_multiple_entries() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        std::env::set_current_dir(temp_path).unwrap();
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Create initial log
         let log_path = temp_path.join(".specks/specks-implementation-log.md");
@@ -619,6 +582,7 @@ Entries are sorted newest-first.
 
         // Add first entry
         run_log_prepend(
+            Some(temp_path),
             "#step-0".to_string(),
             ".specks/specks-13.md".to_string(),
             "First entry".to_string(),
@@ -630,6 +594,7 @@ Entries are sorted newest-first.
 
         // Add second entry
         run_log_prepend(
+            Some(temp_path),
             "#step-1".to_string(),
             ".specks/specks-13.md".to_string(),
             "Second entry".to_string(),
@@ -644,22 +609,18 @@ Entries are sorted newest-first.
         let step0_pos = new_content.find("step: #step-0").unwrap();
         let step1_pos = new_content.find("step: #step-1").unwrap();
         assert!(step1_pos < step0_pos, "Newest entry should be first");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_prepend_nonexistent_log() {
-        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        std::env::set_current_dir(temp_path).unwrap();
-        fs::create_dir_all(".specks").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
 
         // Run prepend without log file
         let result = run_log_prepend(
+            Some(temp_path),
             "#step-0".to_string(),
             ".specks/specks-13.md".to_string(),
             "Test".to_string(),
@@ -669,9 +630,6 @@ Entries are sorted newest-first.
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("does not exist"));
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
     }
 }
 
@@ -786,6 +744,7 @@ fn find_insertion_point(content: &str) -> usize {
 /// Run the log prepend command
 ///
 /// # Arguments
+/// * `root` - Optional root directory (uses current directory if None)
 /// * `step` - Step anchor (e.g., #step-0)
 /// * `speck` - Speck file path
 /// * `summary` - One-line summary of completed work
@@ -793,6 +752,7 @@ fn find_insertion_point(content: &str) -> usize {
 /// * `json_output` - Output in JSON format
 /// * `quiet` - Suppress non-error output
 pub fn run_log_prepend(
+    root: Option<&std::path::Path>,
     step: String,
     speck: String,
     summary: String,
@@ -802,9 +762,12 @@ pub fn run_log_prepend(
 ) -> Result<i32, String> {
     use crate::output::{JsonResponse, PrependData};
     use std::fs;
-    use std::path::Path;
+    use std::path::PathBuf;
 
-    let log_path = Path::new(".specks/specks-implementation-log.md");
+    let base = root
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let log_path = base.join(".specks/specks-implementation-log.md");
 
     // Check if log file exists
     if !log_path.exists() {
@@ -812,7 +775,7 @@ pub fn run_log_prepend(
     }
 
     // Read the current log
-    let content = fs::read_to_string(log_path)
+    let content = fs::read_to_string(&log_path)
         .map_err(|e| format!("Failed to read implementation log: {}", e))?;
 
     // Generate timestamp
@@ -834,7 +797,7 @@ pub fn run_log_prepend(
     let temp_path = log_path.with_extension("md.tmp");
     fs::write(&temp_path, &new_content)
         .map_err(|e| format!("Failed to write temp log file: {}", e))?;
-    fs::rename(&temp_path, log_path).map_err(|e| format!("Failed to update log file: {}", e))?;
+    fs::rename(&temp_path, &log_path).map_err(|e| format!("Failed to update log file: {}", e))?;
 
     // Build response data
     let data = PrependData {

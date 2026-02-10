@@ -63,12 +63,16 @@ pub struct PrInfo {
 /// that has an open PR (indicating it's the complete/active worktree).
 ///
 /// # Arguments
+/// * `root` - Optional root directory (uses current directory if None)
 /// * `speck_path` - Path to the speck file (can be relative or absolute)
 ///
 /// # Returns
 /// * `Ok((worktree_path, session))` - Worktree path and loaded session
 /// * `Err(String)` - Error message if no matching worktree found
-fn find_worktree_for_speck(speck_path: &str) -> Result<(PathBuf, Session), String> {
+fn find_worktree_for_speck(
+    root: Option<&Path>,
+    speck_path: &str,
+) -> Result<(PathBuf, Session), String> {
     // Normalize the speck path to handle both relative and absolute paths
     let normalized_speck = if let Some(stripped) = speck_path.strip_prefix("./") {
         stripped.to_string()
@@ -81,7 +85,10 @@ fn find_worktree_for_speck(speck_path: &str) -> Result<(PathBuf, Session), Strin
     };
 
     // Find the worktrees directory
-    let worktrees_dir = Path::new(".specks-worktrees");
+    let base = root
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let worktrees_dir = base.join(".specks-worktrees");
     if !worktrees_dir.exists() {
         return Err("No worktrees directory found (.specks-worktrees)".to_string());
     }
@@ -244,13 +251,20 @@ fn is_infrastructure_file(path: &str) -> bool {
 /// Infrastructure files can be auto-committed in main before merging.
 /// Uses `-u` (--untracked-files=all) to show individual files instead of directories.
 ///
+/// # Arguments
+/// * `root` - Optional root directory (uses current directory if None)
+///
 /// # Returns
 /// * `Ok((infrastructure, other))` - Two lists of file paths
 /// * `Err(String)` - Error message if git status fails
 // Will be used in Step 3 & 4 for merge workflow
 #[allow(dead_code)]
-fn categorize_uncommitted() -> Result<(Vec<String>, Vec<String>), String> {
-    let output = Command::new("git")
+fn categorize_uncommitted(root: Option<&Path>) -> Result<(Vec<String>, Vec<String>), String> {
+    let mut cmd = Command::new("git");
+    if let Some(dir) = root {
+        cmd.arg("-C").arg(dir);
+    }
+    let output = cmd
         .args(["status", "--porcelain", "-u"])
         .output()
         .map_err(|e| format!("Failed to execute git status: {}", e))?;
@@ -419,7 +433,7 @@ pub fn run_merge(
     quiet: bool,
 ) -> Result<i32, String> {
     // Step 1: Find the worktree for this speck
-    let (worktree_path, session) = match find_worktree_for_speck(&speck) {
+    let (worktree_path, session) = match find_worktree_for_speck(None, &speck) {
         Ok(result) => result,
         Err(e) => {
             let data = MergeData {
@@ -545,7 +559,7 @@ pub fn run_merge(
     }
 
     // Step 6: Categorize uncommitted files
-    let (infrastructure, other) = match categorize_uncommitted() {
+    let (infrastructure, other) = match categorize_uncommitted(None) {
         Ok(result) => result,
         Err(e) => {
             let data = MergeData {
@@ -980,7 +994,6 @@ pub fn run_merge(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
     use specks_core::session::{Session, SessionStatus};
     use std::fs;
 
@@ -1026,40 +1039,28 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_find_worktree_missing_directory() {
-        // Create a temporary directory that definitely won't have worktrees
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-no-worktrees-{}", std::process::id()));
-        let original_dir = std::env::current_dir().unwrap();
+        use tempfile::TempDir;
 
-        // Create and change to temp directory
-        fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
+        // Create a temporary directory that definitely won't have worktrees
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
         // Should fail because .specks-worktrees doesn't exist
-        let result = find_worktree_for_speck(".specks/specks-test.md");
+        let result = find_worktree_for_speck(Some(temp_path), ".specks/specks-test.md");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No worktrees directory found"));
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
-    #[serial]
     fn test_find_worktree_no_matching_speck() {
+        use tempfile::TempDir;
+
         // Create a temporary test environment
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-no-match-{}", std::process::id()));
-        let original_dir = std::env::current_dir().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
-        // Create directory structure
-        fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
-
-        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        let worktrees_dir = temp_path.join(".specks-worktrees");
         let worktree1 = worktrees_dir.join("specks__test1-20260209-120000");
         let specks_dir1 = worktree1.join(".specks");
         fs::create_dir_all(&specks_dir1).unwrap();
@@ -1084,28 +1085,20 @@ mod tests {
         fs::write(specks_dir1.join("session.json"), session_json).unwrap();
 
         // Try to find a different speck
-        let result = find_worktree_for_speck(".specks/specks-test.md");
+        let result = find_worktree_for_speck(Some(temp_path), ".specks/specks-test.md");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("No worktree found"));
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
-    #[serial]
     fn test_find_worktree_success() {
+        use tempfile::TempDir;
+
         // Create a temporary test environment
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-success-{}", std::process::id()));
-        let original_dir = std::env::current_dir().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
-        // Create directory structure
-        fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
-
-        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        let worktrees_dir = temp_path.join(".specks-worktrees");
         let worktree1 = worktrees_dir.join("specks__test-20260209-120000");
         let specks_dir1 = worktree1.join(".specks");
         fs::create_dir_all(&specks_dir1).unwrap();
@@ -1130,7 +1123,7 @@ mod tests {
         fs::write(specks_dir1.join("session.json"), session_json).unwrap();
 
         // Find the worktree
-        let result = find_worktree_for_speck(".specks/specks-test.md");
+        let result = find_worktree_for_speck(Some(temp_path), ".specks/specks-test.md");
         assert!(result.is_ok());
 
         let (path, loaded_session) = result.unwrap();
@@ -1138,25 +1131,17 @@ mod tests {
         assert!(path.ends_with("specks__test-20260209-120000"));
         assert_eq!(loaded_session.speck_path, ".specks/specks-test.md");
         assert_eq!(loaded_session.branch_name, "specks/test-20260209-120000");
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
-    #[serial]
     fn test_find_worktree_path_normalization() {
+        use tempfile::TempDir;
+
         // Create a temporary test environment
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-norm-{}", std::process::id()));
-        let original_dir = std::env::current_dir().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
-        // Create directory structure
-        fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
-
-        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        let worktrees_dir = temp_path.join(".specks-worktrees");
         let worktree1 = worktrees_dir.join("specks__test-20260209-120000");
         let specks_dir1 = worktree1.join(".specks");
         fs::create_dir_all(&specks_dir1).unwrap();
@@ -1181,33 +1166,25 @@ mod tests {
         fs::write(specks_dir1.join("session.json"), session_json).unwrap();
 
         // Test various path formats
-        let result1 = find_worktree_for_speck(".specks/specks-test.md");
+        let result1 = find_worktree_for_speck(Some(temp_path), ".specks/specks-test.md");
         assert!(result1.is_ok());
 
-        let result2 = find_worktree_for_speck("specks-test.md");
+        let result2 = find_worktree_for_speck(Some(temp_path), "specks-test.md");
         assert!(result2.is_ok());
 
-        let result3 = find_worktree_for_speck("./.specks/specks-test.md");
+        let result3 = find_worktree_for_speck(Some(temp_path), "./.specks/specks-test.md");
         assert!(result3.is_ok());
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
-    #[serial]
     fn test_find_worktree_corrupt_session() {
+        use tempfile::TempDir;
+
         // Create a temporary test environment
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-corrupt-{}", std::process::id()));
-        let original_dir = std::env::current_dir().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
-        // Create directory structure
-        fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
-
-        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        let worktrees_dir = temp_path.join(".specks-worktrees");
         let worktree1 = worktrees_dir.join("specks__corrupt-20260209-120000");
         let specks_dir1 = worktree1.join(".specks");
         fs::create_dir_all(&specks_dir1).unwrap();
@@ -1239,12 +1216,8 @@ mod tests {
         fs::write(specks_dir2.join("session.json"), session_json).unwrap();
 
         // Should skip corrupt session and find the valid one
-        let result = find_worktree_for_speck(".specks/specks-test.md");
+        let result = find_worktree_for_speck(Some(temp_path), ".specks/specks-test.md");
         assert!(result.is_ok());
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     // Tests for is_infrastructure_file() covering all patterns in Table T01
@@ -1321,78 +1294,84 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_categorize_uncommitted_integration() {
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-categorize-{}", std::process::id()));
-        let original_dir = std::env::current_dir().unwrap();
-
-        // Cleanup if exists from previous run
-        let _ = fs::remove_dir_all(&temp_dir);
-
-        // Create directory structure
-        fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
         // Initialize git repo
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["init"])
             .output()
             .expect("Failed to init git repo");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
 
         // Create initial commit to have a HEAD
-        fs::write("README.md", "Test repo").unwrap();
+        fs::write(temp_path.join("README.md"), "Test repo").unwrap();
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
 
         // Create mixed uncommitted files
         // Infrastructure files
-        fs::create_dir_all("agents").unwrap();
-        fs::write("agents/test-agent.md", "# Agent").unwrap();
+        fs::create_dir_all(temp_path.join("agents")).unwrap();
+        fs::write(temp_path.join("agents/test-agent.md"), "# Agent").unwrap();
 
-        fs::create_dir_all(".claude/skills/test").unwrap();
-        fs::write(".claude/skills/test/SKILL.md", "# Skill").unwrap();
+        fs::create_dir_all(temp_path.join(".claude/skills/test")).unwrap();
+        fs::write(temp_path.join(".claude/skills/test/SKILL.md"), "# Skill").unwrap();
 
-        fs::create_dir_all(".specks").unwrap();
-        fs::write(".specks/specks-skeleton.md", "# Skeleton").unwrap();
-        fs::write(".specks/config.toml", "# Config").unwrap();
-        fs::write(".specks/specks-implementation-log.md", "# Log").unwrap();
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
+        fs::write(temp_path.join(".specks/specks-skeleton.md"), "# Skeleton").unwrap();
+        fs::write(temp_path.join(".specks/config.toml"), "# Config").unwrap();
+        fs::write(
+            temp_path.join(".specks/specks-implementation-log.md"),
+            "# Log",
+        )
+        .unwrap();
 
-        fs::create_dir_all(".beads").unwrap();
-        fs::write(".beads/beads.json", "{}").unwrap();
+        fs::create_dir_all(temp_path.join(".beads")).unwrap();
+        fs::write(temp_path.join(".beads/beads.json"), "{}").unwrap();
 
-        fs::write("CLAUDE.md", "# Claude").unwrap();
+        fs::write(temp_path.join("CLAUDE.md"), "# Claude").unwrap();
 
         // Non-infrastructure files
-        fs::create_dir_all("src").unwrap();
-        fs::write("src/main.rs", "fn main() {}").unwrap();
+        fs::create_dir_all(temp_path.join("src")).unwrap();
+        fs::write(temp_path.join("src/main.rs"), "fn main() {}").unwrap();
 
-        fs::write(".specks/specks-123.md", "# Speck 123").unwrap();
+        fs::write(temp_path.join(".specks/specks-123.md"), "# Speck 123").unwrap();
 
-        fs::write("Cargo.toml", "[package]").unwrap();
+        fs::write(temp_path.join("Cargo.toml"), "[package]").unwrap();
 
         // Run categorization
-        let result = categorize_uncommitted();
+        let result = categorize_uncommitted(Some(temp_path));
         assert!(result.is_ok());
 
         let (infrastructure, other) = result.unwrap();
@@ -1414,10 +1393,6 @@ mod tests {
         // Verify counts
         assert_eq!(infrastructure.len(), 7);
         assert_eq!(other.len(), 3);
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     // Unit tests for validation functions
@@ -1558,56 +1533,58 @@ mod tests {
     // Integration tests
 
     #[test]
-    #[serial]
     fn test_run_merge_abort_on_non_infrastructure_files_without_force() {
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-merge-abort-{}", std::process::id()));
-        let original_dir = std::env::current_dir().unwrap();
-
-        // Cleanup if exists from previous run
-        let _ = fs::remove_dir_all(&temp_dir);
-
-        // Create directory structure
-        fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
         // Initialize git repo
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["init"])
             .output()
             .expect("Failed to init git repo");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
 
         // Create initial commit
-        fs::write("README.md", "Test repo").unwrap();
+        fs::write(temp_path.join("README.md"), "Test repo").unwrap();
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
 
         // Create a non-infrastructure file
-        fs::create_dir_all("src").unwrap();
-        fs::write("src/main.rs", "fn main() {}").unwrap();
+        fs::create_dir_all(temp_path.join("src")).unwrap();
+        fs::write(temp_path.join("src/main.rs"), "fn main() {}").unwrap();
 
         // Test that categorize_uncommitted correctly identifies this as non-infrastructure
-        let result = categorize_uncommitted();
+        let result = categorize_uncommitted(Some(temp_path));
         assert!(result.is_ok());
 
         let (infrastructure, other) = result.unwrap();
@@ -1617,66 +1594,64 @@ mod tests {
         );
         assert_eq!(other.len(), 1, "Should have 1 non-infrastructure file");
         assert!(other.contains(&"src/main.rs".to_string()));
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
-    #[serial]
     fn test_run_merge_force_proceeds_with_non_infrastructure() {
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-merge-force-{}", std::process::id()));
-        let original_dir = std::env::current_dir().unwrap();
-
-        // Cleanup if exists from previous run
-        let _ = fs::remove_dir_all(&temp_dir);
-
-        // Create directory structure
-        fs::create_dir_all(&temp_dir).unwrap();
-        std::env::set_current_dir(&temp_dir).unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
 
         // Initialize git repo
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["init"])
             .output()
             .expect("Failed to init git repo");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
 
         // Create initial commit
-        fs::write("README.md", "Test repo").unwrap();
+        fs::write(temp_path.join("README.md"), "Test repo").unwrap();
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
 
         Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
 
         // Create both infrastructure and non-infrastructure files
-        fs::create_dir_all("agents").unwrap();
-        fs::write("agents/test-agent.md", "# Agent").unwrap();
+        fs::create_dir_all(temp_path.join("agents")).unwrap();
+        fs::write(temp_path.join("agents/test-agent.md"), "# Agent").unwrap();
 
-        fs::create_dir_all("src").unwrap();
-        fs::write("src/main.rs", "fn main() {}").unwrap();
+        fs::create_dir_all(temp_path.join("src")).unwrap();
+        fs::write(temp_path.join("src/main.rs"), "fn main() {}").unwrap();
 
         // Test categorization
-        let result = categorize_uncommitted();
+        let result = categorize_uncommitted(Some(temp_path));
         assert!(result.is_ok());
 
         let (infrastructure, other) = result.unwrap();
@@ -1688,10 +1663,6 @@ mod tests {
         // Verify that --force flag would allow proceeding
         // This is validated in the run_merge function logic at lines 596-602
         // where if force=true and other.is_empty()=false, it prints warning but continues
-
-        // Cleanup
-        std::env::set_current_dir(original_dir).unwrap();
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
