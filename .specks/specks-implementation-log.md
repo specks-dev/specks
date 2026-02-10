@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-5
+date: 2026-02-10T03:06:00Z
+bead: specks-15g.6
+---
+
+## #step-5: Added run_command_with_context() helper for enhanced error messages with command string, exit code, and stderr. Added eprintln! warnings for rollback failures instead of silent error handling.
+
+**Files changed:**
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
 step: #step-4
 date: 2026-02-10T03:01:00Z
 bead: specks-15g.5

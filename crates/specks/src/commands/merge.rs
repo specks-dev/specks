@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use specks_core::session::Session;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 /// JSON output for merge command
 #[derive(Serialize)]
@@ -44,6 +44,43 @@ pub struct MergeData {
 
 fn is_false(b: &bool) -> bool {
     !b
+}
+
+/// Helper function to run a command with enhanced error context
+///
+/// Executes a command and returns detailed error messages that include:
+/// - The full command string
+/// - The exit code
+/// - The stderr output
+///
+/// This makes debugging command failures much easier by providing complete context.
+///
+/// # Arguments
+/// * `cmd` - Mutable reference to Command to execute
+/// * `cmd_name` - Human-readable command description for error messages
+///
+/// # Returns
+/// * `Ok(Output)` - Command succeeded (exit code 0)
+/// * `Err(String)` - Command failed with detailed error message
+fn run_command_with_context(cmd: &mut Command, cmd_name: &str) -> Result<Output, String> {
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to execute command '{}': {}", cmd_name, e))?;
+
+    if !output.status.success() {
+        let exit_code = output
+            .status
+            .code()
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "signal".to_string());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "Command '{}' failed with exit code {}: {}",
+            cmd_name, exit_code, stderr
+        ));
+    }
+
+    Ok(output)
 }
 
 /// Information about a GitHub pull request
@@ -752,14 +789,12 @@ pub fn run_merge(
 
         // Stage infrastructure files
         for file in &infrastructure {
-            let add_output = Command::new("git")
-                .args(["add", file])
-                .output()
-                .map_err(|e| format!("Failed to execute git add: {}", e))?;
+            let mut cmd = Command::new("git");
+            cmd.args(["add", file]);
+            let add_output = run_command_with_context(&mut cmd, &format!("git add {}", file));
 
-            if !add_output.status.success() {
-                let stderr = String::from_utf8_lossy(&add_output.stderr);
-                let error_msg = format!("Failed to stage {}: {}", file, stderr);
+            if let Err(e) = add_output {
+                let error_msg = format!("Failed to stage {}: {}", file, e);
 
                 let data = MergeData {
                     status: "error".to_string(),
@@ -786,23 +821,22 @@ pub fn run_merge(
 
         // Commit with message following D04 format
         let commit_message = format!("chore({}): infrastructure updates", speck_name);
-        let commit_output = Command::new("git")
-            .args(["commit", "-m", &commit_message])
-            .output()
-            .map_err(|e| format!("Failed to execute git commit: {}", e))?;
+        let mut cmd = Command::new("git");
+        cmd.args(["commit", "-m", &commit_message]);
+        let commit_output = run_command_with_context(
+            &mut cmd,
+            &format!("git commit -m '{}'", commit_message),
+        );
 
-        if !commit_output.status.success() {
-            let stderr = String::from_utf8_lossy(&commit_output.stderr);
-
+        if let Err(e) = commit_output {
             // Check if it's an empty commit (no changes to commit)
-            if stderr.contains("nothing to commit") || stderr.contains("no changes added to commit")
-            {
+            if e.contains("nothing to commit") || e.contains("no changes added to commit") {
                 if !quiet {
                     println!("No infrastructure changes to commit (already committed)");
                 }
                 false
             } else {
-                let error_msg = format!("Failed to commit infrastructure files: {}", stderr);
+                let error_msg = format!("Failed to commit infrastructure files: {}", e);
 
                 let data = MergeData {
                     status: "error".to_string(),
@@ -866,14 +900,12 @@ pub fn run_merge(
             return Err(format!("Pre-push sync check failed: {}", e));
         }
 
-        let push_output = Command::new("git")
-            .args(["push", "origin", "main"])
-            .output()
-            .map_err(|e| format!("Failed to execute git push: {}", e))?;
+        let mut cmd = Command::new("git");
+        cmd.args(["push", "origin", "main"]);
+        let push_output = run_command_with_context(&mut cmd, "git push origin main");
 
-        if !push_output.status.success() {
-            let stderr = String::from_utf8_lossy(&push_output.stderr);
-            let error_msg = format!("Failed to push main to origin: {}", stderr);
+        if let Err(e) = push_output {
+            let error_msg = format!("Failed to push main to origin: {}", e);
 
             let data = MergeData {
                 status: "error".to_string(),
@@ -907,14 +939,15 @@ pub fn run_merge(
         println!("Merging PR #{} via squash...", pr_info.number);
     }
 
-    let merge_output = Command::new("gh")
-        .args(["pr", "merge", "--squash", &session.branch_name])
-        .output()
-        .map_err(|e| format!("Failed to execute gh pr merge: {}", e))?;
+    let mut cmd = Command::new("gh");
+    cmd.args(["pr", "merge", "--squash", &session.branch_name]);
+    let merge_output = run_command_with_context(
+        &mut cmd,
+        &format!("gh pr merge --squash {}", session.branch_name),
+    );
 
-    if !merge_output.status.success() {
-        let stderr = String::from_utf8_lossy(&merge_output.stderr);
-        let error_msg = format!("Failed to merge PR: {}", stderr);
+    if let Err(e) = merge_output {
+        let error_msg = format!("Failed to merge PR: {}", e);
 
         let data = MergeData {
             status: "error".to_string(),
@@ -947,14 +980,12 @@ pub fn run_merge(
     }
 
     // Step 11: Pull main to fetch the squashed commit
-    let pull_output = Command::new("git")
-        .args(["pull", "origin", "main"])
-        .output()
-        .map_err(|e| format!("Failed to execute git pull: {}", e))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["pull", "origin", "main"]);
+    let pull_output = run_command_with_context(&mut cmd, "git pull origin main");
 
-    if !pull_output.status.success() {
-        let stderr = String::from_utf8_lossy(&pull_output.stderr);
-        let error_msg = format!("Failed to pull main after merge: {}", stderr);
+    if let Err(e) = pull_output {
+        let error_msg = format!("Failed to pull main after merge: {}", e);
 
         let data = MergeData {
             status: "error".to_string(),
@@ -1017,38 +1048,47 @@ pub fn run_merge(
     };
 
     // Delete the branch
-    let delete_output = Command::new("git")
-        .args(["branch", "-D", &session.branch_name])
-        .output()
-        .map_err(|e| format!("Failed to execute git branch -D: {}", e))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["branch", "-D", &session.branch_name]);
+    let delete_output = run_command_with_context(
+        &mut cmd,
+        &format!("git branch -D {}", session.branch_name),
+    );
 
-    if !delete_output.status.success() {
-        let stderr = String::from_utf8_lossy(&delete_output.stderr);
-        if !quiet {
-            eprintln!("Warning: Failed to delete branch: {}", stderr);
-            eprintln!(
-                "You may need to manually run: git branch -D {}",
-                session.branch_name
-            );
+    match delete_output {
+        Ok(_) => {
+            if !quiet {
+                println!("Deleted branch: {}", session.branch_name);
+            }
         }
-        worktree_cleaned = false;
-    } else if !quiet {
-        println!("Deleted branch: {}", session.branch_name);
+        Err(e) => {
+            if !quiet {
+                eprintln!("Warning: Failed to delete branch: {}", e);
+                eprintln!(
+                    "You may need to manually run: git branch -D {}",
+                    session.branch_name
+                );
+            }
+            worktree_cleaned = false;
+        }
     }
 
     // Prune stale worktree metadata
-    let prune_output = Command::new("git")
-        .args(["worktree", "prune"])
-        .output()
-        .map_err(|e| format!("Failed to execute git worktree prune: {}", e))?;
+    let mut cmd = Command::new("git");
+    cmd.args(["worktree", "prune"]);
+    let prune_output = run_command_with_context(&mut cmd, "git worktree prune");
 
-    if !prune_output.status.success() {
-        let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        if !quiet {
-            eprintln!("Warning: Failed to prune worktree metadata: {}", stderr);
+    match prune_output {
+        Ok(_) => {
+            if !quiet {
+                println!("Pruned worktree metadata");
+            }
         }
-    } else if !quiet {
-        println!("Pruned worktree metadata");
+        Err(e) => {
+            if !quiet {
+                eprintln!("Warning: Failed to prune worktree metadata: {}", e);
+            }
+        }
     }
 
     // Step 13: Return success response
@@ -2183,6 +2223,106 @@ mod tests {
         assert!(
             error.contains("Not in a git repository"),
             "Error should mention missing git directory, got: {}",
+            error
+        );
+    }
+
+    // Tests for run_command_with_context error formatting
+
+    #[test]
+    fn test_run_command_with_context_success() {
+        // Run a simple command that should succeed
+        let mut cmd = Command::new("echo");
+        cmd.arg("test");
+        let output = run_command_with_context(&mut cmd, "echo test");
+
+        assert!(
+            output.is_ok(),
+            "Expected echo command to succeed, got: {:?}",
+            output
+        );
+
+        let output = output.unwrap();
+        assert!(output.status.success());
+    }
+
+    #[test]
+    fn test_run_command_with_context_includes_command_name() {
+        // Run a command that will fail
+        let mut cmd = Command::new("git");
+        cmd.args(["this-command-does-not-exist"]);
+        let result = run_command_with_context(&mut cmd, "git this-command-does-not-exist");
+
+        assert!(result.is_err(), "Expected command to fail");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("git this-command-does-not-exist"),
+            "Error should include command name, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_run_command_with_context_includes_exit_code() {
+        // Run a command that will fail with a specific exit code
+        // Using 'false' command which always exits with code 1
+        let mut cmd = Command::new("false");
+        let result = run_command_with_context(&mut cmd, "false");
+
+        assert!(result.is_err(), "Expected false command to fail");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("exit code 1") || error.contains("exit code"),
+            "Error should include exit code, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_run_command_with_context_includes_stderr() {
+        // Run git command with invalid option to get stderr output
+        let mut cmd = Command::new("git");
+        cmd.args(["--invalid-flag"]);
+        let result = run_command_with_context(&mut cmd, "git --invalid-flag");
+
+        assert!(result.is_err(), "Expected command to fail");
+
+        let error = result.unwrap_err();
+        // Error should include command name, exit code format, and likely some stderr
+        assert!(
+            error.contains("git --invalid-flag"),
+            "Error should include command, got: {}",
+            error
+        );
+        assert!(
+            error.contains("exit code") || error.contains("failed"),
+            "Error should mention exit code, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_run_command_with_context_execution_error() {
+        // Try to run a command that doesn't exist
+        let mut cmd = Command::new("this-command-definitely-does-not-exist-12345");
+        let result = run_command_with_context(
+            &mut cmd,
+            "this-command-definitely-does-not-exist-12345",
+        );
+
+        assert!(result.is_err(), "Expected command to fail");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("Failed to execute command"),
+            "Error should indicate execution failure, got: {}",
+            error
+        );
+        assert!(
+            error.contains("this-command-definitely-does-not-exist-12345"),
+            "Error should include command name, got: {}",
             error
         );
     }
