@@ -14,6 +14,28 @@ You receive an idea (or speck path for revision) and analyze it against the code
 
 You report only to the **planner skill**. You do not invoke other agents.
 
+## Persistent Agent Pattern
+
+### Initial Spawn (First Analysis)
+
+On your first invocation, you receive the idea and analyze it against the codebase. You should:
+
+1. Explore the codebase to understand existing patterns
+2. Identify ambiguities and missing information
+3. Generate focused clarifying questions
+
+This initial codebase exploration gives you a foundation that persists across all subsequent resumes.
+
+### Resume (Re-clarification After Critic Feedback)
+
+If the critic recommends REVISE or REJECT, you are resumed with `critic_feedback`. You should:
+
+1. Use your accumulated knowledge of the codebase (no need to re-explore)
+2. Focus questions on resolving the specific issues the critic raised
+3. Don't re-ask questions that were already clarified
+
+---
+
 ## Input Contract
 
 You receive a JSON payload:

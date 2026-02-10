@@ -12,6 +12,16 @@ You report only to the **implementer skill**. You do not invoke other agents.
 
 **FORBIDDEN:** You MUST NOT spawn any planning agents (clarifier, author, critic). If something is wrong, return `status: "error"` and halt.
 
+## Persistent Agent Pattern
+
+### Initial Spawn
+
+On your first invocation, you create the worktree, sync beads, determine speck state, and resolve steps. This is the primary one-shot operation.
+
+### Resume (Re-run with User Answers)
+
+If the implementer needs clarification (e.g., step selection), you are resumed with `user_answers` rather than freshly spawned. You retain knowledge of the worktree you created, beads you synced, and state you determined — so you can skip directly to intent resolution and validation.
+
 ---
 
 ## Input Contract
@@ -72,6 +82,7 @@ Before returning your response, you MUST validate that your JSON output conforms
   "validation": {"valid": false, "issues": []},
   "beads": {"sync_performed": false, "root_bead": null, "bead_mapping": {}},
   "beads_committed": false,
+  "session": {"session_id": null, "session_file": null, "artifacts_base": null},
   "clarification_needed": null,
   "error": "JSON validation failed: <specific error>"
 }
@@ -129,6 +140,12 @@ Return structured JSON:
 
   "beads_committed": true,
 
+  "session": {
+    "session_id": "auth-20260208-143022",
+    "session_file": "/abs/repo/.specks-worktrees/.sessions/auth-20260208-143022.json",
+    "artifacts_base": "/abs/repo/.specks-worktrees/.artifacts/auth-20260208-143022"
+  },
+
   "clarification_needed": null,
 
   "error": null
@@ -142,6 +159,9 @@ Return structured JSON:
 | `branch_name` | string | Git branch name (with `/`) |
 | `base_branch` | string | Branch to merge back to |
 | `beads_committed` | bool | Whether bead annotations were committed as first commit |
+| `session.session_id` | string | Derived from worktree directory name (strip `specks__` prefix) |
+| `session.session_file` | string | Absolute path to the session JSON file (created by this agent) |
+| `session.artifacts_base` | string | Absolute path to the artifacts directory (created by this agent) |
 
 ---
 
@@ -242,6 +262,7 @@ If the file does NOT exist in the worktree, return immediately:
   "branch_name": null,
   "base_branch": null,
   "beads_committed": false,
+  "session": {"session_id": null, "session_file": null, "artifacts_base": null},
   "error": "Speck file not found in worktree: <speck_path>. Run /specks:planner first to create a speck."
 }
 ```
@@ -341,7 +362,60 @@ Populate `validation.issues` array:
 }
 ```
 
-### Phase 7: Determine Output Status
+### Phase 7: Create Session File and Artifact Directories
+
+**IMPORTANT:** The orchestrator has NO file I/O tools. You MUST create the session file and artifact directories so that downstream agents (coder, reviewer, committer) can write their output.
+
+1. **Derive session ID** from worktree directory name by stripping the `specks__` prefix:
+   ```
+   Worktree dir: specks__auth-20260208-143022
+   Session ID:   auth-20260208-143022
+   ```
+
+2. **Derive repo root** from worktree path:
+   ```
+   worktree_path: /abs/repo/.specks-worktrees/specks__auth-20260208-143022
+   repo_root:     /abs/repo
+   ```
+
+3. **Create session directories and file:**
+   ```bash
+   mkdir -p {repo_root}/.specks-worktrees/.sessions
+   mkdir -p {repo_root}/.specks-worktrees/.artifacts/{session_id}
+   ```
+
+4. **Create artifact directories for each resolved step:**
+   ```bash
+   mkdir -p {repo_root}/.specks-worktrees/.artifacts/{session_id}/step-0
+   mkdir -p {repo_root}/.specks-worktrees/.artifacts/{session_id}/step-1
+   # ... for each step in resolved_steps
+   ```
+
+5. **Write initial session JSON:**
+   ```json
+   {
+     "session_id": "<session_id>",
+     "speck_path": "<speck_path>",
+     "worktree_path": "<worktree_path>",
+     "branch_name": "<branch_name>",
+     "base_branch": "<base_branch>",
+     "status": "in_progress",
+     "created_at": "<ISO timestamp>",
+     "last_updated_at": "<ISO timestamp>",
+     "current_step": "<first resolved step>",
+     "steps_completed": [],
+     "steps_remaining": ["#step-X", "#step-Y", ...],
+     "root_bead": "<root_bead>",
+     "bead_mapping": { "#step-0": "bd-xxx", "#step-1": "bd-yyy" }
+   }
+   ```
+
+6. **Populate output `session` field:**
+   - `session_id`: the derived ID
+   - `session_file`: absolute path to the session JSON
+   - `artifacts_base`: absolute path to the artifacts directory
+
+### Phase 8: Determine Output Status
 
 - If prerequisites failed → `status: "error"`
 - If any step in `all_steps` is missing a bead ID in `bead_mapping` → `status: "error"` with message "Beads sync failed: some steps are missing bead IDs"
@@ -452,6 +526,11 @@ When `status: "needs_clarification"`, populate `clarification_needed`:
     }
   },
   "beads_committed": true,
+  "session": {
+    "session_id": "specks-3-20260208-143022",
+    "session_file": "/abs/path/to/.specks-worktrees/.sessions/specks-3-20260208-143022.json",
+    "artifacts_base": "/abs/path/to/.specks-worktrees/.artifacts/specks-3-20260208-143022"
+  },
   "clarification_needed": {
     "type": "step_selection",
     "question": "Speck has 3 total steps. 0 completed, 3 remaining. What would you like to do?",
@@ -501,6 +580,11 @@ When `status: "needs_clarification"`, populate `clarification_needed`:
     }
   },
   "beads_committed": true,
+  "session": {
+    "session_id": "specks-3-20260208-143022",
+    "session_file": "/abs/path/to/.specks-worktrees/.sessions/specks-3-20260208-143022.json",
+    "artifacts_base": "/abs/path/to/.specks-worktrees/.artifacts/specks-3-20260208-143022"
+  },
   "clarification_needed": null,
   "error": null
 }
@@ -541,6 +625,11 @@ When `status: "needs_clarification"`, populate `clarification_needed`:
     }
   },
   "beads_committed": true,
+  "session": {
+    "session_id": "specks-3-20260208-143022",
+    "session_file": "/abs/path/to/.specks-worktrees/.sessions/specks-3-20260208-143022.json",
+    "artifacts_base": "/abs/path/to/.specks-worktrees/.artifacts/specks-3-20260208-143022"
+  },
   "clarification_needed": null,
   "error": null
 }

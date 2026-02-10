@@ -205,7 +205,7 @@ This document defines the canonical terminology for all skill and agent invocati
 | `disallowedTools` | tool list | Explicitly denied tools |
 | `model` | `haiku`, `sonnet`, `opus`, `inherit` | Model selection |
 | `skills` | skill name list | Skills to preload into agent context |
-| `permissionMode` | `default`, `acceptEdits`, `dontAsk`, `bypassPermissions`, `plan` | Permission handling |
+| `permissionMode` | `default`, `acceptEdits`, `dontAsk`, `delegate`, `bypassPermissions`, `plan` | Permission handling |
 | `memory` | `user`, `project`, `local` | Persistent memory scope |
 | `maxTurns` | number | Maximum agentic turns |
 
