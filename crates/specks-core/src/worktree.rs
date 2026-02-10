@@ -1161,8 +1161,13 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
 
     // Handle stale branch cleanup if mode includes it
     if matches!(mode, CleanupMode::Stale | CleanupMode::All) {
-        let (removed, skipped) =
-            cleanup_stale_branches_with_pr_checker(repo_root, &sessions, dry_run, force, &pr_checker)?;
+        let (removed, skipped) = cleanup_stale_branches_with_pr_checker(
+            repo_root,
+            &sessions,
+            dry_run,
+            force,
+            &pr_checker,
+        )?;
         result.stale_branches_removed.extend(removed);
         result.skipped.extend(skipped);
     }
@@ -2362,14 +2367,11 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in Orphaned mode (dry run) with mock PR checker
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::Orphaned,
-            true,
-            false,
-            |_| PrState::NotFound,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, false, |_| {
+                PrState::NotFound
+            })
+            .unwrap();
 
         // Should identify orphaned worktree
         assert_eq!(result.orphaned_removed.len(), 1);
@@ -2659,14 +2661,11 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in Merged mode (dry run) with mock PR checker
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::Merged,
-            true,
-            false,
-            |_| PrState::NotFound,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, false, |_| {
+                PrState::NotFound
+            })
+            .unwrap();
 
         // Should identify NeedsReconcile worktree with merged branch
         assert_eq!(result.merged_removed.len(), 1);
@@ -2757,14 +2756,11 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in Orphaned mode (dry run) with mock PR checker
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::Orphaned,
-            true,
-            false,
-            |_| PrState::NotFound,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, false, |_| {
+                PrState::NotFound
+            })
+            .unwrap();
 
         // Should identify NeedsReconcile worktree without PR as orphaned
         assert_eq!(result.orphaned_removed.len(), 1);
@@ -2868,27 +2864,21 @@ mod tests {
         // Mock PR checker returns Closed for this branch
 
         // Run cleanup in Merged mode (dry run) with Closed PR
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::Merged,
-            true,
-            false,
-            |_| PrState::Closed,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, false, |_| {
+                PrState::Closed
+            })
+            .unwrap();
 
         // Closed PR is not treated as merged
         assert_eq!(result.merged_removed.len(), 0);
 
         // Run cleanup in Orphaned mode (dry run) with Closed PR
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::Orphaned,
-            true,
-            false,
-            |_| PrState::Closed,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, false, |_| {
+                PrState::Closed
+            })
+            .unwrap();
 
         // Closed PR is protected from Orphaned mode (Closed != NotFound)
         assert_eq!(result.orphaned_removed.len(), 0);
@@ -2989,28 +2979,22 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in Merged mode without force (dry run) with Unknown PR state
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::Merged,
-            true,
-            false,
-            |_| PrState::Unknown,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Merged, true, false, |_| {
+                PrState::Unknown
+            })
+            .unwrap();
 
         // Unknown PR state without force: skipped
         assert_eq!(result.merged_removed.len(), 0);
         assert_eq!(result.skipped.len(), 1);
 
         // Run cleanup in Orphaned mode without force (dry run) with Unknown PR state
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::Orphaned,
-            true,
-            false,
-            |_| PrState::Unknown,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::Orphaned, true, false, |_| {
+                PrState::Unknown
+            })
+            .unwrap();
 
         // Unknown PR state without force: skipped, not removed
         assert_eq!(result.orphaned_removed.len(), 0);
@@ -3099,14 +3083,11 @@ mod tests {
         save_session(&session1, temp_dir).unwrap();
 
         // Run cleanup in All mode (dry run) with Closed PR state
-        let result = cleanup_worktrees_with_pr_checker(
-            temp_dir,
-            CleanupMode::All,
-            true,
-            false,
-            |_| PrState::Closed,
-        )
-        .unwrap();
+        let result =
+            cleanup_worktrees_with_pr_checker(temp_dir, CleanupMode::All, true, false, |_| {
+                PrState::Closed
+            })
+            .unwrap();
 
         // All mode includes closed PRs, categorized as merged_removed
         assert_eq!(result.merged_removed.len(), 1);
