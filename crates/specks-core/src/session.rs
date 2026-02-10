@@ -384,8 +384,11 @@ mod tests {
 
     #[test]
     fn test_load_session_missing_file() {
-        let temp_dir = std::env::temp_dir().join("specks-test-missing");
-        let result = load_session(&temp_dir, None);
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+        let result = load_session(temp_dir, None);
         assert!(result.is_err());
         match result {
             Err(SpecksError::FileNotFound(path)) => {
@@ -397,9 +400,11 @@ mod tests {
 
     #[test]
     fn test_save_and_load_session_internal() {
+        use tempfile::TempDir;
+
         // Test old internal storage path for backward compatibility
-        let temp_dir = std::env::temp_dir().join("specks-test-session-internal");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
 
         let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
         let session = Session {
@@ -433,18 +438,18 @@ mod tests {
         assert_eq!(loaded.status, SessionStatus::Pending);
         assert_eq!(loaded.current_step, 0);
         assert_eq!(loaded.total_steps, 3);
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_save_and_load_session_external() {
-        // Test new external storage path
-        let temp_dir = std::env::temp_dir().join("specks-test-session-external");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test new external storage path
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
 
         let session = Session {
@@ -466,31 +471,31 @@ mod tests {
         fs::create_dir_all(&worktree_path).unwrap();
 
         // Save session to external storage
-        save_session(&session, &repo_root).unwrap();
+        save_session(&session, repo_root).unwrap();
 
         // Verify external file exists
-        let external_path = session_file_path(&repo_root, "test-20260208-120000");
+        let external_path = session_file_path(repo_root, "test-20260208-120000");
         assert!(external_path.exists());
 
         // Load session from external storage
-        let loaded = load_session(&worktree_path, Some(&repo_root)).unwrap();
+        let loaded = load_session(&worktree_path, Some(repo_root)).unwrap();
         assert_eq!(loaded.schema_version, session.schema_version);
         assert_eq!(loaded.speck_path, session.speck_path);
         assert_eq!(loaded.status, SessionStatus::Pending);
         assert_eq!(loaded.current_step, 0);
         assert_eq!(loaded.total_steps, 3);
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_load_session_fallback_to_internal() {
-        // Test fallback: external doesn't exist, but internal does
-        let temp_dir = std::env::temp_dir().join("specks-test-session-fallback");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test fallback: external doesn't exist, but internal does
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
 
         let session = Session {
@@ -518,22 +523,22 @@ mod tests {
         fs::write(&session_path, content).unwrap();
 
         // Load with repo_root provided, should fall back to internal
-        let loaded = load_session(&worktree_path, Some(&repo_root)).unwrap();
+        let loaded = load_session(&worktree_path, Some(repo_root)).unwrap();
         assert_eq!(loaded.schema_version, session.schema_version);
         assert_eq!(loaded.speck_path, session.speck_path);
         assert_eq!(loaded.status, SessionStatus::Pending);
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_save_session_creates_directory() {
-        // Test that save_session creates .sessions directory if it doesn't exist
-        let temp_dir = std::env::temp_dir().join("specks-test-session-create-dir");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test that save_session creates .sessions directory if it doesn't exist
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
 
         let session = Session {
@@ -555,31 +560,31 @@ mod tests {
         fs::create_dir_all(&worktree_path).unwrap();
 
         // Verify .sessions directory doesn't exist yet
-        let sessions_directory = sessions_dir(&repo_root);
+        let sessions_directory = sessions_dir(repo_root);
         assert!(!sessions_directory.exists());
 
         // Save session (should create directory)
-        save_session(&session, &repo_root).unwrap();
+        save_session(&session, repo_root).unwrap();
 
         // Verify .sessions directory was created
         assert!(sessions_directory.exists());
         assert!(sessions_directory.is_dir());
 
         // Verify session file exists
-        let external_path = session_file_path(&repo_root, "test-20260208-120000");
+        let external_path = session_file_path(repo_root, "test-20260208-120000");
         assert!(external_path.exists());
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_load_session_external_takes_precedence() {
-        // Test that external storage takes precedence over internal when both exist
-        let temp_dir = std::env::temp_dir().join("specks-test-session-precedence");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test that external storage takes precedence over internal when both exist
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
 
         // Create a session for external storage
@@ -624,16 +629,14 @@ mod tests {
         fs::write(&internal_path, internal_content).unwrap();
 
         // Write to external location
-        save_session(&external_session, &repo_root).unwrap();
+        save_session(&external_session, repo_root).unwrap();
 
         // Load session - should get external version
-        let loaded = load_session(&worktree_path, Some(&repo_root)).unwrap();
+        let loaded = load_session(&worktree_path, Some(repo_root)).unwrap();
         assert_eq!(loaded.status, SessionStatus::InProgress);
         assert_eq!(loaded.current_step, 2);
         assert_eq!(loaded.beads_root, Some("bd-external".to_string()));
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
@@ -798,11 +801,13 @@ mod tests {
 
     #[test]
     fn test_delete_session_success() {
-        // Test successful deletion of session file and artifacts
-        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-success");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test successful deletion of session file and artifacts
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let session_id = "test-20260208-143022";
         let worktree_path = temp_dir.join(format!(".specks-worktrees/specks__{}", session_id));
 
@@ -826,65 +831,65 @@ mod tests {
         fs::create_dir_all(&worktree_path).unwrap();
 
         // Save session (creates session file)
-        save_session(&session, &repo_root).unwrap();
+        save_session(&session, repo_root).unwrap();
 
         // Create artifacts directory with nested subdirectories
-        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        let artifacts_path = artifacts_dir(repo_root, session_id);
         let step_dir = artifacts_path.join("step-1");
         fs::create_dir_all(&step_dir).unwrap();
         fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
         fs::write(step_dir.join("coder-output.json"), "{}").unwrap();
 
         // Verify files exist before deletion
-        let session_path = session_file_path(&repo_root, session_id);
+        let session_path = session_file_path(repo_root, session_id);
         assert!(session_path.exists());
         assert!(artifacts_path.exists());
 
         // Delete session
-        delete_session(session_id, &repo_root).unwrap();
+        delete_session(session_id, repo_root).unwrap();
 
         // Verify files are deleted
         assert!(!session_path.exists());
         assert!(!artifacts_path.exists());
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_delete_session_missing_files() {
-        // Test that delete_session succeeds even if files don't exist
-        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-missing");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test that delete_session succeeds even if files don't exist
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let session_id = "nonexistent-20260208-143022";
 
         // Verify files don't exist
-        let session_path = session_file_path(&repo_root, session_id);
-        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        let session_path = session_file_path(repo_root, session_id);
+        let artifacts_path = artifacts_dir(repo_root, session_id);
         assert!(!session_path.exists());
         assert!(!artifacts_path.exists());
 
         // Delete session (should succeed even though nothing exists)
-        let result = delete_session(session_id, &repo_root);
+        let result = delete_session(session_id, repo_root);
         assert!(result.is_ok());
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_delete_session_nested_artifacts() {
-        // Test recursive deletion of deeply nested artifact directories
-        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-nested");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test recursive deletion of deeply nested artifact directories
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let session_id = "nested-20260208-143022";
 
         // Create deeply nested artifact structure
-        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        let artifacts_path = artifacts_dir(repo_root, session_id);
         let step1_dir = artifacts_path.join("step-1");
         let step2_dir = artifacts_path.join("step-2");
         let deep_dir = step1_dir.join("subdir").join("nested").join("deep");
@@ -903,22 +908,22 @@ mod tests {
         assert!(deep_dir.exists());
 
         // Delete session (artifacts only, no session file in this test)
-        delete_session(session_id, &repo_root).unwrap();
+        delete_session(session_id, repo_root).unwrap();
 
         // Verify entire directory tree is deleted
         assert!(!artifacts_path.exists());
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_delete_session_only_session_file() {
-        // Test deletion when only session file exists (no artifacts)
-        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-file-only");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test deletion when only session file exists (no artifacts)
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let session_id = "file-only-20260208-143022";
         let worktree_path = temp_dir.join(format!(".specks-worktrees/specks__{}", session_id));
 
@@ -942,51 +947,49 @@ mod tests {
         fs::create_dir_all(&worktree_path).unwrap();
 
         // Save session (creates session file only)
-        save_session(&session, &repo_root).unwrap();
+        save_session(&session, repo_root).unwrap();
 
         // Verify session file exists, artifacts don't
-        let session_path = session_file_path(&repo_root, session_id);
-        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        let session_path = session_file_path(repo_root, session_id);
+        let artifacts_path = artifacts_dir(repo_root, session_id);
         assert!(session_path.exists());
         assert!(!artifacts_path.exists());
 
         // Delete session
-        delete_session(session_id, &repo_root).unwrap();
+        delete_session(session_id, repo_root).unwrap();
 
         // Verify session file is deleted
         assert!(!session_path.exists());
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_delete_session_only_artifacts() {
-        // Test deletion when only artifacts exist (no session file)
-        let temp_dir = std::env::temp_dir().join("specks-test-delete-session-artifacts-only");
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        use tempfile::TempDir;
 
-        let repo_root = temp_dir.clone();
+        // Test deletion when only artifacts exist (no session file)
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        let repo_root = temp_dir;
         let session_id = "artifacts-only-20260208-143022";
 
         // Create artifacts directory only
-        let artifacts_path = artifacts_dir(&repo_root, session_id);
+        let artifacts_path = artifacts_dir(repo_root, session_id);
         let step_dir = artifacts_path.join("step-1");
         fs::create_dir_all(&step_dir).unwrap();
         fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
 
         // Verify artifacts exist, session file doesn't
-        let session_path = session_file_path(&repo_root, session_id);
+        let session_path = session_file_path(repo_root, session_id);
         assert!(!session_path.exists());
         assert!(artifacts_path.exists());
 
         // Delete session
-        delete_session(session_id, &repo_root).unwrap();
+        delete_session(session_id, repo_root).unwrap();
 
         // Verify artifacts are deleted
         assert!(!artifacts_path.exists());
-
-        // Clean up
-        let _ = fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 }

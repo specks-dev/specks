@@ -779,32 +779,29 @@ mod tests {
             Session, SessionStatus, artifacts_dir, save_session, session_file_path,
         };
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir = std::env::temp_dir().join(format!(
-            "specks-test-remove-external-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
 
-        // Create directory structure
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        // Create directory structure (temp_dir already exists)
 
         // Initialize git repo
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["init"])
             .output()
             .expect("Failed to init git repo");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
@@ -812,13 +809,13 @@ mod tests {
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
@@ -829,14 +826,14 @@ mod tests {
 
         // Create branch
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["branch", "specks/test-20260208-120000", "main"])
             .output()
             .expect("Failed to create branch");
 
         // Add worktree
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args([
                 "worktree",
                 "add",
@@ -862,59 +859,54 @@ mod tests {
             reused: false,
         };
 
-        save_session(&session, &temp_dir).unwrap();
+        save_session(&session, temp_dir).unwrap();
 
         // Create artifacts
-        let artifacts_path = artifacts_dir(&temp_dir, "test-20260208-120000");
+        let artifacts_path = artifacts_dir(temp_dir, "test-20260208-120000");
         let step_dir = artifacts_path.join("step-1");
         std::fs::create_dir_all(&step_dir).unwrap();
         std::fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
 
         // Verify session and artifacts exist
-        let session_file = session_file_path(&temp_dir, "test-20260208-120000");
+        let session_file = session_file_path(temp_dir, "test-20260208-120000");
         assert!(session_file.exists(), "Session file should exist");
         assert!(artifacts_path.exists(), "Artifacts should exist");
         assert!(worktree_path.exists(), "Worktree should exist");
 
         // Remove worktree
-        remove_worktree(&worktree_path, &temp_dir).unwrap();
+        remove_worktree(&worktree_path, temp_dir).unwrap();
 
         // Verify cleanup
         assert!(!session_file.exists(), "Session file should be deleted");
         assert!(!artifacts_path.exists(), "Artifacts should be deleted");
         assert!(!worktree_path.exists(), "Worktree should be deleted");
-
-        // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_remove_worktree_with_legacy_session() {
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-remove-legacy-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
-
-        // Create directory structure
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
 
         // Initialize git repo
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["init"])
             .output()
             .expect("Failed to init git repo");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
@@ -922,13 +914,13 @@ mod tests {
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
@@ -939,14 +931,14 @@ mod tests {
 
         // Create branch
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["branch", "specks/legacy-20260208-120000", "main"])
             .output()
             .expect("Failed to create branch");
 
         // Add worktree
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args([
                 "worktree",
                 "add",
@@ -976,13 +968,11 @@ mod tests {
         assert!(worktree_path.exists(), "Worktree should exist");
 
         // Remove worktree
-        remove_worktree(&worktree_path, &temp_dir).unwrap();
+        remove_worktree(&worktree_path, temp_dir).unwrap();
 
         // Verify cleanup
         assert!(!worktree_path.exists(), "Worktree should be deleted");
-
-        // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
@@ -991,30 +981,27 @@ mod tests {
             Session, SessionStatus, artifacts_dir, save_session, session_file_path,
         };
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-remove-both-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&temp_dir); // Clean up from previous tests
-
-        // Create directory structure
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
 
         // Initialize git repo
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["init"])
             .output()
             .expect("Failed to init git repo");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
@@ -1022,13 +1009,13 @@ mod tests {
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
 
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
@@ -1039,14 +1026,14 @@ mod tests {
 
         // Create branch
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args(["branch", "specks/both-20260208-120000", "main"])
             .output()
             .expect("Failed to create branch");
 
         // Add worktree
         Command::new("git")
-            .current_dir(&temp_dir)
+            .current_dir(temp_dir)
             .args([
                 "worktree",
                 "add",
@@ -1072,10 +1059,10 @@ mod tests {
             reused: false,
         };
 
-        save_session(&session, &temp_dir).unwrap();
+        save_session(&session, temp_dir).unwrap();
 
         // Create external artifacts
-        let external_artifacts = artifacts_dir(&temp_dir, "both-20260208-120000");
+        let external_artifacts = artifacts_dir(temp_dir, "both-20260208-120000");
         let external_step_dir = external_artifacts.join("step-1");
         std::fs::create_dir_all(&external_step_dir).unwrap();
         std::fs::write(external_step_dir.join("architect-output.json"), "{}").unwrap();
@@ -1091,7 +1078,7 @@ mod tests {
         std::fs::write(legacy_step_dir.join("architect-output.json"), "{}").unwrap();
 
         // Verify both exist
-        let session_file = session_file_path(&temp_dir, "both-20260208-120000");
+        let session_file = session_file_path(temp_dir, "both-20260208-120000");
         assert!(session_file.exists(), "External session should exist");
         assert!(
             external_artifacts.exists(),
@@ -1104,7 +1091,7 @@ mod tests {
         assert!(legacy_artifacts.exists(), "Legacy artifacts should exist");
 
         // Remove worktree
-        remove_worktree(&worktree_path, &temp_dir).unwrap();
+        remove_worktree(&worktree_path, temp_dir).unwrap();
 
         // Verify all cleaned up
         assert!(!session_file.exists(), "External session should be deleted");
@@ -1113,9 +1100,7 @@ mod tests {
             "External artifacts should be deleted"
         );
         assert!(!worktree_path.exists(), "Worktree should be deleted");
-
-        // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
@@ -1173,14 +1158,11 @@ mod tests {
     #[test]
     fn test_create_worktree_reuse_existing_finds_worktree() {
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-reuse-finds-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&temp_dir);
-
-        // Create directory structure
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
 
         // Initialize git repo
         Command::new("git")
@@ -1268,22 +1250,17 @@ mod tests {
         let session2 = create_worktree(&config2).unwrap();
         assert_eq!(session2.worktree_path, session1.worktree_path);
         assert_eq!(session2.branch_name, session1.branch_name);
-
-        // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_create_worktree_reuse_existing_creates_when_none_exists() {
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-reuse-creates-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&temp_dir);
-
-        // Create directory structure
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
 
         // Initialize git repo
         Command::new("git")
@@ -1360,22 +1337,17 @@ mod tests {
         let session = create_worktree(&config).unwrap();
         assert!(!session.reused);
         assert!(session.worktree_path.contains(".specks-worktrees"));
-
-        // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_create_worktree_fails_when_exists_and_no_reuse() {
         use std::process::Command;
+        use tempfile::TempDir;
 
         // Create a temporary test git repository
-        let temp_dir =
-            std::env::temp_dir().join(format!("specks-test-no-reuse-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&temp_dir);
-
-        // Create directory structure
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path().to_path_buf();
 
         // Initialize git repo
         Command::new("git")
@@ -1461,8 +1433,6 @@ mod tests {
         // Actually, the implementation doesn't fail on existing worktrees with different
         // timestamps, it only fails if the exact same path/branch exists. This is correct
         // behavior since each creation gets a unique timestamp.
-
-        // Clean up
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 }

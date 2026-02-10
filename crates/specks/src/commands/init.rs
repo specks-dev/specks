@@ -68,8 +68,13 @@ Entries are sorted newest-first.
 "#;
 
 /// Check if the project is initialized
-pub fn run_init_check(json_output: bool) -> Result<i32, String> {
-    let skeleton_path = Path::new(".specks/specks-skeleton.md");
+///
+/// # Arguments
+/// * `root` - Optional root directory (uses current directory if None)
+/// * `json_output` - Output in JSON format
+pub fn run_init_check(root: Option<&Path>, json_output: bool) -> Result<i32, String> {
+    let base = root.unwrap_or_else(|| Path::new("."));
+    let skeleton_path = base.join(".specks/specks-skeleton.md");
     let initialized = skeleton_path.exists();
 
     if json_output {
@@ -91,7 +96,7 @@ pub fn run_init_check(json_output: bool) -> Result<i32, String> {
 pub fn run_init(force: bool, check: bool, json_output: bool, quiet: bool) -> Result<i32, String> {
     // Route to check if --check flag is set
     if check {
-        return run_init_check(json_output);
+        return run_init_check(None, json_output);
     }
     let specks_dir = Path::new(".specks");
 
@@ -221,56 +226,43 @@ pub fn run_init(force: bool, check: bool, json_output: bool, quiet: bool) -> Res
 mod tests {
     use super::*;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_init_check_not_initialized() {
-        let temp = tempfile::tempdir().expect("failed to create temp dir");
-        let original_dir = std::env::current_dir().expect("failed to get current dir");
+        let temp = TempDir::new().expect("failed to create temp dir");
+        let temp_path = temp.path();
 
-        // Change to temp dir
-        std::env::set_current_dir(temp.path()).expect("failed to change dir");
-
-        let result = run_init_check(false).expect("init check should not error");
+        // No .specks directory - should return exit code 9
+        let result = run_init_check(Some(temp_path), false).expect("init check should not error");
         assert_eq!(result, 9, "should return exit code 9 for not initialized");
-
-        // Restore original dir
-        std::env::set_current_dir(original_dir).expect("failed to restore dir");
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_init_check_initialized() {
-        let temp = tempfile::tempdir().expect("failed to create temp dir");
-        let original_dir = std::env::current_dir().expect("failed to get current dir");
+        let temp = TempDir::new().expect("failed to create temp dir");
+        let temp_path = temp.path();
 
         // Create .specks directory with skeleton
-        let specks_dir = temp.path().join(".specks");
+        let specks_dir = temp_path.join(".specks");
         fs::create_dir_all(&specks_dir).expect("failed to create .specks");
         fs::write(specks_dir.join("specks-skeleton.md"), "test content")
             .expect("failed to write skeleton");
 
-        // Change to temp dir
-        std::env::set_current_dir(temp.path()).expect("failed to change dir");
-
-        let result = run_init_check(false).expect("init check should not error");
+        let result = run_init_check(Some(temp_path), false).expect("init check should not error");
         assert_eq!(result, 0, "should return exit code 0 for initialized");
-
-        // Restore original dir
-        std::env::set_current_dir(original_dir).expect("failed to restore dir");
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
     #[test]
     fn test_init_check_json_output() {
-        let temp = tempfile::tempdir().expect("failed to create temp dir");
-        let original_dir = std::env::current_dir().expect("failed to get current dir");
-
-        // Change to temp dir (not initialized)
-        std::env::set_current_dir(temp.path()).expect("failed to change dir");
+        let temp = TempDir::new().expect("failed to create temp dir");
+        let temp_path = temp.path();
 
         // Capture stdout would require more infrastructure, so we just verify it doesn't error
-        let result = run_init_check(true).expect("init check should not error");
+        let result = run_init_check(Some(temp_path), true).expect("init check should not error");
         assert_eq!(result, 9, "should return exit code 9");
-
-        // Restore original dir
-        std::env::set_current_dir(original_dir).expect("failed to restore dir");
+        // TempDir auto-cleans on drop - no manual cleanup needed
     }
 }

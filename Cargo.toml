@@ -27,5 +27,8 @@ regex = "1"
 # Directory paths
 dirs = "5"
 
+# Testing
+tempfile = "3"
+
 # Internal crates
 specks-core = { path = "crates/specks-core" }
