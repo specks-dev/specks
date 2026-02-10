@@ -785,54 +785,83 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let temp_dir = temp.path();
 
-        // Create directory structure (temp_dir already exists)
-
-        // Initialize git repo
-        Command::new("git")
+        // Initialize git repo with explicit main branch (required on Linux CI)
+        let output = Command::new("git")
             .current_dir(temp_dir)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .expect("Failed to init git repo");
+        assert!(
+            output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config email failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config name failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
+        assert!(
+            output.status.success(),
+            "git add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
+        assert!(
+            output.status.success(),
+            "git commit failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        // Create worktree directory
-        let worktree_path = temp_dir.join(".specks-worktrees/specks__test-20260208-120000");
-        std::fs::create_dir_all(&worktree_path).unwrap();
+        // Create only the parent directory - git worktree add creates the actual worktree dir
+        let worktrees_parent = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_parent).unwrap();
+        let worktree_path = worktrees_parent.join("specks__test-20260208-120000");
 
         // Create branch
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["branch", "specks/test-20260208-120000", "main"])
             .output()
             .expect("Failed to create branch");
+        assert!(
+            output.status.success(),
+            "git branch failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        // Add worktree
-        Command::new("git")
+        // Add worktree (git creates the directory)
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args([
                 "worktree",
@@ -842,6 +871,11 @@ mod tests {
             ])
             .output()
             .expect("Failed to add worktree");
+        assert!(
+            output.status.success(),
+            "git worktree add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create session with external storage
         let session = Session {
@@ -892,52 +926,83 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let temp_dir = temp.path();
 
-        // Initialize git repo
-        Command::new("git")
+        // Initialize git repo with explicit main branch (required on Linux CI)
+        let output = Command::new("git")
             .current_dir(temp_dir)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .expect("Failed to init git repo");
+        assert!(
+            output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config email failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config name failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
+        assert!(
+            output.status.success(),
+            "git add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
+        assert!(
+            output.status.success(),
+            "git commit failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        // Create worktree directory
-        let worktree_path = temp_dir.join(".specks-worktrees/specks__legacy-20260208-120000");
-        std::fs::create_dir_all(&worktree_path).unwrap();
+        // Create only the parent directory - git worktree add creates the actual worktree dir
+        let worktrees_parent = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_parent).unwrap();
+        let worktree_path = worktrees_parent.join("specks__legacy-20260208-120000");
 
         // Create branch
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["branch", "specks/legacy-20260208-120000", "main"])
             .output()
             .expect("Failed to create branch");
+        assert!(
+            output.status.success(),
+            "git branch failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        // Add worktree
-        Command::new("git")
+        // Add worktree (git creates the directory)
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args([
                 "worktree",
@@ -947,6 +1012,11 @@ mod tests {
             ])
             .output()
             .expect("Failed to add worktree");
+        assert!(
+            output.status.success(),
+            "git worktree add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create legacy internal session at old location
         let legacy_specks_dir = worktree_path.join(".specks");
@@ -987,52 +1057,83 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let temp_dir = temp.path();
 
-        // Initialize git repo
-        Command::new("git")
+        // Initialize git repo with explicit main branch (required on Linux CI)
+        let output = Command::new("git")
             .current_dir(temp_dir)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .expect("Failed to init git repo");
+        assert!(
+            output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config email failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config name failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
+        assert!(
+            output.status.success(),
+            "git add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
+        assert!(
+            output.status.success(),
+            "git commit failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        // Create worktree directory
-        let worktree_path = temp_dir.join(".specks-worktrees/specks__both-20260208-120000");
-        std::fs::create_dir_all(&worktree_path).unwrap();
+        // Create only the parent directory - git worktree add creates the actual worktree dir
+        let worktrees_parent = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_parent).unwrap();
+        let worktree_path = worktrees_parent.join("specks__both-20260208-120000");
 
         // Create branch
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args(["branch", "specks/both-20260208-120000", "main"])
             .output()
             .expect("Failed to create branch");
+        assert!(
+            output.status.success(),
+            "git branch failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        // Add worktree
-        Command::new("git")
+        // Add worktree (git creates the directory)
+        let output = Command::new("git")
             .current_dir(temp_dir)
             .args([
                 "worktree",
@@ -1042,6 +1143,11 @@ mod tests {
             ])
             .output()
             .expect("Failed to add worktree");
+        assert!(
+            output.status.success(),
+            "git worktree add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create external session
         let session = Session {
@@ -1164,38 +1270,63 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let temp_dir = temp.path().to_path_buf();
 
-        // Initialize git repo
-        Command::new("git")
+        // Initialize git repo with explicit main branch (required on Linux CI)
+        let output = Command::new("git")
             .current_dir(&temp_dir)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .expect("Failed to init git repo");
+        assert!(
+            output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config email failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config name failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
+        assert!(
+            output.status.success(),
+            "git add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
+        assert!(
+            output.status.success(),
+            "git commit failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create speck file with valid execution step format
         let specks_dir = temp_dir.join(".specks");
@@ -1262,38 +1393,63 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let temp_dir = temp.path().to_path_buf();
 
-        // Initialize git repo
-        Command::new("git")
+        // Initialize git repo with explicit main branch (required on Linux CI)
+        let output = Command::new("git")
             .current_dir(&temp_dir)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .expect("Failed to init git repo");
+        assert!(
+            output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config email failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config name failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
+        assert!(
+            output.status.success(),
+            "git add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
+        assert!(
+            output.status.success(),
+            "git commit failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create speck file with valid execution step format
         let specks_dir = temp_dir.join(".specks");
@@ -1349,38 +1505,63 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let temp_dir = temp.path().to_path_buf();
 
-        // Initialize git repo
-        Command::new("git")
+        // Initialize git repo with explicit main branch (required on Linux CI)
+        let output = Command::new("git")
             .current_dir(&temp_dir)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .expect("Failed to init git repo");
+        assert!(
+            output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["config", "user.email", "test@example.com"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config email failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["config", "user.name", "Test User"])
             .output()
             .expect("Failed to configure git");
+        assert!(
+            output.status.success(),
+            "git config name failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create initial commit
         std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["add", "README.md"])
             .output()
             .expect("Failed to add README");
+        assert!(
+            output.status.success(),
+            "git add failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&temp_dir)
             .args(["commit", "-m", "Initial commit"])
             .output()
             .expect("Failed to commit");
+        assert!(
+            output.status.success(),
+            "git commit failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         // Create speck file with valid execution step format
         let specks_dir = temp_dir.join(".specks");
