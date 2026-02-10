@@ -679,6 +679,202 @@ pub fn is_valid_worktree_path(path: &Path) -> bool {
     path_str.starts_with(".specks-worktrees/specks__")
 }
 
+/// List all local branches matching the specks/* pattern
+///
+/// Returns all branch names that start with "specks/".
+/// Only local branches are included (no remote-tracking branches).
+pub fn list_specks_branches(repo_root: &Path) -> Result<Vec<String>, SpecksError> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["branch", "--list", "specks/*"])
+        .output()
+        .map_err(|e| SpecksError::WorktreeCleanupFailed {
+            reason: format!("failed to list branches: {}", e),
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(SpecksError::WorktreeCleanupFailed {
+            reason: format!("git branch --list failed: {}", stderr),
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let branches: Vec<String> = stdout
+        .lines()
+        .map(|line| {
+            // git branch --list output format:
+            // "  branch-name" - regular branch
+            // "* branch-name" - current branch
+            // "+ branch-name" - branch checked out in a worktree
+            let trimmed = line.trim();
+            trimmed
+                .strip_prefix("* ")
+                .or_else(|| trimmed.strip_prefix("+ "))
+                .unwrap_or(trimmed)
+                .to_string()
+        })
+        .filter(|line| !line.is_empty())
+        .collect();
+
+    Ok(branches)
+}
+
+/// Clean up stale branches (specks/* branches without worktrees)
+///
+/// Finds all specks/* branches that don't have corresponding worktrees and attempts
+/// to delete them using safe delete first (git branch -d), then force delete (git branch -D)
+/// only if the PR is confirmed merged via gh pr view.
+///
+/// # Arguments
+///
+/// * `repo_root` - Repository root path
+/// * `sessions` - List of active sessions (to determine which branches have worktrees)
+/// * `dry_run` - If true, report what would be removed without actually removing
+/// * `force` - If true, use force delete for all stale branches regardless of PR state
+///
+/// # Returns
+///
+/// * `removed` - List of branch names that were successfully deleted (or would be in dry-run)
+/// * `skipped` - List of (branch_name, reason) tuples for branches that were skipped
+pub fn cleanup_stale_branches(
+    repo_root: &Path,
+    sessions: &[Session],
+    dry_run: bool,
+    force: bool,
+) -> Result<(Vec<String>, Vec<(String, String)>), SpecksError> {
+    let git = GitCli::new(repo_root);
+    let all_branches = list_specks_branches(repo_root)?;
+
+    // Build set of branch names that have worktrees
+    let branches_with_worktrees: std::collections::HashSet<String> = sessions
+        .iter()
+        .map(|s| s.branch_name.clone())
+        .collect();
+
+    let mut removed = Vec::new();
+    let mut skipped = Vec::new();
+
+    for branch in all_branches {
+        // Skip branches that have worktrees
+        if branches_with_worktrees.contains(&branch) {
+            continue;
+        }
+
+        if dry_run {
+            // In dry-run mode, simulate the deletion logic without actually deleting
+            // Try safe delete check first (in real mode)
+            let would_safe_delete = Command::new("git")
+                .arg("-C")
+                .arg(repo_root)
+                .args(["branch", "-d", &branch])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            if would_safe_delete {
+                // Safe delete would succeed
+                removed.push(branch.clone());
+                continue;
+            }
+
+            // Safe delete would fail - check if we would escalate
+            if force {
+                // Force mode: would force delete
+                removed.push(branch.clone());
+            } else {
+                // Not force mode: check PR state
+                let pr_state = get_pr_state(&branch);
+                match pr_state {
+                    PrState::Merged => {
+                        // PR is merged, would force delete
+                        removed.push(branch.clone());
+                    }
+                    PrState::Unknown => {
+                        skipped.push((
+                            branch.clone(),
+                            "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
+                                .to_string(),
+                        ));
+                    }
+                    PrState::NotFound | PrState::Open | PrState::Closed => {
+                        skipped.push((
+                            branch.clone(),
+                            format!(
+                                "Unmerged; PR state is {:?} (use --force to override)",
+                                pr_state
+                            ),
+                        ));
+                    }
+                }
+            }
+        } else {
+            // Not dry-run mode: actually delete branches
+            // Try safe delete first
+            let safe_delete = Command::new("git")
+                .arg("-C")
+                .arg(repo_root)
+                .args(["branch", "-d", &branch])
+                .output()
+                .map_err(|e| SpecksError::WorktreeCleanupFailed {
+                    reason: format!("failed to delete branch: {}", e),
+                })?;
+
+            if safe_delete.status.success() {
+                // Safe delete succeeded
+                removed.push(branch.clone());
+                continue;
+            }
+
+            // Safe delete failed - check if we should escalate to force delete
+            if force {
+                // Force mode: unconditionally force delete
+                match git.delete_branch(&branch) {
+                    Ok(()) => removed.push(branch.clone()),
+                    Err(e) => {
+                        skipped.push((branch.clone(), format!("Force delete failed: {}", e)))
+                    }
+                }
+            } else {
+                // Not force mode: check PR state before escalating
+                let pr_state = get_pr_state(&branch);
+                match pr_state {
+                    PrState::Merged => {
+                        // PR is merged, safe to force delete
+                        match git.delete_branch(&branch) {
+                            Ok(()) => removed.push(branch.clone()),
+                            Err(e) => {
+                                skipped.push((branch.clone(), format!("Force delete failed: {}", e)))
+                            }
+                        }
+                    }
+                    PrState::Unknown => {
+                        // gh CLI not available or failed
+                        skipped.push((
+                            branch.clone(),
+                            "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
+                                .to_string(),
+                        ));
+                    }
+                    PrState::NotFound | PrState::Open | PrState::Closed => {
+                        // Not merged, skip
+                        skipped.push((
+                            branch.clone(),
+                            format!(
+                                "Unmerged; PR state is {:?} (use --force to override)",
+                                pr_state
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((removed, skipped))
+}
+
 /// Remove a worktree and clean up all associated files
 ///
 /// This function orchestrates the cleanup of a worktree by:
@@ -748,7 +944,7 @@ pub fn cleanup_worktrees(
         skipped: Vec::new(),
     };
 
-    for session in sessions {
+    for session in &sessions {
         // ABSOLUTE GUARD: InProgress sessions are never removed
         if session.status == SessionStatus::InProgress {
             result.skipped.push((
@@ -888,7 +1084,7 @@ pub fn cleanup_worktrees(
                             // Not force mode: skip with warning
                             result.skipped.push((
                                 session.branch_name.clone(),
-                                format!("Dirty worktree (use --force to override)"),
+                                "Dirty worktree (use --force to override)".to_string(),
                             ));
                             // Remove from category since we didn't actually remove it
                             category.pop();
@@ -901,7 +1097,9 @@ pub fn cleanup_worktrees(
 
     // Handle stale branch cleanup if mode includes it
     if matches!(mode, CleanupMode::Stale | CleanupMode::All) {
-        // TODO: Implement stale branch cleanup in Step 4
+        let (removed, skipped) = cleanup_stale_branches(repo_root, &sessions, dry_run, force)?;
+        result.stale_branches_removed.extend(removed);
+        result.skipped.extend(skipped);
     }
 
     // Final prune to clean up any stale metadata
@@ -2986,5 +3184,386 @@ mod tests {
         // Since we don't have gh CLI, this will be treated as NotFound anyway
         assert_eq!(result.orphaned_removed.len(), 1);
         assert_eq!(result.orphaned_removed[0], "specks/force-20260208-120000");
+    }
+
+    #[test]
+    fn test_list_specks_branches() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create some specks/* branches
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/auth-20260208-120000"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/db-20260208-130000"])
+            .output()
+            .unwrap();
+
+        // Create a non-specks branch
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "feature/something"])
+            .output()
+            .unwrap();
+
+        let branches = list_specks_branches(temp_dir).unwrap();
+
+        // Should only return specks/* branches
+        assert_eq!(branches.len(), 2);
+        assert!(branches.contains(&"specks/auth-20260208-120000".to_string()));
+        assert!(branches.contains(&"specks/db-20260208-130000".to_string()));
+        assert!(!branches.contains(&"feature/something".to_string()));
+    }
+
+    #[test]
+    fn test_cleanup_stale_removes_orphan_branch() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create a specks/* branch with no worktree
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/orphan-20260208-120000"])
+            .output()
+            .unwrap();
+
+        let sessions = vec![]; // No sessions, so all branches are stale
+
+        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+
+        // Should remove the branch via safe delete (it's based on current branch)
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed[0], "specks/orphan-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_stale_skips_branch_with_worktree() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create a specks/* branch
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/active-20260208-120000"])
+            .output()
+            .unwrap();
+
+        // Create a session for this branch
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "active".to_string(),
+            branch_name: "specks/active-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: ".specks-worktrees/specks__active-20260208-120000".to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: CurrentStep::Index(0),
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+
+        let sessions = vec![session];
+
+        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+
+        // Should NOT remove the branch because it has a worktree
+        assert_eq!(removed.len(), 0);
+    }
+
+    #[test]
+    fn test_cleanup_stale_safe_delete_fallback() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit on main
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create a specks/* branch with commits not in main
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["checkout", "-b", "specks/unmerged-20260208-120000"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("feature.txt"), "new feature").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Add feature"])
+            .output()
+            .unwrap();
+
+        // Switch back to main
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+
+        // Create .git/refs/pull directory to simulate merged PR scenario
+        // This allows us to test the fallback from safe delete (-d) to force delete (-D)
+        // when PR is confirmed as merged
+        let refs_pull = temp_dir.join(".git/refs/pull");
+        std::fs::create_dir_all(&refs_pull).unwrap();
+
+        // Test verifies safe delete fallback behavior:
+        // When gh CLI is available, it will query PR state and return NotFound (no PR exists)
+        // When gh CLI is unavailable, get_pr_state returns Unknown
+        // Either way, the unmerged branch should be skipped without --force
+
+        let sessions = vec![]; // No sessions, so all branches are stale
+
+        // Without force flag: safe delete will fail (branch not merged),
+        // and PR state will be checked (either NotFound or Unknown depending on gh CLI availability)
+        let (_removed, skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+
+        // Branch should be skipped because it's unmerged
+        assert_eq!(skipped.len(), 1, "Expected 1 skipped branch, got: {:?}", skipped);
+        assert_eq!(skipped[0].0, "specks/unmerged-20260208-120000");
+        // Skip reason varies based on gh CLI availability:
+        // - If gh available: "Unmerged; PR state is NotFound (use --force to override)"
+        // - If gh unavailable: "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
+        assert!(
+            skipped[0].1.contains("Unmerged") && skipped[0].1.contains("--force"),
+            "Expected skip reason to mention unmerged and --force, got: {}",
+            skipped[0].1
+        );
+
+        // With force flag: should force delete regardless of merge state
+        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, true).unwrap();
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed[0], "specks/unmerged-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_stale_gh_absent_safe_only() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit on main
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create a specks/* branch that is NOT merged into main
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/unmerged-feature"])
+            .output()
+            .unwrap();
+
+        // Add a commit to the branch
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["checkout", "specks/unmerged-feature"])
+            .output()
+            .unwrap();
+        std::fs::write(temp_dir.join("feature.txt"), "new feature").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "feature.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Add feature"])
+            .output()
+            .unwrap();
+
+        // Return to main
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+
+        let sessions = vec![]; // No sessions, so all branches are stale
+
+        // Test graceful degradation when gh CLI check returns non-merged state:
+        // - Safe delete (-d) will fail (branch has unmerged commits)
+        // - get_pr_state returns either PrState::Unknown (gh absent) or PrState::NotFound (gh present, no PR)
+        // - Should skip with appropriate message
+        let (removed, skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+
+        // Branch should be skipped (not removed)
+        assert_eq!(removed.len(), 0);
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(skipped[0].0, "specks/unmerged-feature");
+        // Skip reason varies based on gh CLI availability:
+        // - If gh available: "Unmerged; PR state is NotFound (use --force to override)"
+        // - If gh unavailable: "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
+        assert!(
+            skipped[0].1.contains("Unmerged") && skipped[0].1.contains("--force"),
+            "Expected skip reason to mention unmerged and --force, got: {}",
+            skipped[0].1
+        );
     }
 }

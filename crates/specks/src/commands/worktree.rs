@@ -49,7 +49,7 @@ pub enum WorktreeCommands {
     ///
     /// Cleans up worktrees based on PR state and session status.
     #[command(
-        long_about = "Remove worktrees based on cleanup mode.\n\nModes:\n  --merged: Remove worktrees with merged PRs\n  --orphaned: Remove worktrees with no PR (not InProgress)\n  --all: Remove all eligible worktrees (merged + orphaned + closed)\n\nUse --dry-run to preview what would be removed.\nUse --force to override PR state unknown skips.\n\nInProgress sessions are always protected."
+        long_about = "Remove worktrees based on cleanup mode.\n\nModes:\n  --merged: Remove worktrees with merged PRs\n  --orphaned: Remove worktrees with no PR (not InProgress)\n  --stale: Remove specks/* branches without worktrees\n  --all: Remove all eligible worktrees (merged + orphaned + closed + stale branches)\n\nUse --dry-run to preview what would be removed.\nUse --force to override PR state unknown skips and force-delete stale branches.\n\nInProgress sessions are always protected."
     )]
     Cleanup {
         /// Only remove merged worktrees
@@ -60,7 +60,11 @@ pub enum WorktreeCommands {
         #[arg(long)]
         orphaned: bool,
 
-        /// Remove all eligible worktrees (merged + orphaned + closed)
+        /// Only remove stale branches (specks/* branches without worktrees)
+        #[arg(long)]
+        stale: bool,
+
+        /// Remove all eligible worktrees (merged + orphaned + closed + stale branches)
         #[arg(long)]
         all: bool,
 
@@ -530,6 +534,7 @@ pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> 
 pub fn run_worktree_cleanup(
     merged: bool,
     orphaned: bool,
+    stale: bool,
     all: bool,
     dry_run: bool,
     force: bool,
@@ -541,6 +546,8 @@ pub fn run_worktree_cleanup(
     // Determine cleanup mode
     let mode = if all {
         CleanupMode::All
+    } else if stale {
+        CleanupMode::Stale
     } else if orphaned {
         CleanupMode::Orphaned
     } else if merged {
@@ -565,13 +572,15 @@ pub fn run_worktree_cleanup(
                     serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
                 );
             } else if !quiet {
-                let total_removed = result.merged_removed.len() + result.orphaned_removed.len();
+                let total_removed = result.merged_removed.len()
+                    + result.orphaned_removed.len()
+                    + result.stale_branches_removed.len();
 
                 if dry_run {
                     if total_removed == 0 {
-                        println!("No worktrees to remove");
+                        println!("No worktrees or branches to remove");
                     } else {
-                        println!("Would remove {} worktree(s):", total_removed);
+                        println!("Would remove {} item(s):", total_removed);
                         if !result.merged_removed.is_empty() {
                             println!("\nMerged PRs:");
                             for branch in &result.merged_removed {
@@ -584,11 +593,17 @@ pub fn run_worktree_cleanup(
                                 println!("  - {}", branch);
                             }
                         }
+                        if !result.stale_branches_removed.is_empty() {
+                            println!("\nStale branches (no worktree):");
+                            for branch in &result.stale_branches_removed {
+                                println!("  - {}", branch);
+                            }
+                        }
                     }
                 } else if total_removed == 0 {
-                    println!("No worktrees removed");
+                    println!("No worktrees or branches removed");
                 } else {
-                    println!("Removed {} worktree(s):", total_removed);
+                    println!("Removed {} item(s):", total_removed);
                     if !result.merged_removed.is_empty() {
                         println!("\nMerged PRs:");
                         for branch in &result.merged_removed {
@@ -601,10 +616,16 @@ pub fn run_worktree_cleanup(
                             println!("  - {}", branch);
                         }
                     }
+                    if !result.stale_branches_removed.is_empty() {
+                        println!("\nStale branches (no worktree):");
+                        for branch in &result.stale_branches_removed {
+                            println!("  - {}", branch);
+                        }
+                    }
                 }
 
                 if !result.skipped.is_empty() {
-                    println!("\nSkipped {} worktree(s):", result.skipped.len());
+                    println!("\nSkipped {} item(s):", result.skipped.len());
                     for (branch, reason) in &result.skipped {
                         println!("  - {}: {}", branch, reason);
                     }
