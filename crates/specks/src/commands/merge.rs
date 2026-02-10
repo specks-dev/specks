@@ -375,13 +375,11 @@ fn check_main_sync() -> Result<(), String> {
 /// or other detached checkout. This is required for merge operations.
 ///
 /// # Returns
-/// * `Ok(())` - Current directory is the main worktree
+/// * `Ok(())` - Specified directory is the main worktree on main/master branch
 /// * `Err(String)` - Not in main worktree (provides actionable error message)
-fn is_main_worktree() -> Result<(), String> {
-    use std::path::Path;
-
+fn is_main_worktree(repo_root: &std::path::Path) -> Result<(), String> {
     // Check if .git is a directory (not a file, which indicates a worktree)
-    let git_path = Path::new(".git");
+    let git_path = repo_root.join(".git");
     if !git_path.exists() {
         return Err("Not in a git repository (no .git directory found)".to_string());
     }
@@ -395,6 +393,8 @@ fn is_main_worktree() -> Result<(), String> {
 
     // Verify we're on the expected branch (main or master)
     let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .output()
         .map_err(|e| format!("Failed to check current branch: {}", e))?;
@@ -518,7 +518,7 @@ pub fn run_merge(
     quiet: bool,
 ) -> Result<i32, String> {
     // Step 0: Validate that we're running from the main worktree
-    if let Err(e) = is_main_worktree() {
+    if let Err(e) = is_main_worktree(std::path::Path::new(".")) {
         let data = MergeData {
             status: "error".to_string(),
             pr_url: None,
@@ -2013,14 +2013,8 @@ mod tests {
             .output()
             .expect("Failed to commit");
 
-        // Change to the temp directory and run the check
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        let result = is_main_worktree();
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        // Run the check with the temp directory path
+        let result = is_main_worktree(temp_path);
 
         // Should succeed - this is a main worktree with .git directory
         assert!(
@@ -2092,14 +2086,8 @@ mod tests {
             .output()
             .expect("Failed to create worktree");
 
-        // Change to the worktree directory and run the check
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&worktree_path).unwrap();
-
-        let result = is_main_worktree();
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        // Run the check with the worktree path
+        let result = is_main_worktree(&worktree_path);
 
         // Should fail - this is a worktree, not main repository
         assert!(result.is_err(), "Expected worktree check to fail");
@@ -2166,14 +2154,8 @@ mod tests {
             .output()
             .expect("Failed to create feature branch");
 
-        // Change to the temp directory and run the check
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        let result = is_main_worktree();
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        // Run the check with the temp directory path
+        let result = is_main_worktree(temp_path);
 
         // Should fail - we're on feature-branch, not main
         assert!(
@@ -2202,14 +2184,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        // Change to the temp directory and run the check
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        let result = is_main_worktree();
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        // Run the check with the temp directory path
+        let result = is_main_worktree(temp_path);
 
         // Should fail - no git repository
         assert!(result.is_err(), "Expected no git directory check to fail");
