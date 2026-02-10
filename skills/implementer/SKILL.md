@@ -1,51 +1,58 @@
 ---
 name: implementer
 description: Orchestrates the implementation workflow - spawns sub-agents via Task
-allowed-tools: Task, Skill, AskUserQuestion, Read, Write, Edit, Bash, Grep, Glob
+allowed-tools: Task, AskUserQuestion, Bash, Read, Grep, Glob, Write, Edit, WebFetch, WebSearch
+hooks:
+  PreToolUse:
+    - matcher: "Bash|Write|Edit"
+      hooks:
+        - type: command
+          command: "echo 'Orchestrator must delegate via Task, not use tools directly' >&2; exit 2"
 ---
 
-## CRITICAL: You Are an Orchestrator
+## CRITICAL: You Are a Pure Orchestrator
 
-**YOUR TOOLS:** `Task`, `Skill`, `AskUserQuestion`, `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`.
+**YOUR TOOLS:** `Task` and `AskUserQuestion` ONLY. You have no other tools. You cannot read files, write files, edit files, or run commands. Everything happens through agents you spawn via `Task`.
 
-**You use these for:**
-- `Skill` — invoking inline skills (setup, commit/publish)
-- `Task` — spawning coder and reviewer agents
-- `AskUserQuestion` — getting user decisions
-- `Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob` — inline setup, session management, commit operations
-
-**FIRST ACTION:** Your very first tool call MUST be `Skill` with `specks:implementer-setup-inline`. No exceptions.
+**FIRST ACTION:** Your very first tool call MUST be `Task` with `specks:implementer-setup-agent`. No exceptions.
 
 **FORBIDDEN:**
-- Implementing code directly (coder agent does this)
-- Analyzing the speck yourself (coder agent does this)
+- Reading, writing, editing, or creating ANY files
+- Running ANY shell commands
+- Implementing code (the coder-agent does this)
+- Analyzing the speck yourself (the architect-agent does this)
 - Spawning planning agents (clarifier, author, critic)
+- Using any tool other than Task and AskUserQuestion
 
-**GOAL:** Execute speck steps by orchestrating: inline setup → coder agent → reviewer agent → inline commit.
+**YOUR ENTIRE JOB:** Spawn agents in sequence, parse their JSON output, pass data between them, and ask the user questions when needed.
+
+**GOAL:** Execute speck steps by orchestrating: setup → architect → coder → reviewer → committer.
 
 ---
 
 ## Orchestration Loop
 
 ```
-  Skill: implementer-setup-inline (inline, one-shot)
+  Task: implementer-setup-agent (FRESH spawn, one time)
        │
        ├── error ──► HALT with error
        │
-       ├── needs_clarification ──► AskUserQuestion ──► re-run setup inline
+       ├── needs_clarification ──► AskUserQuestion ──► re-run setup agent
        │
        └── ready (worktree_path, branch_name, base_branch, resolved_steps, bead_mapping)
-              │
-              ▼
-       Create session: .specks-worktrees/.sessions/<session-id>.json at repo root
               │
               ▼
        ┌─────────────────────────────────────────────────────────────────┐
        │              FOR EACH STEP in resolved_steps                    │
        │  ┌───────────────────────────────────────────────────────────┐  │
        │  │                                                           │  │
-       │  │  Task: coder-agent (FRESH spawn)                          │  │
-       │  │  → get coder_agent_id                                     │  │
+       │  │  Step 0: SPAWN architect-agent (FRESH) → architect_id     │  │
+       │  │  Step N: RESUME architect_id                              │  │
+       │  │           │                                               │  │
+       │  │           ▼  (strategy)                                   │  │
+       │  │                                                           │  │
+       │  │  Step 0: SPAWN coder-agent (FRESH) → coder_id             │  │
+       │  │  Step N: RESUME coder_id                                  │  │
        │  │           │                                               │  │
        │  │           ▼                                               │  │
        │  │    Drift Check                                            │  │
@@ -54,133 +61,158 @@ allowed-tools: Task, Skill, AskUserQuestion, Read, Write, Edit, Bash, Grep, Glob
        │  │  ┌─────────────────────────────────────────────────┐      │  │
        │  │  │         REVIEW LOOP (max 3 retries)             │      │  │
        │  │  │                                                 │      │  │
-       │  │  │  Task: reviewer-agent (FRESH spawn first time)  │      │  │
-       │  │  │  → get reviewer_agent_id                        │      │  │
+       │  │  │  Step 0: SPAWN reviewer-agent → reviewer_id     │      │  │
+       │  │  │  Step N: RESUME reviewer_id                     │      │  │
        │  │  │         │                                       │      │  │
-       │  │  │    REVISE? ──► Task: RESUME coder_agent_id      │      │  │
-       │  │  │                  ──► Task: RESUME reviewer_id   │      │  │
+       │  │  │    REVISE? ──► RESUME coder_id                  │      │  │
+       │  │  │                  ──► RESUME reviewer_id         │      │  │
        │  │  │         │                                       │      │  │
        │  │  │      APPROVE                                    │      │  │
        │  │  └─────────────────────────────────────────────────┘      │  │
        │  │           │                                               │  │
        │  │           ▼                                               │  │
-       │  │  Skill: committer-inline (commit mode)                    │  │
+       │  │  Step 0: SPAWN committer-agent → committer_id             │  │
+       │  │  Step N: RESUME committer_id                              │  │
        │  │     ├─► update log + stage + commit + close bead          │  │
        │  │     └─► collect step summary                              │  │
        │  │                                                           │  │
        │  └───────────────────────────────────────────────────────────┘  │
        │                           │                                     │
        │                           ▼                                     │
-       │                    Next step or done                            │
-       │           (new coder_agent_id + reviewer_agent_id per step)     │
+       │                    Next step (all agents RESUMED)               │
        └─────────────────────────────────────────────────────────────────┘
               │
               ▼
-       Skill: committer-inline (publish mode)
+       RESUME committer_id (publish mode)
               ├─► push branch
               ├─► create PR with step_summaries
               └─► return PR URL
-              │
-              ▼
-       Update session.json: status = "completed"
 ```
 
-**Key changes from previous architecture:**
-- Setup runs inline (no subagent spawn)
-- Architect + coder merged into single coder agent (1 spawn instead of 2)
-- Coder and reviewer use Task-Resumed for retry loops (faster than fresh spawns)
-- Commit/publish runs inline (no subagent spawn)
-- Per step: 2 fresh agent spawns + resumes for retries (was 4 fresh spawns minimum)
+**Architecture principles:**
+- Orchestrator is a pure dispatcher: `Task` + `AskUserQuestion` only
+- All file I/O, git operations, and code execution happen in subagents
+- **Persistent agents**: architect, coder, reviewer, committer are each spawned ONCE (during step 0) and RESUMED for all subsequent steps
+- Auto-compaction handles context overflow — agents compact at ~95% capacity
+- Agents accumulate cross-step knowledge: codebase structure, files created, patterns established
+- Architect does read-only strategy; coder receives strategy and implements
+- Task-Resumed for retry loops AND across steps (same agent IDs throughout session)
 
 ---
 
 ## Execute This Sequence
 
-### 1. Inline Setup
+### 1. Spawn Setup Agent
 
 ```
-Skill(
-  skill: "specks:implementer-setup-inline",
-  args: '{"speck_path": "<path>", "user_input": "<raw user text or null>", "user_answers": null}'
+Task(
+  subagent_type: "specks:implementer-setup-agent",
+  prompt: '{"speck_path": "<path>", "user_input": "<raw user text or null>", "user_answers": null}',
+  description: "Initialize implementation session"
 )
 ```
 
-This runs inline — you execute the setup procedure directly. After completion, you'll have in memory:
-- `worktree_path`, `branch_name`, `base_branch`
-- `all_steps`, `completed_steps`, `remaining_steps`, `next_step`
-- `resolved_steps`
-- `root_bead`, `bead_mapping`
-- `beads_committed`
+Parse the setup agent's JSON response. Extract all fields from the output contract.
 
 ### 2. Handle Setup Result
 
-**If error:** Report the error to the user and HALT. Do NOT attempt to fix anything yourself.
+**If `status == "error"`:** Report the error to the user and HALT.
 
-**If needs_clarification:** Use `AskUserQuestion` with the appropriate clarification template, then re-run the setup inline with the user's answer.
+**If `status == "needs_clarification"`:** Use `AskUserQuestion` with the template from the agent's `clarification_needed` field, then re-run the setup agent with the user's answer:
 
-**If ready:**
+```
+Task(
+  subagent_type: "specks:implementer-setup-agent",
+  prompt: '{"speck_path": "<path>", "user_input": null, "user_answers": <user answers>}',
+  description: "Re-run setup with user answers"
+)
+```
+
+**If `status == "ready"`:**
 - If `resolved_steps` is empty: report "All steps already complete." and HALT
-- Otherwise proceed to create session
+- Otherwise proceed to the step loop
 
-### 3. Create Session
+Store in memory: `worktree_path`, `branch_name`, `base_branch`, `resolved_steps`, `bead_mapping`, `root_bead`, `session.session_id`, `session.session_file`, `session.artifacts_base`
 
-1. Derive session ID from worktree directory name by stripping the `specks__` prefix:
-   ```
-   Worktree: .specks-worktrees/specks__auth-20260208-143022/
-   Session ID: auth-20260208-143022
-   ```
+### 3. For Each Step in `resolved_steps`
 
-2. Write `.specks-worktrees/.sessions/<session-id>.json` at repo root:
-   ```json
-   {
-     "session_id": "<session-id>",
-     "speck_path": "<path>",
-     "worktree_path": "<worktree_path>",
-     "branch_name": "<branch_name>",
-     "base_branch": "<base_branch>",
-     "status": "in_progress",
-     "created_at": "<ISO timestamp>",
-     "last_updated_at": "<ISO timestamp>",
-     "current_step": "<first step>",
-     "steps_completed": [],
-     "steps_remaining": ["#step-X", "#step-Y", ...],
-     "root_bead": "<root-bead-id>",
-     "bead_mapping": { "#step-0": "bd-xxx", "#step-1": "bd-yyy" }
-   }
-   ```
+Initialize once (persists across all steps):
+- `architect_id = null`
+- `coder_id = null`
+- `reviewer_id = null`
+- `committer_id = null`
+- `step_summaries = []`
 
-   **IMPORTANT:** Session file is stored at repo root in `.specks-worktrees/.sessions/`, NOT inside the worktree.
+Initialize per step: `reviewer_attempts = 0`
 
-### 4. For Each Step in `resolved_steps`
+#### 3a. Architect: Plan Strategy
 
-Initialize per step: `revision_feedback = null`, `reviewer_attempts = 0`, `coder_agent_id = null`, `reviewer_agent_id = null`
+Construct `artifact_dir` as `<artifacts_base>/step-N` (e.g., `step-0`, `step-1`).
 
-Collect across steps: `step_summaries = []`
+**First step (architect_id is null) — FRESH spawn:**
 
-#### 4a. Step Preparation
+```
+Task(
+  subagent_type: "specks:architect-agent",
+  prompt: '{
+    "worktree_path": "<worktree_path>",
+    "speck_path": "<path>",
+    "step_anchor": "#step-0",
+    "all_steps": ["#step-0", "#step-1", ...],
+    "artifact_dir": "<artifacts_base>/step-0"
+  }',
+  description: "Plan strategy for step 0"
+)
+```
 
-1. Create step artifact directory: `.specks-worktrees/.artifacts/<session-id>/step-N/` at repo root
-2. Read bead ID: `bead_id = bead_mapping[step_anchor]`
-3. **Validate bead ID**: If missing or null, HALT with error
-4. Update session JSON with `current_step`
+**Save the `agentId` as `architect_id`.**
 
-#### 4b. Spawn Coder (FRESH for each new step)
+**Subsequent steps — RESUME:**
+
+```
+Task(
+  resume: "<architect_id>",
+  prompt: 'Plan strategy for step #step-N. Previous step accomplished: <step_summary>. Artifact dir: <artifacts_base>/step-N.',
+  description: "Plan strategy for step N"
+)
+```
+
+Parse the architect's JSON output. Extract `approach`, `expected_touch_set`, `implementation_steps`, `test_plan`, `risks`. If `risks` contains an error message (empty `approach`), report and HALT.
+
+#### 3b. Coder: Implement Strategy
+
+**First step (coder_id is null) — FRESH spawn:**
 
 ```
 Task(
   subagent_type: "specks:coder-agent",
-  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "revision_feedback": null, "worktree_path": "<worktree_path>", "session_id": "<session-id>"}',
-  description: "Plan and implement step N"
+  prompt: '{
+    "worktree_path": "<worktree_path>",
+    "speck_path": "<path>",
+    "step_anchor": "#step-0",
+    "strategy": <architect output JSON>,
+    "session_id": "<session_id>",
+    "artifact_dir": "<artifacts_base>/step-0"
+  }',
+  description: "Implement step 0"
 )
 ```
 
-**Save the `agentId` from the response as `coder_agent_id`.** This is critical for Task-Resumed on retries.
+**Save the `agentId` as `coder_id`.**
 
-Save the coder output to `.specks-worktrees/.artifacts/<session-id>/step-N/coder-output.json` at repo root.
+**Subsequent steps — RESUME:**
 
-If the coder returns critical risks in `strategy.risks`, use AskUserQuestion to confirm proceeding.
+```
+Task(
+  resume: "<coder_id>",
+  prompt: 'Implement step #step-N. Strategy: <architect output JSON>. Artifact dir: <artifacts_base>/step-N.',
+  description: "Implement step N"
+)
+```
 
-#### 4c. Drift Check
+Parse the coder's JSON output. If `success == false` and `halted_for_drift == false`, report error and HALT.
+
+#### 3c. Drift Check
 
 Evaluate `drift_assessment.drift_severity` from coder output:
 
@@ -190,43 +222,60 @@ Evaluate `drift_assessment.drift_severity` from coder output:
 | `moderate` | AskUserQuestion: "Moderate drift detected. Continue, revise, or abort?" |
 | `major` | AskUserQuestion: "Major drift detected. Revise strategy or abort?" |
 
-- If **Revise**: set `revision_feedback` to the drift assessment details, **GO TO 4b-resume** (see below)
-- If **Abort**: update session to failed, HALT
+- If **Revise**: resume coder with feedback (see 3c-resume below)
+- If **Abort**: HALT
 - If **Continue**: proceed to review
 
-**4b-resume (drift revision):** Resume the coder with feedback:
+**3c-resume (drift revision):**
 
 ```
 Task(
-  resume: "<coder_agent_id>",
-  prompt: 'Revision needed. Feedback: <drift_assessment details>. Adjust your expected_touch_set and strategy to account for the additional files, then re-implement.',
+  resume: "<coder_id>",
+  prompt: 'Revision needed. Feedback: <drift_assessment details>. Adjust your implementation to stay within expected scope.',
   description: "Revise implementation for step N"
 )
 ```
 
-#### 4d. Spawn Reviewer (FRESH first time per step)
+#### 3d. Reviewer: Verify Implementation
+
+**First step (reviewer_id is null) — FRESH spawn:**
 
 ```
 Task(
   subagent_type: "specks:reviewer-agent",
-  prompt: '{"speck_path": "<path>", "step_anchor": "#step-N", "coder_output": <full coder output JSON>, "worktree_path": "<worktree_path>"}',
+  prompt: '{
+    "worktree_path": "<worktree_path>",
+    "speck_path": "<path>",
+    "step_anchor": "#step-0",
+    "artifact_dir": "<artifacts_base>/step-0",
+    "architect_output": <architect output JSON>,
+    "coder_output": <coder output JSON>
+  }',
+  description: "Verify step 0 completion"
+)
+```
+
+**Save the `agentId` as `reviewer_id`.**
+
+**Subsequent steps — RESUME:**
+
+```
+Task(
+  resume: "<reviewer_id>",
+  prompt: 'Review step #step-N. Architect output: <architect JSON>. Coder output: <coder JSON>. Artifact dir: <artifacts_base>/step-N.',
   description: "Verify step N completion"
 )
 ```
 
-**Save the `agentId` from the response as `reviewer_agent_id`.**
-
-Save the reviewer output to `.specks-worktrees/.artifacts/<session-id>/step-N/reviewer-output.json` at repo root.
-
-#### 4e. Handle Reviewer Recommendation
+#### 3e. Handle Reviewer Recommendation
 
 | Recommendation | Action |
 |----------------|--------|
-| `APPROVE` | Proceed to inline commit (4f) |
-| `REVISE` | Resume coder with feedback, then resume reviewer (4e-retry) |
+| `APPROVE` | Proceed to commit (3f) |
+| `REVISE` | Resume coder with feedback, then resume reviewer (3e-retry) |
 | `ESCALATE` | AskUserQuestion showing issues, get user decision |
 
-**4e-retry (REVISE loop):**
+**3e-retry (REVISE loop):**
 
 Increment `reviewer_attempts`. If `reviewer_attempts >= 3`, ESCALATE to user.
 
@@ -234,8 +283,8 @@ Increment `reviewer_attempts`. If `reviewer_attempts >= 3`, ESCALATE to user.
 
 ```
 Task(
-  resume: "<coder_agent_id>",
-  prompt: 'Reviewer found issues. Fix these: <failed tasks from plan_conformance> <issues array>. Then return updated output.',
+  resume: "<coder_id>",
+  prompt: 'Reviewer found issues. Fix these: <failed tasks from plan_conformance> <issues array>. Then return updated output. Artifact dir: <artifacts_base>/step-N.',
   description: "Fix reviewer issues for step N"
 )
 ```
@@ -244,86 +293,118 @@ Task(
 
 ```
 Task(
-  resume: "<reviewer_agent_id>",
+  resume: "<reviewer_id>",
   prompt: 'Coder has addressed the issues. Updated output: <new coder output>. Re-review.',
   description: "Re-review step N"
 )
 ```
 
-Using Task-Resumed means both agents retain their full context — the coder remembers all files it read and the implementation so far, and the reviewer remembers the step requirements and what it already checked.
+Using persistent agents means both retain their full accumulated context — the coder remembers all files it read across ALL steps, and the reviewer remembers requirements and prior verifications.
 
-Save updated outputs to the same artifact files (overwrite).
+#### 3f. Committer: Commit Step
 
-#### 4f. Inline Commit
-
-After reviewer APPROVE, execute the commit inline:
+**First step (committer_id is null) — FRESH spawn:**
 
 ```
-Skill(
-  skill: "specks:committer-inline",
-  args: '{
+Task(
+  subagent_type: "specks:committer-agent",
+  prompt: '{
     "operation": "commit",
     "worktree_path": "<worktree_path>",
     "speck_path": "<path>",
     "step_anchor": "#step-N",
     "proposed_message": "feat(<scope>): <description>",
-    "files_to_stage": [<...files_created, ...files_modified, ".specks/specks-implementation-log.md">],
+    "files_to_stage": [<...files_created, ...files_modified from coder output, ".specks/specks-implementation-log.md">],
+    "commit_policy": "auto",
+    "confirmed": false,
     "bead_id": "<bead_id from bead_mapping>",
     "close_reason": "Step N complete: <summary>",
+    "session_file": "<session_file>",
     "log_entry": {
       "summary": "<brief description>",
       "tasks_completed": [<from reviewer plan_conformance.tasks>],
       "tests_run": ["<test results>"],
       "checkpoints_verified": ["<checkpoint results>"]
     }
-  }'
+  }',
+  description: "Commit step 0"
 )
 ```
 
-This runs inline — you execute the commit procedure directly. After completion, record:
-- `commit_hash` for the step summary
-- Whether `needs_reconcile` was set (commit succeeded but bead close failed)
+**Save the `agentId` as `committer_id`.**
 
-If `needs_reconcile`: report to user and HALT.
+**Subsequent steps — RESUME:**
+
+```
+Task(
+  resume: "<committer_id>",
+  prompt: '<same JSON payload as above for the new step>',
+  description: "Commit step N"
+)
+```
+
+Parse the committer's JSON output. Record `commit_hash` for step summary.
+
+If `needs_reconcile == true`: report to user and HALT.
+If `aborted == true`: report reason to user and HALT.
 
 Extract commit summary and add to `step_summaries`.
 
-#### 4g. Step Completion
+#### 3g. Step Completion
 
-1. Update session JSON: move step from `steps_remaining` to `steps_completed`
-2. Update `current_step` to next step (or null if done)
-3. Update `last_updated_at`
-4. **Reset per-step agent IDs**: `coder_agent_id = null`, `reviewer_agent_id = null`
-5. If more steps: **GO TO 4a** for next step
-6. If all done: proceed to Session Completion
+1. If more steps: **GO TO 3a** for next step (all agent IDs are preserved)
+2. If all done: proceed to Session Completion
 
-### 5. Session Completion
+### 4. Session Completion
 
-1. Update session JSON with `status: "completed"`
-
-2. Inline publish — create PR:
+Resume committer in publish mode to create PR:
 
 ```
-Skill(
-  skill: "specks:committer-inline",
-  args: '{
+Task(
+  resume: "<committer_id>",
+  prompt: '{
     "operation": "publish",
     "worktree_path": "<worktree_path>",
     "branch_name": "<branch_name>",
     "base_branch": "<base_branch>",
     "speck_title": "<speck title>",
     "speck_path": "<path>",
-    "step_summaries": [<...step_summaries>]
-  }'
+    "step_summaries": [<...step_summaries>],
+    "session_file": "<session_file>"
+  }',
+  description: "Push and create PR"
 )
 ```
 
-3. Report summary:
-   - Session ID
-   - Speck path
-   - Steps completed
-   - Commit hashes
-   - PR URL
+Parse the committer's publish output. Report summary:
+- Speck path
+- Steps completed
+- PR URL
+
+---
+
+## Reference: Persistent Agent Pattern
+
+All four implementation agents are **spawned once** during the first step and **resumed** for every subsequent step:
+
+| Agent | Spawned | Resumed For | Accumulated Knowledge |
+|-------|---------|-------------|----------------------|
+| **architect** | Step 0 | Steps 1..N | Codebase structure, speck contents, patterns |
+| **coder** | Step 0 | Steps 1..N + retries | Files created/modified, build system, test suite |
+| **reviewer** | Step 0 | Steps 1..N + re-reviews | Speck requirements, audit patterns, prior findings |
+| **committer** | Step 0 | Steps 1..N + publish | Worktree layout, session file format, commit history |
+
+**Why this matters:**
+- **Faster**: No cold-start exploration on steps 1..N — agents already know the codebase
+- **Smarter**: Coder remembers files created in step 0 when implementing step 1
+- **Consistent**: Reviewer applies the same standards across all steps
+- **Auto-compaction**: Agents compress old context at ~95% capacity, keeping recent work
+
+**Agent ID management:**
+- Store `architect_id`, `coder_id`, `reviewer_id`, `committer_id` after first spawn
+- Pass these IDs to `Task(resume: "<id>")` for all subsequent invocations
+- IDs persist for the entire implementer session
+- Never reset IDs between steps
 
 ---
 
@@ -352,62 +433,14 @@ From coder output, evaluate `drift_assessment`:
 
 ## Reference: Beads Integration
 
-**Beads are synced during inline setup**, which populates:
+**Beads are synced during setup**, which populates:
 - `root_bead`: The root bead ID for the entire speck
 - `bead_mapping`: A map from step anchors to bead IDs
 
-Stored in session JSON and read from there when needed.
-
-**Close after commit** (handled by inline committer):
+**Close after commit** (handled by committer-agent):
 ```bash
 specks beads close <bead_id> --reason "<reason>"
 ```
-
----
-
-## Reference: Worktree Structure
-
-```
-repo_root/
-├── .specks-worktrees/
-│   ├── .sessions/
-│   │   └── <session-id>.json        # Session metadata (external to worktree)
-│   └── .artifacts/
-│       └── <session-id>/            # Per-step agent outputs (external to worktree)
-│           ├── step-0/
-│           │   ├── coder-output.json
-│           │   └── reviewer-output.json
-│           ├── step-1/
-│           │   └── ...
-│           └── step-N/
-│               └── ...
-
-{worktree_path}/
-├── .specks/
-│   └── specks-implementation-log.md  # Updated by inline committer
-├── src/
-├── tests/
-└── ...
-```
-
-**Note:** Artifact directory no longer includes architect-output.json or committer-output.json since those are now handled inline or merged into the coder.
-
----
-
-## Reference: Task-Resumed Pattern
-
-The key optimization in this workflow is **Task-Resumed**. When the review loop sends feedback back to the coder:
-
-1. **Old approach**: Fresh coder spawn → cold starts, re-reads all files, re-discovers codebase
-2. **New approach**: Resume coder → retains all context (file reads, codebase understanding, prior implementation), just gets the feedback
-
-Same for the reviewer: instead of a fresh spawn that re-reads the speck and re-analyzes everything, the resumed reviewer already knows the step requirements and what it checked.
-
-**Per-step lifecycle:**
-- Fresh `coder_agent_id` at step start
-- Fresh `reviewer_agent_id` at first review
-- All retries within the step use `Task(resume: <agent_id>)`
-- New step = new agent IDs (clean slate for each step)
 
 ---
 
@@ -415,17 +448,28 @@ Same for the reviewer: instead of a fresh spawn that re-reads the speck and re-a
 
 ### Agent Output Validation
 
-When you receive a coder or reviewer response:
+When you receive an agent response:
 
 1. **Parse the JSON**: Attempt to parse the response as JSON
 2. **Validate required fields**: Check all required fields are present
 3. **Verify field types**: Ensure fields match expected types
 4. **Check enum values**: Validate status/recommendation fields
 
+**Architect validation:**
+```json
+{
+  "step_anchor": string (required),
+  "approach": string (required),
+  "expected_touch_set": array (required),
+  "implementation_steps": array (required),
+  "test_plan": string (required),
+  "risks": array (required)
+}
+```
+
 **Coder validation:**
 ```json
 {
-  "strategy": object (required: approach, expected_touch_set, implementation_steps, test_plan, risks),
   "success": boolean (required),
   "halted_for_drift": boolean (required),
   "files_created": array (required),
@@ -453,54 +497,29 @@ When you receive a coder or reviewer response:
 
 If an agent returns invalid JSON or missing required fields:
 
-1. Write error to `.specks-worktrees/.artifacts/<session-id>/error.json` at repo root
-2. Update session status to `"failed"`
-3. HALT and report the validation failure to the user
-4. Preserve the agent's raw output for debugging
-
-Do NOT attempt to fix JSON, retry automatically, or continue with partial data.
+1. Report the agent name, step, and validation error to the user
+2. HALT — do NOT retry automatically or continue with partial data
 
 ---
 
 ## Error Handling
 
-If any agent or inline operation fails:
+If any agent fails:
 
-1. Write to `.specks-worktrees/.artifacts/<session-id>/error.json` at repo root:
-   ```json
-   {
-     "agent": "<agent-name or inline-skill>",
-     "step": "#step-N",
-     "raw_output": "<raw response>",
-     "error": "<parse error or failure reason>",
-     "timestamp": "<ISO timestamp>"
-   }
-   ```
+1. Report: `[Agent] failed at step #step-N: [reason]`
+2. HALT — user must intervene
 
-2. Update session JSON with `status: "failed"` and `failed_at_step`
-
-3. HALT with:
-   ```
-   [Agent/Skill] failed at step #step-N: [reason]
-   See .specks-worktrees/.artifacts/<session-id>/error.json for details.
-   ```
-
-Do NOT retry automatically — user must intervene.
+Do NOT retry automatically.
 
 ---
 
 ## Output
 
 **On success:**
-- Session ID
 - Speck path
 - Steps completed
-- Commit hashes
 - PR URL
 
 **On failure:**
-- Session ID
 - Step where failure occurred
 - Error details
-- Path to error.json
-- Partial progress (steps completed before failure)

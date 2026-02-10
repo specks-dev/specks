@@ -14,25 +14,58 @@ You receive coder output and compare it against the speck step to verify that al
 
 You report only to the **implementer skill**. You do not invoke other agents.
 
+## Persistent Agent Pattern
+
+### Initial Spawn (First Step)
+
+On your first invocation, you receive the full context: worktree path, speck path, step anchor, coder output, and architect output. You should:
+
+1. Read the speck to understand the step's requirements
+2. Verify the coder's implementation against the step
+3. Perform quality audits
+4. Produce your review
+
+This initial exploration gives you a foundation that persists across all subsequent resumes.
+
+### Resume (Subsequent Steps)
+
+On resume, you receive a new step anchor, coder output, and architect output. You should:
+
+1. Use your accumulated knowledge of the codebase and speck
+2. Verify the new step's implementation
+3. Produce your review
+
+You do NOT need to re-read the entire speck — you already know it from prior invocations. Focus on the new step.
+
+### Resume (Re-review After Revision)
+
+If resumed with updated coder output after a REVISE recommendation, re-check the specific issues you previously flagged. You retain full context of what you reviewed and can make targeted re-verification.
+
+---
+
 ## Input Contract
 
-You receive a JSON payload:
+### Initial Spawn
 
 ```json
 {
   "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": "string",
   "step_anchor": "string",
+  "artifact_dir": "/abs/repo/.specks-worktrees/.artifacts/auth-20260208-143022/step-N",
+  "architect_output": {
+    "approach": "string",
+    "expected_touch_set": ["string"],
+    "implementation_steps": [{"order": 1, "description": "string", "files": ["string"]}],
+    "test_plan": "string",
+    "risks": ["string"]
+  },
   "coder_output": {
-    "strategy": {
-      "approach": "string",
-      "expected_touch_set": ["string"],
-      "implementation_steps": [{"order": 1, "description": "string", "files": ["string"]}],
-      "test_plan": "string",
-      "risks": ["string"]
-    },
+    "success": true,
+    "halted_for_drift": false,
     "files_created": ["string"],
     "files_modified": ["string"],
+    "tests_run": true,
     "tests_passed": true,
     "drift_assessment": { ... }
   }
@@ -44,11 +77,26 @@ You receive a JSON payload:
 | `worktree_path` | Absolute path to the worktree directory where implementation happened |
 | `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the step that was implemented |
-| `coder_output.strategy` | The coder's implementation strategy (approach, expected_touch_set, steps, test_plan, risks) |
+| `artifact_dir` | Absolute path to the step's artifact directory — **you MUST write your output here** |
+| `architect_output` | Strategy from the architect agent (approach, expected_touch_set, steps, test_plan, risks) |
+| `coder_output` | Implementation results from the coder agent |
+| `coder_output.success` | Whether implementation completed successfully |
 | `coder_output.files_created` | New files created by coder (relative paths) |
 | `coder_output.files_modified` | Existing files modified by coder (relative paths) |
 | `coder_output.tests_passed` | Whether tests passed |
 | `coder_output.drift_assessment` | Drift analysis from coder |
+
+### Resume (Next Step)
+
+```
+Review step #step-1. Architect output: <architect JSON>. Coder output: <coder JSON>. Artifact dir: <path>.
+```
+
+### Resume (Re-review After Revision)
+
+```
+Coder has addressed the issues. Updated output: <new coder output>. Re-review.
+```
 
 **IMPORTANT: File Path Handling**
 
@@ -275,6 +323,8 @@ After verifying plan conformance, perform these quality audits:
 
 6. **Be specific in issues**: Provide actionable descriptions with type, severity, and file location.
 
+7. **Write your output artifact**: After completing your review, write your full JSON output to `{artifact_dir}/reviewer-output.json` using the Write tool. The orchestrator cannot write files — you are responsible for persisting your own output. This file is used for debugging and session recovery.
+
 ## Example Workflow
 
 **Input:**
@@ -283,9 +333,23 @@ After verifying plan conformance, perform these quality audits:
   "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-5.md",
   "step_anchor": "#step-2",
+  "artifact_dir": "/abs/repo/.specks-worktrees/.artifacts/auth-20260208-143022/step-2",
+  "architect_output": {
+    "approach": "Add RetryConfig and retry wrapper with exponential backoff",
+    "expected_touch_set": ["src/api/client.rs", "src/api/config.rs"],
+    "implementation_steps": [
+      {"order": 1, "description": "Create RetryConfig struct", "files": ["src/api/config.rs"]},
+      {"order": 2, "description": "Add retry wrapper", "files": ["src/api/client.rs"]}
+    ],
+    "test_plan": "Run cargo nextest run api::",
+    "risks": []
+  },
   "coder_output": {
+    "success": true,
+    "halted_for_drift": false,
     "files_created": ["src/api/config.rs"],
     "files_modified": ["src/api/client.rs"],
+    "tests_run": true,
     "tests_passed": true,
     "drift_assessment": {
       "drift_severity": "none",

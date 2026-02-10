@@ -8,7 +8,7 @@ Specks transforms ideas into working software through orchestrated LLM agents. A
 
 **ONLY THE USER CAN COMMIT TO GIT.** Do not run `git commit`, `git push`, or any git commands that modify the repository history unless explicitly instructed by the user. You may run read-only git commands like `git status`, `git diff`, `git log`, etc.
 
-**Exception:** The `committer-agent` (or `committer-inline` skill) is explicitly given the job to make commits during the implementer workflow.
+**Exception:** The `committer-agent` is explicitly given the job to make commits during the implementer workflow.
 
 ## Plan Mode Policy
 
@@ -92,8 +92,7 @@ Orchestrator skills live in `skills/<name>/SKILL.md` with YAML frontmatter:
 ---
 name: planner
 description: Orchestrates the planning workflow - spawns sub-agents via Task
-disable-model-invocation: true
-allowed-tools: Task, AskUserQuestion, Read, Grep, Glob, Write, Bash
+allowed-tools: Task, AskUserQuestion
 ---
 ```
 
@@ -175,7 +174,7 @@ Then use the skills:
 
 ## Implementation Log
 
-The implementation log at `.specks/specks-implementation-log.md` tracks completed work. The `committer-inline` skill updates this log as part of the commit procedure during implementation.
+The implementation log at `.specks/specks-implementation-log.md` tracks completed work. The `committer-agent` updates this log as part of the commit procedure during implementation.
 
 ## Agent and Skill Architecture
 
@@ -191,25 +190,15 @@ Specks is a Claude Code plugin. Planning and execution are invoked via skills, n
 
 ### Orchestrator Skills (3)
 
-Three skills contain the main workflow logic:
+Three skills contain the main workflow logic. Orchestrators are **pure dispatchers** with only `Task` and `AskUserQuestion` tools — they cannot read files, write files, or run commands.
 
 | Skill | Role |
 |-------|------|
-| **planner** | Orchestrates planning loop: clarifier → author → critic |
-| **implementer** | Orchestrates implementation loop: coder → reviewer → inline commit |
+| **planner** | Orchestrates planning loop: setup → clarifier → author → critic |
+| **implementer** | Orchestrates implementation loop: setup → architect → coder → reviewer → committer |
 | **merge** | Wraps `specks merge` CLI with dry-run preview, confirmation, and post-merge health checks |
 
-### Inline Skills (3)
-
-Inline skills run in the orchestrator's context (no subagent spawn). Set `user-invocable: false`.
-
-| Skill | Role | Invoked by |
-|-------|------|------------|
-| **planner-setup-inline** | Check prerequisites, determine planning mode | planner |
-| **implementer-setup-inline** | Create worktree, sync beads, resolve steps | implementer |
-| **committer-inline** | Stage, commit, close beads, push, create PR | implementer |
-
-### Sub-Agents (5)
+### Sub-Agents (9)
 
 Sub-agents are invoked via Task tool and return JSON results. Each has specific tools and contracts.
 
@@ -217,6 +206,7 @@ Sub-agents are invoked via Task tool and return JSON results. Each has specific 
 
 | Agent | Role | Tools |
 |-------|------|-------|
+| **planner-setup-agent** | Check prerequisites, determine planning mode | Bash |
 | **clarifier-agent** | Analyzes ideas, generates clarifying questions | Read, Grep, Glob |
 | **author-agent** | Creates and revises speck documents | Read, Grep, Glob, Write, Edit |
 | **critic-agent** | Reviews speck quality and skeleton compliance | Read, Grep, Glob |
@@ -225,17 +215,13 @@ Sub-agents are invoked via Task tool and return JSON results. Each has specific 
 
 | Agent | Role | Tools |
 |-------|------|-------|
-| **coder-agent** | Plans strategy (architect phase) and implements with drift detection | Read, Grep, Glob, Write, Edit, Bash, WebFetch, WebSearch |
+| **implementer-setup-agent** | Create worktree, sync beads, resolve steps | Read, Grep, Glob, Bash, Write, Edit |
+| **architect-agent** | Read-only codebase analysis, produces implementation strategy per step | Bash, Read, Grep, Glob, WebFetch, WebSearch |
+| **coder-agent** | Implements strategy from architect with drift detection | Read, Grep, Glob, Write, Edit, Bash, WebFetch, WebSearch |
 | **reviewer-agent** | Verifies completed step matches plan and audits code quality, security, error handling | Read, Grep, Glob, Edit, Bash |
+| **committer-agent** | Stage, commit, close beads, push, create PR | Read, Grep, Glob, Write, Edit, Bash |
 
-**Deprecated agents (kept as fallback):**
-
-| Agent | Status | Replaced by |
-|-------|--------|-------------|
-| **architect-agent** | Merged into coder-agent | coder-agent Phase 1 |
-| **planner-setup-agent** | Replaced by inline skill | planner-setup-inline |
-| **implementer-setup-agent** | Replaced by inline skill | implementer-setup-inline |
-| **committer-agent** | Replaced by inline skill | committer-inline |
+All agents use the **persistent agent pattern** — spawned once and resumed for subsequent invocations. Planning agents (clarifier, author, critic) persist across revision loops. Implementation agents (architect, coder, reviewer, committer) persist across steps. This eliminates cold-start exploration, lets agents accumulate knowledge, and enables targeted revisions. Auto-compaction handles context overflow.
 
 ### Development Workflow
 
