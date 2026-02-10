@@ -293,6 +293,9 @@ fn rollback_worktree_creation(
 }
 
 /// Run worktree create command
+///
+/// If `override_root` is provided, use it instead of `current_dir()`.
+/// This avoids the `set_current_dir` anti-pattern in tests.
 pub fn run_worktree_create(
     speck: String,
     base: String,
@@ -301,7 +304,31 @@ pub fn run_worktree_create(
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
-    let repo_root = std::env::current_dir().map_err(|e| e.to_string())?;
+    run_worktree_create_with_root(
+        speck,
+        base,
+        sync_beads,
+        reuse_existing,
+        json_output,
+        quiet,
+        None,
+    )
+}
+
+/// Inner implementation that accepts an explicit repo root.
+pub fn run_worktree_create_with_root(
+    speck: String,
+    base: String,
+    sync_beads: bool,
+    reuse_existing: bool,
+    json_output: bool,
+    quiet: bool,
+    override_root: Option<&Path>,
+) -> Result<i32, String> {
+    let repo_root = match override_root {
+        Some(root) => root.to_path_buf(),
+        None => std::env::current_dir().map_err(|e| e.to_string())?,
+    };
     let speck_path = PathBuf::from(&speck);
 
     // Check if speck file exists
@@ -467,7 +494,19 @@ pub fn run_worktree_create(
 
 /// Run worktree list command
 pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> {
-    let repo_root = std::env::current_dir().map_err(|e| e.to_string())?;
+    run_worktree_list_with_root(json_output, quiet, None)
+}
+
+/// Inner implementation that accepts an explicit repo root.
+pub fn run_worktree_list_with_root(
+    json_output: bool,
+    quiet: bool,
+    override_root: Option<&Path>,
+) -> Result<i32, String> {
+    let repo_root = match override_root {
+        Some(root) => root.to_path_buf(),
+        None => std::env::current_dir().map_err(|e| e.to_string())?,
+    };
 
     match list_worktrees(&repo_root) {
         Ok(sessions) => {
@@ -551,7 +590,36 @@ pub fn run_worktree_cleanup(
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
-    let repo_root = std::env::current_dir().map_err(|e| e.to_string())?;
+    run_worktree_cleanup_with_root(
+        merged,
+        orphaned,
+        stale,
+        all,
+        dry_run,
+        force,
+        json_output,
+        quiet,
+        None,
+    )
+}
+
+/// Inner implementation that accepts an explicit repo root.
+#[allow(clippy::too_many_arguments)]
+pub fn run_worktree_cleanup_with_root(
+    merged: bool,
+    orphaned: bool,
+    stale: bool,
+    all: bool,
+    dry_run: bool,
+    force: bool,
+    json_output: bool,
+    quiet: bool,
+    override_root: Option<&Path>,
+) -> Result<i32, String> {
+    let repo_root = match override_root {
+        Some(root) => root.to_path_buf(),
+        None => std::env::current_dir().map_err(|e| e.to_string())?,
+    };
 
     // Determine cleanup mode
     let mode = if all {
@@ -661,9 +729,23 @@ pub fn run_worktree_remove(
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
+    run_worktree_remove_with_root(target, force, json_output, quiet, None)
+}
+
+/// Inner implementation that accepts an explicit repo root.
+pub fn run_worktree_remove_with_root(
+    target: String,
+    force: bool,
+    json_output: bool,
+    quiet: bool,
+    override_root: Option<&Path>,
+) -> Result<i32, String> {
     use std::process::Command;
 
-    let repo_root = std::env::current_dir().map_err(|e| e.to_string())?;
+    let repo_root = match override_root {
+        Some(root) => root.to_path_buf(),
+        None => std::env::current_dir().map_err(|e| e.to_string())?,
+    };
 
     // List all worktrees
     let worktrees = list_worktrees(&repo_root).map_err(|e| e.to_string())?;
@@ -1266,17 +1348,14 @@ mod integration_tests {
         // Verify worktree exists
         assert!(worktree_path.exists(), "worktree should exist");
 
-        // Save current directory to restore later
-        let original_dir = std::env::current_dir().expect("failed to get current dir");
-
-        // Change to repo directory so run_worktree_remove works correctly
-        std::env::set_current_dir(&repo_path).expect("failed to change directory");
-
-        // Remove by branch name
-        let result = run_worktree_remove(session.branch_name.clone(), false, false, true);
-
-        // Restore original directory
-        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
+        // Remove by branch name — pass explicit repo_root, no set_current_dir needed
+        let result = run_worktree_remove_with_root(
+            session.branch_name.clone(),
+            false,
+            false,
+            true,
+            Some(&repo_path),
+        );
 
         assert!(result.is_ok(), "remove should succeed: {:?}", result.err());
         assert_eq!(result.unwrap(), 0, "exit code should be 0");
@@ -1321,17 +1400,14 @@ mod integration_tests {
         // Verify worktree exists
         assert!(worktree_path.exists(), "worktree should exist");
 
-        // Save current directory to restore later
-        let original_dir = std::env::current_dir().expect("failed to get current dir");
-
-        // Change to repo directory so run_worktree_remove works correctly
-        std::env::set_current_dir(&repo_path).expect("failed to change directory");
-
-        // Remove by speck path
-        let result = run_worktree_remove(speck_path.to_string(), false, false, true);
-
-        // Restore original directory
-        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
+        // Remove by speck path — pass explicit repo_root
+        let result = run_worktree_remove_with_root(
+            speck_path.to_string(),
+            false,
+            false,
+            true,
+            Some(&repo_path),
+        );
 
         assert!(result.is_ok(), "remove should succeed: {:?}", result.err());
         assert_eq!(result.unwrap(), 0, "exit code should be 0");
@@ -1362,17 +1438,14 @@ mod integration_tests {
         // Verify worktree exists
         assert!(worktree_path.exists(), "worktree should exist");
 
-        // Save current directory to restore later
-        let original_dir = std::env::current_dir().expect("failed to get current dir");
-
-        // Change to repo directory so run_worktree_remove works correctly
-        std::env::set_current_dir(&repo_path).expect("failed to change directory");
-
-        // Remove by worktree path
-        let result = run_worktree_remove(session.worktree_path.clone(), false, false, true);
-
-        // Restore original directory
-        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
+        // Remove by worktree path — pass explicit repo_root
+        let result = run_worktree_remove_with_root(
+            session.worktree_path.clone(),
+            false,
+            false,
+            true,
+            Some(&repo_path),
+        );
 
         assert!(result.is_ok(), "remove should succeed: {:?}", result.err());
         assert_eq!(result.unwrap(), 0, "exit code should be 0");
@@ -1404,14 +1477,14 @@ mod integration_tests {
         fs::write(worktree_path.join("dirty.txt"), "uncommitted")
             .expect("failed to create dirty file");
 
-        // Save current directory to restore later
-        let original_dir = std::env::current_dir().expect("failed to get current dir");
-
-        // Change to repo directory so run_worktree_remove works correctly
-        std::env::set_current_dir(&repo_path).expect("failed to change directory");
-
-        // Try to remove without --force (should fail)
-        let result = run_worktree_remove(session.branch_name.clone(), false, false, true);
+        // Try to remove without --force (should fail) — pass explicit repo_root
+        let result = run_worktree_remove_with_root(
+            session.branch_name.clone(),
+            false,
+            false,
+            true,
+            Some(&repo_path),
+        );
         assert!(result.is_ok(), "command should return result");
         assert_eq!(result.unwrap(), 1, "exit code should be 1 (error)");
 
@@ -1419,12 +1492,15 @@ mod integration_tests {
         assert!(worktree_path.exists(), "worktree should still exist");
 
         // Now try with --force (should succeed)
-        let result_force = run_worktree_remove(session.branch_name.clone(), true, false, true);
+        let result_force = run_worktree_remove_with_root(
+            session.branch_name.clone(),
+            true,
+            false,
+            true,
+            Some(&repo_path),
+        );
         assert!(result_force.is_ok(), "remove with force should succeed");
         assert_eq!(result_force.unwrap(), 0, "exit code should be 0");
-
-        // Restore original directory
-        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
 
         // Verify worktree is removed
         assert!(
@@ -1500,14 +1576,14 @@ mod integration_tests {
         };
         specks_core::session::save_session(&session2, &repo_path).expect("failed to save session2");
 
-        // Save current directory to restore later
-        let original_dir = std::env::current_dir().expect("failed to get current dir");
-
-        // Change to repo directory so run_worktree_remove works correctly
-        std::env::set_current_dir(&repo_path).expect("failed to change directory");
-
-        // Try to remove by speck path (should fail with ambiguity error)
-        let result = run_worktree_remove(speck_path.to_string(), false, false, true);
+        // Try to remove by speck path (should fail with ambiguity error) — pass explicit repo_root
+        let result = run_worktree_remove_with_root(
+            speck_path.to_string(),
+            false,
+            false,
+            true,
+            Some(&repo_path),
+        );
         assert!(result.is_ok(), "command should return result");
         assert_eq!(
             result.unwrap(),
@@ -1524,10 +1600,19 @@ mod integration_tests {
         );
 
         // Clean up - remove by specific branch names
-        let _ = run_worktree_remove(session1.branch_name.clone(), false, false, true);
-        let _ = run_worktree_remove(branch_name_2.to_string(), false, false, true);
-
-        // Restore original directory
-        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
+        let _ = run_worktree_remove_with_root(
+            session1.branch_name.clone(),
+            false,
+            false,
+            true,
+            Some(&repo_path),
+        );
+        let _ = run_worktree_remove_with_root(
+            branch_name_2.to_string(),
+            false,
+            false,
+            true,
+            Some(&repo_path),
+        );
     }
 }

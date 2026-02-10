@@ -362,16 +362,33 @@ impl<'a> GitCli<'a> {
     /// The worktree must be clean (no untracked files) for this to succeed.
     /// Callers should clean up session files and artifacts before calling this.
     fn worktree_remove(&self, path: &Path) -> Result<(), SpecksError> {
+        self.worktree_remove_impl(path, false)
+    }
+
+    /// Force-remove a worktree, even if it has uncommitted changes.
+    ///
+    /// Uses `git worktree remove --force` which discards dirty state.
+    fn worktree_force_remove(&self, path: &Path) -> Result<(), SpecksError> {
+        self.worktree_remove_impl(path, true)
+    }
+
+    fn worktree_remove_impl(&self, path: &Path, force: bool) -> Result<(), SpecksError> {
         let path_str = path
             .to_str()
             .ok_or_else(|| SpecksError::WorktreeCleanupFailed {
                 reason: format!("worktree path is not valid UTF-8: {}", path.display()),
             })?;
 
+        let mut args = vec!["worktree", "remove"];
+        if force {
+            args.push("--force");
+        }
+        args.push(path_str);
+
         let output = Command::new("git")
             .arg("-C")
             .arg(self.repo_root)
-            .args(["worktree", "remove", path_str])
+            .args(&args)
             .output()
             .map_err(|e| SpecksError::WorktreeCleanupFailed {
                 reason: format!("failed to remove worktree: {}", e),
@@ -768,23 +785,21 @@ pub fn cleanup_stale_branches(
         }
 
         if dry_run {
-            // In dry-run mode, simulate the deletion logic without actually deleting
-            // Try safe delete check first (in real mode)
-            let would_safe_delete = Command::new("git")
-                .arg("-C")
-                .arg(repo_root)
-                .args(["branch", "-d", &branch])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
+            // In dry-run mode, predict whether the branch would be deleted without
+            // actually running `git branch -d` (which is a destructive operation).
+            // Instead, check if the branch is fully merged into the base using
+            // `merge-base --is-ancestor`, which is the same check `git branch -d`
+            // performs internally.
+            let is_merged =
+                git.is_ancestor(&branch, "main") || git.is_ancestor(&branch, "origin/main");
 
-            if would_safe_delete {
-                // Safe delete would succeed
+            if is_merged {
+                // Branch is fully merged, safe delete would succeed
                 removed.push(branch.clone());
                 continue;
             }
 
-            // Safe delete would fail - check if we would escalate
+            // Branch is not fully merged — check if we would escalate
             if force {
                 // Force mode: would force delete
                 removed.push(branch.clone());
@@ -1072,16 +1087,31 @@ pub fn cleanup_worktrees(
                     }
                     Err(e) => {
                         if force {
-                            // Force mode: try force removal
+                            // Force mode: try force removal via git worktree remove --force
                             eprintln!(
                                 "Warning: worktree removal failed, attempting force removal: {}",
                                 e
                             );
-                            // Would need to implement force removal here
-                            result.skipped.push((
-                                session.branch_name.clone(),
-                                format!("Failed to remove: {}", e),
-                            ));
+                            let worktree_path = Path::new(&session.worktree_path);
+                            match git.worktree_force_remove(worktree_path) {
+                                Ok(()) => {
+                                    // Force removal succeeded, delete branch
+                                    if let Err(e2) = git.delete_branch(&session.branch_name) {
+                                        eprintln!(
+                                            "Warning: force-removed worktree but failed to delete branch {}: {}",
+                                            session.branch_name, e2
+                                        );
+                                    }
+                                }
+                                Err(e2) => {
+                                    result.skipped.push((
+                                        session.branch_name.clone(),
+                                        format!("Force removal also failed: {}", e2),
+                                    ));
+                                    // Remove from category since we didn't actually remove it
+                                    category.pop();
+                                }
+                            }
                         } else {
                             // Not force mode: skip with warning
                             result.skipped.push((

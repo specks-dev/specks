@@ -179,12 +179,11 @@ fn find_worktree_for_speck(
         }
     }
 
-    // No worktree has an open PR - return the most recent one by created_at
+    // No worktree has an open PR - return the most recent one by created_at.
+    // ISO8601 timestamps (e.g. "2026-02-10T15:00:58Z") sort correctly as strings
+    // because the format is fixed-width, big-endian, and zero-padded.
     let mut sorted = matching_worktrees;
-    sorted.sort_by(|a, b| {
-        // Compare by created_at timestamp (most recent last)
-        a.created_at.cmp(&b.created_at)
-    });
+    sorted.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
     let session = sorted.into_iter().last().unwrap();
     let worktree_path = PathBuf::from(&session.worktree_path);
