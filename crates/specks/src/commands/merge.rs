@@ -236,6 +236,7 @@ fn get_pr_for_branch(branch: &str) -> Result<PrInfo, String> {
 #[allow(dead_code)]
 const INFRASTRUCTURE_PATTERNS: &[&str] = &[
     "agents/",
+    "skills/",
     ".claude/skills/",
     ".specks/specks-skeleton.md",
     ".specks/config.toml",
@@ -1419,6 +1420,15 @@ mod tests {
             ".claude/skills/implementer/SKILL.md"
         ));
         assert!(is_infrastructure_file(".claude/skills/foo/bar/baz.txt"));
+    }
+
+    #[test]
+    fn test_is_infrastructure_file_plugin_skills() {
+        assert!(is_infrastructure_file("skills/implementer/SKILL.md"));
+        assert!(is_infrastructure_file("skills/committer-inline/SKILL.md"));
+        assert!(is_infrastructure_file(
+            "skills/planner-setup-inline/SKILL.md"
+        ));
     }
 
     #[test]

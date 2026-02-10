@@ -8,7 +8,7 @@ Specks transforms ideas into working software through orchestrated LLM agents. A
 
 **ONLY THE USER CAN COMMIT TO GIT.** Do not run `git commit`, `git push`, or any git commands that modify the repository history unless explicitly instructed by the user. You may run read-only git commands like `git status`, `git diff`, `git log`, etc.
 
-**Exception:** The `committer-agent` is explicitly given the job to make commits during the implementer workflow.
+**Exception:** The `committer-agent` (or `committer-inline` skill) is explicitly given the job to make commits during the implementer workflow.
 
 ## Plan Mode Policy
 
@@ -175,7 +175,7 @@ Then use the skills:
 
 ## Implementation Log
 
-The implementation log at `.specks/specks-implementation-log.md` tracks completed work. The `/specks:logger` skill updates this log after completing steps during execution.
+The implementation log at `.specks/specks-implementation-log.md` tracks completed work. The `committer-inline` skill updates this log as part of the commit procedure during implementation.
 
 ## Agent and Skill Architecture
 
@@ -196,10 +196,20 @@ Three skills contain the main workflow logic:
 | Skill | Role |
 |-------|------|
 | **planner** | Orchestrates planning loop: clarifier → author → critic |
-| **implementer** | Orchestrates implementation loop: architect → coder → reviewer → committer |
+| **implementer** | Orchestrates implementation loop: coder → reviewer → inline commit |
 | **merge** | Wraps `specks merge` CLI with dry-run preview, confirmation, and post-merge health checks |
 
-### Sub-Agents (7)
+### Inline Skills (3)
+
+Inline skills run in the orchestrator's context (no subagent spawn). Set `user-invocable: false`.
+
+| Skill | Role | Invoked by |
+|-------|------|------------|
+| **planner-setup-inline** | Check prerequisites, determine planning mode | planner |
+| **implementer-setup-inline** | Create worktree, sync beads, resolve steps | implementer |
+| **committer-inline** | Stage, commit, close beads, push, create PR | implementer |
+
+### Sub-Agents (5)
 
 Sub-agents are invoked via Task tool and return JSON results. Each has specific tools and contracts.
 
@@ -215,10 +225,17 @@ Sub-agents are invoked via Task tool and return JSON results. Each has specific 
 
 | Agent | Role | Tools |
 |-------|------|-------|
-| **architect-agent** | Creates implementation strategies, defines expected_touch_set | Read, Grep, Glob |
-| **coder-agent** | Executes strategies with drift detection, self-halts on drift | Read, Grep, Glob, Write, Edit, Bash |
-| **reviewer-agent** | Verifies completed step matches plan and audits code quality, security, error handling | Read, Grep, Glob, Edit |
-| **committer-agent** | Stages files, commits changes, updates implementation log, closes beads | Read, Grep, Glob, Write, Edit, Bash |
+| **coder-agent** | Plans strategy (architect phase) and implements with drift detection | Read, Grep, Glob, Write, Edit, Bash, WebFetch, WebSearch |
+| **reviewer-agent** | Verifies completed step matches plan and audits code quality, security, error handling | Read, Grep, Glob, Edit, Bash |
+
+**Deprecated agents (kept as fallback):**
+
+| Agent | Status | Replaced by |
+|-------|--------|-------------|
+| **architect-agent** | Merged into coder-agent | coder-agent Phase 1 |
+| **planner-setup-agent** | Replaced by inline skill | planner-setup-inline |
+| **implementer-setup-agent** | Replaced by inline skill | implementer-setup-inline |
+| **committer-agent** | Replaced by inline skill | committer-inline |
 
 ### Development Workflow
 
@@ -276,7 +293,8 @@ The merge command:
 
 **Infrastructure files** are auto-committed automatically:
 - `agents/*.md` - Agent definition files
-- `.claude/skills/**/` - Skill directories and contents
+- `skills/**/` - Plugin skill directories and contents
+- `.claude/skills/**/` - Project skill directories and contents
 - `.specks/specks-skeleton.md` - Speck template
 - `.specks/config.toml` - Configuration
 - `.specks/specks-implementation-log.md` - Implementation log
