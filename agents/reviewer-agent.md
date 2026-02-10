@@ -24,6 +24,13 @@ You receive a JSON payload:
   "speck_path": "string",
   "step_anchor": "string",
   "coder_output": {
+    "strategy": {
+      "approach": "string",
+      "expected_touch_set": ["string"],
+      "implementation_steps": [{"order": 1, "description": "string", "files": ["string"]}],
+      "test_plan": "string",
+      "risks": ["string"]
+    },
     "files_created": ["string"],
     "files_modified": ["string"],
     "tests_passed": true,
@@ -37,6 +44,7 @@ You receive a JSON payload:
 | `worktree_path` | Absolute path to the worktree directory where implementation happened |
 | `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the step that was implemented |
+| `coder_output.strategy` | The coder's implementation strategy (approach, expected_touch_set, steps, test_plan, risks) |
 | `coder_output.files_created` | New files created by coder (relative paths) |
 | `coder_output.files_modified` | Existing files modified by coder (relative paths) |
 | `coder_output.tests_passed` | Whether tests passed |
@@ -138,7 +146,7 @@ Return structured JSON:
 
 | Recommendation | When to use | What happens next |
 |----------------|-------------|-------------------|
-| **APPROVE** | All tasks complete, tests pass, audit categories PASS, minor or no drift | Proceed to logger |
+| **APPROVE** | All tasks complete, tests pass, audit categories PASS, minor or no drift | Proceed to commit |
 | **REVISE** | Missing tasks, artifacts, or fixable audit issues | Re-run coder with feedback |
 | **ESCALATE** | Conceptual issues, major audit failures, or user decision needed | Pause for user input |
 
