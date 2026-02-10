@@ -1,8 +1,10 @@
 //! Doctor command - health checks for specks project
 
 use std::path::Path;
+use std::process::Command;
 
 use crate::output::{DoctorData, DoctorSummary, HealthCheck, JsonResponse};
+use specks_core::SessionStatus;
 
 /// Exit codes per Table T02
 const EXIT_PASS: u8 = 0;
@@ -15,6 +17,77 @@ const LOG_LINE_FAIL: usize = 500;
 const LOG_BYTE_WARN: usize = 80 * 1024; // 80KB
 const LOG_BYTE_FAIL: usize = 100 * 1024; // 100KB
 
+/// PR state from gh pr view
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PrState {
+    Merged,
+    Open,
+    Closed,
+    NotFound,
+    Unknown,
+}
+
+/// Check PR state using GitHub API
+///
+/// Queries `gh pr view <branch> --json state,mergedAt` to detect PR state.
+///
+/// # Arguments
+/// * `branch` - Branch name to check
+///
+/// # Returns
+/// * `PrState::Merged` - PR is merged
+/// * `PrState::Open` - PR is open
+/// * `PrState::Closed` - PR is closed but not merged
+/// * `PrState::NotFound` - No PR exists for this branch
+/// * `PrState::Unknown` - gh CLI error or unavailable
+fn get_pr_state(branch: &str) -> PrState {
+    // Check if gh CLI is available
+    let gh_check = Command::new("gh").arg("--version").output();
+    if gh_check.is_err() {
+        return PrState::Unknown;
+    }
+
+    // Query PR information
+    let output = match Command::new("gh")
+        .args(["pr", "view", branch, "--json", "state,mergedAt"])
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => return PrState::Unknown,
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // "no pull requests found" means no PR exists
+        if stderr.contains("no pull requests found") {
+            return PrState::NotFound;
+        }
+        // Other gh errors
+        return PrState::Unknown;
+    }
+
+    // Parse the JSON response
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    #[derive(serde::Deserialize)]
+    struct PrStateJson {
+        state: String,
+        #[allow(dead_code)]
+        #[serde(rename = "mergedAt")]
+        merged_at: Option<String>,
+    }
+
+    match serde_json::from_str::<PrStateJson>(&stdout) {
+        Ok(pr_state) => match pr_state.state.as_str() {
+            "MERGED" => PrState::Merged,
+            "OPEN" => PrState::Open,
+            "CLOSED" => PrState::Closed,
+            _ => PrState::Unknown,
+        },
+        Err(_) => PrState::Unknown,
+    }
+}
+
 /// Run the doctor command
 pub fn run_doctor(json_output: bool, quiet: bool) -> Result<i32, String> {
     // Run all health checks
@@ -22,6 +95,10 @@ pub fn run_doctor(json_output: bool, quiet: bool) -> Result<i32, String> {
         check_initialized(),
         check_log_size(),
         check_worktrees(),
+        check_stale_branches(),
+        check_orphaned_worktrees(),
+        check_sessionless_worktrees(),
+        check_closed_pr_worktrees(),
         check_broken_refs(),
     ];
 
@@ -228,6 +305,13 @@ fn check_worktrees() -> HealthCheck {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
+            // Only validate directories matching specks__* pattern
+            // Exclude infrastructure directories like .sessions, .artifacts
+            let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
+            if !dir_name.starts_with("specks__") {
+                continue;
+            }
+
             // Check if path follows the expected pattern
             if !specks_core::is_valid_worktree_path(&path) {
                 invalid_paths.push(path.to_string_lossy().to_string());
@@ -260,6 +344,283 @@ fn check_worktrees() -> HealthCheck {
             status: "pass".to_string(),
             message: format!("{} worktree(s) found, all paths valid", valid_count),
             details: None,
+        }
+    }
+}
+
+/// Check for stale specks/* branches without worktrees
+fn check_stale_branches() -> HealthCheck {
+    let repo_root = Path::new(".");
+
+    // Get list of specks/* branches
+    let branches = match specks_core::list_specks_branches(repo_root) {
+        Ok(b) => b,
+        Err(e) => {
+            return HealthCheck {
+                name: "stale_branches".to_string(),
+                status: "fail".to_string(),
+                message: format!("Failed to list branches: {}", e),
+                details: None,
+            };
+        }
+    };
+
+    // Get list of active worktrees
+    let worktrees = match specks_core::list_worktrees(repo_root) {
+        Ok(w) => w,
+        Err(e) => {
+            return HealthCheck {
+                name: "stale_branches".to_string(),
+                status: "fail".to_string(),
+                message: format!("Failed to list worktrees: {}", e),
+                details: None,
+            };
+        }
+    };
+
+    // Build set of branches with worktrees
+    let active_branches: std::collections::HashSet<_> = worktrees
+        .iter()
+        .map(|s| s.branch_name.clone())
+        .collect();
+
+    // Find branches without worktrees
+    let stale: Vec<_> = branches
+        .iter()
+        .filter(|b| !active_branches.contains(*b))
+        .cloned()
+        .collect();
+
+    let stale_count = stale.len();
+
+    if stale_count == 0 {
+        HealthCheck {
+            name: "stale_branches".to_string(),
+            status: "pass".to_string(),
+            message: "No stale branches found".to_string(),
+            details: None,
+        }
+    } else if stale_count <= 2 {
+        let details = serde_json::json!({
+            "stale_branches": stale
+        });
+        HealthCheck {
+            name: "stale_branches".to_string(),
+            status: "warn".to_string(),
+            message: format!("{} stale branch(es) without worktrees", stale_count),
+            details: Some(details),
+        }
+    } else {
+        let details = serde_json::json!({
+            "stale_branches": stale
+        });
+        HealthCheck {
+            name: "stale_branches".to_string(),
+            status: "fail".to_string(),
+            message: format!("{} stale branches without worktrees (clean up recommended)", stale_count),
+            details: Some(details),
+        }
+    }
+}
+
+/// Check for orphaned worktrees (no PR and not in progress)
+fn check_orphaned_worktrees() -> HealthCheck {
+    let repo_root = Path::new(".");
+
+    // Get list of active worktrees
+    let worktrees = match specks_core::list_worktrees(repo_root) {
+        Ok(w) => w,
+        Err(e) => {
+            return HealthCheck {
+                name: "orphaned_worktrees".to_string(),
+                status: "fail".to_string(),
+                message: format!("Failed to list worktrees: {}", e),
+                details: None,
+            };
+        }
+    };
+
+    // Find worktrees that are not InProgress and have no PR
+    let mut orphaned = Vec::new();
+    for session in &worktrees {
+        if session.status == SessionStatus::InProgress {
+            continue;
+        }
+
+        let pr_state = get_pr_state(&session.branch_name);
+        if pr_state == PrState::NotFound {
+            orphaned.push(session.branch_name.clone());
+        }
+    }
+
+    let orphaned_count = orphaned.len();
+
+    if orphaned_count == 0 {
+        HealthCheck {
+            name: "orphaned_worktrees".to_string(),
+            status: "pass".to_string(),
+            message: "No orphaned worktrees found".to_string(),
+            details: None,
+        }
+    } else if orphaned_count <= 2 {
+        let details = serde_json::json!({
+            "orphaned_worktrees": orphaned
+        });
+        HealthCheck {
+            name: "orphaned_worktrees".to_string(),
+            status: "warn".to_string(),
+            message: format!("{} orphaned worktree(s) without PRs", orphaned_count),
+            details: Some(details),
+        }
+    } else {
+        let details = serde_json::json!({
+            "orphaned_worktrees": orphaned
+        });
+        HealthCheck {
+            name: "orphaned_worktrees".to_string(),
+            status: "fail".to_string(),
+            message: format!("{} orphaned worktrees without PRs (clean up recommended)", orphaned_count),
+            details: Some(details),
+        }
+    }
+}
+
+/// Check for sessionless worktrees (directories in git worktree list without parseable sessions)
+fn check_sessionless_worktrees() -> HealthCheck {
+    let repo_root = Path::new(".");
+
+    // Run git worktree list --porcelain to get all worktrees
+    let output = match Command::new("git")
+        .args(["worktree", "list", "--porcelain"])
+        .current_dir(repo_root)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            return HealthCheck {
+                name: "sessionless_worktrees".to_string(),
+                status: "fail".to_string(),
+                message: format!("Failed to run git worktree list: {}", e),
+                details: None,
+            };
+        }
+    };
+
+    if !output.status.success() {
+        return HealthCheck {
+            name: "sessionless_worktrees".to_string(),
+            status: "fail".to_string(),
+            message: "git worktree list command failed".to_string(),
+            details: None,
+        };
+    }
+
+    // Parse git worktree list output
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut git_worktrees = Vec::new();
+    for line in stdout.lines() {
+        if line.starts_with("worktree ") {
+            let path = line.strip_prefix("worktree ").unwrap_or("");
+            // Only include paths in .specks-worktrees/
+            if path.contains(".specks-worktrees/") {
+                git_worktrees.push(path.to_string());
+            }
+        }
+    }
+
+    // Get list of worktrees with parseable sessions
+    let sessions = match specks_core::list_worktrees(repo_root) {
+        Ok(s) => s,
+        Err(e) => {
+            return HealthCheck {
+                name: "sessionless_worktrees".to_string(),
+                status: "fail".to_string(),
+                message: format!("Failed to list worktree sessions: {}", e),
+                details: None,
+            };
+        }
+    };
+
+    // Build set of worktree paths with valid sessions
+    let session_paths: std::collections::HashSet<_> = sessions
+        .iter()
+        .map(|s| s.worktree_path.clone())
+        .collect();
+
+    // Find git worktrees without sessions
+    let sessionless: Vec<_> = git_worktrees
+        .iter()
+        .filter(|path| !session_paths.contains(*path))
+        .cloned()
+        .collect();
+
+    let sessionless_count = sessionless.len();
+
+    if sessionless_count == 0 {
+        HealthCheck {
+            name: "sessionless_worktrees".to_string(),
+            status: "pass".to_string(),
+            message: "All worktrees have parseable sessions".to_string(),
+            details: None,
+        }
+    } else {
+        let details = serde_json::json!({
+            "sessionless_worktrees": sessionless
+        });
+        HealthCheck {
+            name: "sessionless_worktrees".to_string(),
+            status: "fail".to_string(),
+            message: format!("{} worktree(s) found without parseable sessions", sessionless_count),
+            details: Some(details),
+        }
+    }
+}
+
+/// Check for worktrees with closed-but-unmerged PRs
+fn check_closed_pr_worktrees() -> HealthCheck {
+    let repo_root = Path::new(".");
+
+    // Get list of active worktrees
+    let worktrees = match specks_core::list_worktrees(repo_root) {
+        Ok(w) => w,
+        Err(e) => {
+            return HealthCheck {
+                name: "closed_pr_worktrees".to_string(),
+                status: "fail".to_string(),
+                message: format!("Failed to list worktrees: {}", e),
+                details: None,
+            };
+        }
+    };
+
+    // Find worktrees with closed PRs
+    let mut closed_pr_worktrees = Vec::new();
+    for session in &worktrees {
+        let pr_state = get_pr_state(&session.branch_name);
+        if pr_state == PrState::Closed {
+            closed_pr_worktrees.push(session.branch_name.clone());
+        }
+    }
+
+    let closed_count = closed_pr_worktrees.len();
+
+    if closed_count == 0 {
+        HealthCheck {
+            name: "closed_pr_worktrees".to_string(),
+            status: "pass".to_string(),
+            message: "No worktrees with closed PRs found".to_string(),
+            details: None,
+        }
+    } else {
+        let details = serde_json::json!({
+            "closed_pr_worktrees": closed_pr_worktrees,
+            "recommendation": "These PRs are closed but not merged. Review and either reopen or clean up the worktree."
+        });
+        HealthCheck {
+            name: "closed_pr_worktrees".to_string(),
+            status: "warn".to_string(),
+            message: format!("{} worktree(s) with closed-but-unmerged PRs", closed_count),
+            details: Some(details),
         }
     }
 }

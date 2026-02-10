@@ -11,11 +11,27 @@ Entries are sorted newest-first.
 ---
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 step: #step-4
 date: 2026-02-10T16:15:30Z
 bead: specks-dqg.5
 =======
 =======
+=======
+step: #step-5
+date: 2026-02-10T23:35:00Z
+bead: specks-dqg.6
+---
+
+## #step-5: Fixed check_worktrees() false positive by filtering to specks__* directories. Added health checks: check_stale_branches() for branches without worktrees, check_orphaned_worktrees() for worktrees without PRs, check_sessionless_worktrees() for worktree directories without sessions, and check_closed_pr_worktrees() for closed-but-unmerged PRs with actionable recommendations.
+
+**Files changed:**
+- crates/specks/src/commands/doctor.rs
+
+---
+
+---
+>>>>>>> 2fd0a8e (feat(doctor): extend health checks for worktree diagnostics)
 step: #step-3
 date: 2026-02-10T23:02:30Z
 bead: specks-dqg.4
