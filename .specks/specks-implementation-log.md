@@ -9,6 +9,22 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-4
+date: 2026-02-10T16:15:30Z
+bead: specks-dqg.5
+---
+
+## #step-4: Added list_specks_branches() and cleanup_stale_branches() functions. Implements safe delete (git branch -d) first, escalates to force delete (git branch -D) only if PR is confirmed merged via gh CLI. Added --stale flag to CLI with integration into --all mode.
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/lib.rs
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/main.rs
+
+---
+
+---
 step: #step-7
 date: 2026-02-10T03:34:38Z
 bead: specks-15g.8
