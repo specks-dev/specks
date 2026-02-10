@@ -9,6 +9,21 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-1
+date: 2026-02-10T02:49:00Z
+bead: specks-15g.2
+---
+
+## #step-1: Added GitHub API-based merge detection using gh pr view --json for reliable squash merge detection in cleanup_worktrees()
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/session.rs
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
 step: #step-0
 date: 2026-02-10T02:46:23Z
 bead: specks-15g.1

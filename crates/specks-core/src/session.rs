@@ -240,7 +240,7 @@ pub fn save_session_atomic(session: &Session, repo_root: &Path) -> Result<(), Sp
 
         // Fsync the file to ensure data is written to disk
         let file = fs::File::open(&temp_path)?;
-        file.sync_all().map_err(|e| SpecksError::Io(e))?;
+        file.sync_all().map_err(SpecksError::Io)?;
         drop(file);
 
         // Atomically rename temp file to final location

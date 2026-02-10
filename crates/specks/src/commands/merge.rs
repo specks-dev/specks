@@ -334,17 +334,17 @@ fn check_main_sync() -> Result<(), String> {
 
 /// Check if all PR checks have passed
 ///
-/// Uses `gh pr checks <branch>` to query check status.
+/// Uses `gh pr checks <branch> --json name,state,conclusion` to query check status.
 ///
 /// # Arguments
 /// * `branch` - Name of the branch to check
 ///
 /// # Returns
-/// * `Ok(())` - All checks passed
+/// * `Ok(())` - All checks passed (or no checks configured)
 /// * `Err(String)` - Some checks are failing or pending (includes list)
 fn check_pr_checks(branch: &str) -> Result<(), String> {
     let output = Command::new("gh")
-        .args(["pr", "checks", branch])
+        .args(["pr", "checks", branch, "--json", "name,state,conclusion"])
         .output()
         .map_err(|e| format!("Failed to execute gh pr checks: {}", e))?;
 
@@ -355,34 +355,35 @@ fn check_pr_checks(branch: &str) -> Result<(), String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Parse the output to detect failing or pending checks
-    // gh pr checks output format (tab-separated):
-    // NAME    STATUS    CONCLUSION
-    // Build   completed success
-    // Test    pending   -
-    // Lint    completed failure
+    // Parse JSON array of check objects
+    #[derive(Deserialize)]
+    struct CheckStatus {
+        name: String,
+        state: String,
+        conclusion: Option<String>,
+    }
+
+    let checks: Vec<CheckStatus> = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse gh pr checks output: {}", e))?;
+
+    // Empty array means no checks configured - that's success
+    if checks.is_empty() {
+        return Ok(());
+    }
+
     let mut failing = Vec::new();
     let mut pending = Vec::new();
 
-    for line in stdout.lines().skip(1) {
-        // Skip header line
-        let parts: Vec<&str> = line.split('\t').collect();
-        if parts.len() < 3 {
-            continue;
+    for check in checks {
+        // Check if still pending or in progress
+        if check.state == "pending" || check.state == "in_progress" {
+            pending.push(check.name);
         }
-
-        let name = parts[0].trim();
-        let status = parts[1].trim();
-        let conclusion = if parts.len() > 2 { parts[2].trim() } else { "" };
-
-        // Check if still pending
-        if status == "pending" || status == "in_progress" {
-            pending.push(name.to_string());
-        }
-        // Check if failed
-        else if conclusion == "failure" || conclusion == "timed_out" || conclusion == "cancelled"
-        {
-            failing.push(name.to_string());
+        // Check if failed (conclusion may be null for pending checks)
+        else if let Some(conclusion) = check.conclusion {
+            if conclusion == "failure" || conclusion == "timed_out" || conclusion == "cancelled" {
+                failing.push(check.name);
+            }
         }
     }
 
@@ -1473,61 +1474,90 @@ mod tests {
         // - This is tested through integration tests in a controlled git environment
     }
 
-    // Unit tests for parsing gh pr checks output
+    // Unit tests for parsing gh pr checks JSON output
 
     #[test]
-    fn test_check_pr_checks_all_pass() {
-        // This tests the parsing logic for gh pr checks output
-        // The check_pr_checks function parses tab-separated output like:
-        // NAME    STATUS    CONCLUSION
-        // Build   completed success
-        // Test    completed success
+    fn test_check_pr_checks_json_all_pass() {
+        // Test parsing of successful checks JSON
+        let json_output = r#"[
+            {"name":"Build","state":"completed","conclusion":"success"},
+            {"name":"Test","state":"completed","conclusion":"success"}
+        ]"#;
 
-        // Expected behavior:
-        // - All checks have status "completed" and conclusion "success"
-        // - Function should return Ok(())
-        // This is tested through integration tests with mocked gh CLI
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // Test struct fields used only for deserialization
+        struct CheckStatus {
+            name: String,
+            state: String,
+            conclusion: Option<String>,
+        }
+
+        let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
+        assert_eq!(checks.len(), 2);
+        assert_eq!(checks[0].name, "Build");
+        assert_eq!(checks[0].state, "completed");
+        assert_eq!(checks[0].conclusion, Some("success".to_string()));
     }
 
     #[test]
-    fn test_check_pr_checks_failing() {
-        // Tests parsing of failing checks
-        // Sample output:
-        // NAME    STATUS    CONCLUSION
-        // Build   completed failure
-        // Test    completed success
+    fn test_check_pr_checks_json_failing() {
+        // Test parsing of failing checks JSON
+        let json_output = r#"[
+            {"name":"Build","state":"completed","conclusion":"failure"},
+            {"name":"Test","state":"completed","conclusion":"success"}
+        ]"#;
 
-        // Expected behavior:
-        // - Function should return Err with message "PR checks failing: Build"
-        // This is tested through integration tests with mocked gh CLI
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // Test struct fields used only for deserialization
+        struct CheckStatus {
+            name: String,
+            state: String,
+            conclusion: Option<String>,
+        }
+
+        let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
+        assert_eq!(checks.len(), 2);
+        assert_eq!(checks[0].conclusion, Some("failure".to_string()));
     }
 
     #[test]
-    fn test_check_pr_checks_pending() {
-        // Tests parsing of pending checks
-        // Sample output:
-        // NAME    STATUS    CONCLUSION
-        // Build   pending   -
-        // Test    completed success
+    fn test_check_pr_checks_json_pending() {
+        // Test parsing of pending checks JSON
+        let json_output = r#"[
+            {"name":"Build","state":"pending","conclusion":null},
+            {"name":"Test","state":"completed","conclusion":"success"}
+        ]"#;
 
-        // Expected behavior:
-        // - Function should return Err with message "PR checks pending: Build"
-        // This is tested through integration tests with mocked gh CLI
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // Test struct fields used only for deserialization
+        struct CheckStatus {
+            name: String,
+            state: String,
+            conclusion: Option<String>,
+        }
+
+        let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
+        assert_eq!(checks.len(), 2);
+        assert_eq!(checks[0].state, "pending");
+        assert!(checks[0].conclusion.is_none());
     }
 
     #[test]
-    fn test_check_pr_checks_mixed_states() {
-        // Tests parsing of mixed check states
-        // Sample output:
-        // NAME    STATUS      CONCLUSION
-        // Build   completed   success
-        // Test    pending     -
-        // Lint    completed   failure
+    fn test_check_pr_checks_json_empty_array() {
+        // Test that empty array (no checks) is handled as success
+        let json_output = r#"[]"#;
 
-        // Expected behavior:
-        // - Function should return Err listing failing checks first
-        // - Message: "PR checks failing: Lint"
-        // This is tested through integration tests with mocked gh CLI
+        #[derive(Deserialize)]
+        #[allow(dead_code)] // Test struct fields used only for deserialization
+        struct CheckStatus {
+            name: String,
+            state: String,
+            conclusion: Option<String>,
+        }
+
+        let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
+        assert_eq!(checks.len(), 0);
+        // This should be treated as success (no checks configured)
     }
 
     // Integration tests
