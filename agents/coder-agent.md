@@ -112,6 +112,14 @@ Return structured JSON:
   "files_modified": ["path/to/existing.rs"],
   "tests_run": true,
   "tests_passed": true,
+  "build_and_test_report": {
+    "build": {"command": "<build command>", "exit_code": 0, "output_tail": "<last ~20 lines>"},
+    "test": {"command": "<test command>", "exit_code": 0, "output_tail": "<last ~20 lines>"},
+    "lint": null,
+    "checkpoints": [
+      {"command": "<checkpoint from speck>", "passed": true, "output": "<output>"}
+    ]
+  },
   "drift_assessment": {
     "drift_severity": "none | minor | moderate | major",
     "expected_files": ["file1.rs", "file2.rs"],
@@ -138,6 +146,11 @@ Return structured JSON:
 | `files_modified` | List of existing files modified (relative paths) |
 | `tests_run` | True if tests were executed |
 | `tests_passed` | True if all tests passed |
+| `build_and_test_report` | **REQUIRED**: Build, test, lint, and checkpoint results (see below) |
+| `build_and_test_report.build` | Build command, exit code, and tail of output |
+| `build_and_test_report.test` | Test command, exit code, and tail of output |
+| `build_and_test_report.lint` | Lint command, exit code, and tail of output (null if no linter configured) |
+| `build_and_test_report.checkpoints` | Array of checkpoint results from the speck step |
 | `drift_assessment` | **REQUIRED**: Drift analysis (see below) |
 
 ---
@@ -164,19 +177,41 @@ If drift reaches `moderate` or `major`:
 3. Document all changes in `drift_assessment`
 4. Return immediately — do not continue
 
-### 5. Run Tests
+### 5. Build, Test, and Verify
 
-After implementation, run the project's test suite:
+After implementation, run build, tests, lint, and checkpoints. Capture all results in `build_and_test_report`.
+
+Detect project type from project files (`Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, `Makefile`, etc.) and use the appropriate commands.
+
+**5a. Build:**
+
+```bash
+cd {worktree_path} && <project_build_command>
+```
+
+Record command, exit code, and last ~20 lines of output in `build_and_test_report.build`. If build fails, set `success: false` and return immediately.
+
+**5b. Tests:**
 
 ```bash
 cd {worktree_path} && <project_test_command>
 ```
 
-Detect project type from project files (`Cargo.toml`, `package.json`, `pyproject.toml`, `go.mod`, `Makefile`, etc.) and use the appropriate test command.
+Record command, exit code, and last ~20 lines of output in `build_and_test_report.test`. Set `tests_run: true` and `tests_passed` based on exit code. If no test command is available, set `tests_run: false`.
 
-- Exit code 0 = tests passed
-- Exit code non-zero = tests failed
-- If no test command is available, set `tests_run: false`
+**5c. Lint (optional):**
+
+If the project has a linter configured, run it. Record in `build_and_test_report.lint`. Set to `null` if no linter is available.
+
+**5d. Checkpoints:**
+
+Read the speck step at `{worktree_path}/{speck_path}` and locate `{step_anchor}`. Extract any commands under the `**Checkpoint:**` heading. Run each one:
+
+```bash
+cd {worktree_path} && <checkpoint_command>
+```
+
+Record each checkpoint in `build_and_test_report.checkpoints` with command, passed (true/false), and output. If no checkpoints are defined in the step, use an empty array.
 
 ---
 
