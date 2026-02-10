@@ -9,6 +9,23 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-4
+date: 2026-02-10T03:01:00Z
+bead: specks-15g.5
+---
+
+## #step-4: Added specks session reconcile command for manual recovery of sessions stuck in NeedsReconcile state with --dry-run and --json support
+
+**Files changed:**
+- crates/specks/src/commands/session.rs
+- crates/specks/src/cli.rs
+- crates/specks/src/commands/mod.rs
+- crates/specks/src/main.rs
+- crates/specks/src/output.rs
+
+---
+
+---
 step: #step-3
 date: 2026-02-10T02:56:23Z
 bead: specks-15g.4

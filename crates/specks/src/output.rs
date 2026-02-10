@@ -327,3 +327,19 @@ pub struct BeadsCloseData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub archived_path: Option<String>,
 }
+
+/// Data payload for session reconcile command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionReconcileData {
+    /// Session ID that was reconciled
+    pub session_id: String,
+    /// Whether reconciliation was successful
+    pub reconciled: bool,
+    /// Previous status before reconciliation
+    pub previous_status: String,
+    /// New status after reconciliation
+    pub new_status: String,
+    /// Bead ID that was closed (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bead_closed: Option<String>,
+}
