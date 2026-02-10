@@ -22,6 +22,110 @@ pub enum SessionStatus {
     NeedsReconcile,
 }
 
+/// Current step representation supporting multiple formats
+///
+/// This enum supports three variants to unify old and implementer session formats:
+/// - Index(usize): Step index for old format (0-based, e.g., 0, 1, 2)
+/// - Anchor(String): Step anchor for implementer format (e.g., "#step-0", "#step-1")
+/// - Done: Implementation completed (represented as null in JSON)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CurrentStep {
+    /// Old format: numeric step index
+    Index(usize),
+    /// Implementer format: step anchor string
+    Anchor(String),
+    /// Implementation completed (null in JSON)
+    Done,
+}
+
+impl<'de> Deserialize<'de> for CurrentStep {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self, Visitor};
+
+        struct CurrentStepVisitor;
+
+        impl<'de> Visitor<'de> for CurrentStepVisitor {
+            type Value = CurrentStep;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("an integer, string, or null")
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if value < 0 {
+                    return Err(E::custom(format!(
+                        "current_step index cannot be negative: {}",
+                        value
+                    )));
+                }
+                Ok(CurrentStep::Index(value as usize))
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(CurrentStep::Index(value as usize))
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(CurrentStep::Anchor(value.to_string()))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(CurrentStep::Anchor(value))
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(CurrentStep::Done)
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(CurrentStep::Done)
+            }
+        }
+
+        deserializer.deserialize_any(CurrentStepVisitor)
+    }
+}
+
+impl Default for CurrentStep {
+    fn default() -> Self {
+        CurrentStep::Index(0)
+    }
+}
+
+impl Serialize for CurrentStep {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            CurrentStep::Index(n) => serializer.serialize_u64(*n as u64),
+            CurrentStep::Anchor(s) => serializer.serialize_str(s),
+            CurrentStep::Done => serializer.serialize_none(),
+        }
+    }
+}
+
 impl fmt::Display for SessionStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -37,11 +141,13 @@ impl fmt::Display for SessionStatus {
 /// Session state for a worktree-based speck implementation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
-    /// Schema version for forward compatibility
+    /// Schema version for forward compatibility (optional for backward compatibility)
+    #[serde(default)]
     pub schema_version: String,
     /// Relative path to speck file from repo root
     pub speck_path: String,
-    /// Short name derived from speck for branch naming
+    /// Short name derived from speck for branch naming (optional for backward compatibility)
+    #[serde(default)]
     pub speck_slug: String,
     /// Full branch name created for this implementation
     pub branch_name: String,
@@ -53,15 +159,47 @@ pub struct Session {
     pub created_at: String,
     /// Current session status
     pub status: SessionStatus,
-    /// Index of the next step to execute (0-based)
-    pub current_step: usize,
-    /// Total number of steps in speck
+    /// Current step being executed (supports multiple formats)
+    #[serde(default)]
+    pub current_step: CurrentStep,
+    /// Total number of steps in speck (optional for backward compatibility)
+    #[serde(default)]
     pub total_steps: usize,
-    /// Root bead ID if beads are synced
+    /// Root bead ID if beads are synced (supports both "beads_root" and "root_bead" aliases)
+    #[serde(alias = "root_bead")]
     pub beads_root: Option<String>,
     /// True if this session was reused from an existing worktree
     #[serde(default)]
     pub reused: bool,
+    /// Session ID for implementer format (e.g., "15-20250210-024623")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    /// ISO 8601 timestamp of last session update (implementer format)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_updated_at: Option<String>,
+    /// List of completed step anchors (implementer format)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steps_completed: Option<Vec<String>>,
+    /// List of remaining step anchors (implementer format)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steps_remaining: Option<Vec<String>>,
+    /// Mapping from step anchors to bead IDs (implementer format)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bead_mapping: Option<std::collections::HashMap<String, String>>,
+    /// Summaries of completed steps with commit hashes (implementer format)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_summaries: Option<Vec<StepSummary>>,
+}
+
+/// Summary of a completed step (implementer format)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepSummary {
+    /// Step anchor (e.g., "#step-0")
+    pub step: String,
+    /// Git commit hash for this step
+    pub commit_hash: String,
+    /// Human-readable summary of changes
+    pub summary: String,
 }
 
 /// Generate ISO 8601 timestamp in UTC
@@ -387,10 +525,16 @@ mod tests {
                 .to_string(),
             created_at: "2026-02-08T14:30:22Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 2,
+            current_step: CurrentStep::Index(2),
             total_steps: 5,
             beads_root: Some("bd-abc123".to_string()),
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         let json = serde_json::to_string_pretty(&session).unwrap();
@@ -403,7 +547,7 @@ mod tests {
         assert_eq!(deserialized.base_branch, session.base_branch);
         assert_eq!(deserialized.worktree_path, session.worktree_path);
         assert_eq!(deserialized.status, SessionStatus::InProgress);
-        assert_eq!(deserialized.current_step, 2);
+        assert_eq!(deserialized.current_step, CurrentStep::Index(2));
         assert_eq!(deserialized.total_steps, 5);
         assert_eq!(deserialized.beads_root, Some("bd-abc123".to_string()));
     }
@@ -461,10 +605,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::Pending,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory and internal .specks dir
@@ -481,7 +631,7 @@ mod tests {
         assert_eq!(loaded.schema_version, session.schema_version);
         assert_eq!(loaded.speck_path, session.speck_path);
         assert_eq!(loaded.status, SessionStatus::Pending);
-        assert_eq!(loaded.current_step, 0);
+        assert_eq!(loaded.current_step, CurrentStep::Index(0));
         assert_eq!(loaded.total_steps, 3);
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
@@ -506,10 +656,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::Pending,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory
@@ -527,7 +683,7 @@ mod tests {
         assert_eq!(loaded.schema_version, session.schema_version);
         assert_eq!(loaded.speck_path, session.speck_path);
         assert_eq!(loaded.status, SessionStatus::Pending);
-        assert_eq!(loaded.current_step, 0);
+        assert_eq!(loaded.current_step, CurrentStep::Index(0));
         assert_eq!(loaded.total_steps, 3);
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
@@ -552,10 +708,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::Pending,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory and internal .specks dir
@@ -595,10 +757,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::Pending,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory
@@ -642,10 +810,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 2,
+            current_step: CurrentStep::Index(2),
             total_steps: 3,
             beads_root: Some("bd-external".to_string()),
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create a different session for internal storage
@@ -658,10 +832,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::Pending,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: Some("bd-internal".to_string()),
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory and internal .specks dir
@@ -679,7 +859,7 @@ mod tests {
         // Load session - should get external version
         let loaded = load_session(&worktree_path, Some(repo_root)).unwrap();
         assert_eq!(loaded.status, SessionStatus::InProgress);
-        assert_eq!(loaded.current_step, 2);
+        assert_eq!(loaded.current_step, CurrentStep::Index(2));
         assert_eq!(loaded.beads_root, Some("bd-external".to_string()));
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
@@ -866,10 +1046,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T14:30:22Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory
@@ -982,10 +1168,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T14:30:22Z".to_string(),
             status: SessionStatus::Pending,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory
@@ -1058,10 +1250,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-10T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 1,
+            current_step: CurrentStep::Index(1),
             total_steps: 3,
             beads_root: Some("bd-test".to_string()),
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory
@@ -1077,7 +1275,7 @@ mod tests {
         let content = fs::read_to_string(&session_path).unwrap();
         let loaded: Session = serde_json::from_str(&content).unwrap();
         assert_eq!(loaded.speck_slug, "atomic");
-        assert_eq!(loaded.current_step, 1);
+        assert_eq!(loaded.current_step, CurrentStep::Index(1));
 
         // Verify temp file doesn't exist
         let temp_path = session_path.with_extension("tmp");
@@ -1106,10 +1304,16 @@ mod tests {
             worktree_path: invalid_path.display().to_string(),
             created_at: "2026-02-10T12:00:00Z".to_string(),
             status: SessionStatus::Failed,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Atomic save should fail due to invalid worktree path
@@ -1144,10 +1348,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-10T12:00:00Z".to_string(),
             status: SessionStatus::Pending,
-            current_step: 0,
+            current_step: CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory
@@ -1164,7 +1374,7 @@ mod tests {
         // Create updated session with different status
         let updated_session = Session {
             status: SessionStatus::Completed,
-            current_step: 3,
+            current_step: CurrentStep::Index(3),
             ..original_session.clone()
         };
 
@@ -1177,7 +1387,7 @@ mod tests {
 
         let loaded: Session = serde_json::from_str(&updated_content).unwrap();
         assert_eq!(loaded.status, SessionStatus::Completed);
-        assert_eq!(loaded.current_step, 3);
+        assert_eq!(loaded.current_step, CurrentStep::Index(3));
 
         // Verify temp file doesn't exist
         let temp_path = session_path.with_extension("tmp");
@@ -1205,10 +1415,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-10T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 2,
+            current_step: CurrentStep::Index(2),
             total_steps: 5,
             beads_root: Some("bd-test".to_string()),
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         // Create worktree directory
@@ -1224,11 +1440,211 @@ mod tests {
         let content = fs::read_to_string(&session_path).unwrap();
         let loaded: Session = serde_json::from_str(&content).unwrap();
         assert_eq!(loaded.speck_slug, "delegate");
-        assert_eq!(loaded.current_step, 2);
+        assert_eq!(loaded.current_step, CurrentStep::Index(2));
 
         // Verify no temp file left behind
         let temp_path = session_path.with_extension("tmp");
         assert!(!temp_path.exists());
         // TempDir auto-cleans on drop - no manual cleanup needed
+    }
+
+    #[test]
+    fn test_current_step_index_serializes_as_number() {
+        let step = CurrentStep::Index(5);
+        let json = serde_json::to_string(&step).unwrap();
+        assert_eq!(json, "5");
+    }
+
+    #[test]
+    fn test_current_step_anchor_serializes_as_string() {
+        let step = CurrentStep::Anchor("#step-3".to_string());
+        let json = serde_json::to_string(&step).unwrap();
+        assert_eq!(json, "\"#step-3\"");
+    }
+
+    #[test]
+    fn test_current_step_done_serializes_as_null() {
+        let step = CurrentStep::Done;
+        let json = serde_json::to_string(&step).unwrap();
+        assert_eq!(json, "null");
+    }
+
+    #[test]
+    fn test_deserialize_old_format() {
+        // Old format: all required fields with numeric current_step
+        let json = r#"{
+            "schema_version": "1",
+            "speck_path": ".specks/specks-5.md",
+            "speck_slug": "auth",
+            "branch_name": "specks/auth-20260208-143022",
+            "base_branch": "main",
+            "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
+            "created_at": "2026-02-08T14:30:22Z",
+            "status": "in_progress",
+            "current_step": 2,
+            "total_steps": 5,
+            "beads_root": "bd-abc123"
+        }"#;
+
+        let session: Session = serde_json::from_str(json).unwrap();
+        assert_eq!(session.schema_version, "1");
+        assert_eq!(session.speck_slug, "auth");
+        assert_eq!(session.current_step, CurrentStep::Index(2));
+        assert_eq!(session.total_steps, 5);
+        assert_eq!(session.beads_root, Some("bd-abc123".to_string()));
+        assert_eq!(session.session_id, None);
+        assert_eq!(session.bead_mapping, None);
+    }
+
+    #[test]
+    fn test_deserialize_implementer_format() {
+        // Implementer format: current_step as string anchor
+        let json = r##"{
+            "session_id": "15-20250210-024623",
+            "speck_path": ".specks/specks-15.md",
+            "worktree_path": "/path/to/.specks-worktrees/specks__15-20250210-024623",
+            "branch_name": "specks/15-20250210-024623",
+            "base_branch": "main",
+            "status": "in_progress",
+            "created_at": "2025-02-10T02:46:30Z",
+            "last_updated_at": "2026-02-10T03:35:00Z",
+            "current_step": "#step-3",
+            "steps_completed": ["#step-0", "#step-1", "#step-2"],
+            "steps_remaining": ["#step-4", "#step-5"],
+            "root_bead": "specks-15g",
+            "bead_mapping": {
+                "#step-0": "specks-15g.1",
+                "#step-3": "specks-15g.4"
+            }
+        }"##;
+
+        let session: Session = serde_json::from_str(json).unwrap();
+        assert_eq!(session.session_id, Some("15-20250210-024623".to_string()));
+        assert_eq!(session.current_step, CurrentStep::Anchor("#step-3".to_string()));
+        assert_eq!(session.beads_root, Some("specks-15g".to_string()));
+        assert!(session.bead_mapping.is_some());
+        assert_eq!(session.bead_mapping.as_ref().unwrap().get("#step-3"), Some(&"specks-15g.4".to_string()));
+    }
+
+    #[test]
+    fn test_deserialize_implementer_format_completed() {
+        // Implementer format: current_step as null (completed)
+        let json = r##"{
+            "session_id": "15-20250210-024623",
+            "speck_path": ".specks/specks-15.md",
+            "worktree_path": "/path/to/.specks-worktrees/specks__15-20250210-024623",
+            "branch_name": "specks/15-20250210-024623",
+            "base_branch": "main",
+            "status": "completed",
+            "created_at": "2025-02-10T02:46:30Z",
+            "current_step": null,
+            "steps_completed": ["#step-0", "#step-1", "#step-2"],
+            "steps_remaining": [],
+            "root_bead": "specks-15g"
+        }"##;
+
+        let session: Session = serde_json::from_str(json).unwrap();
+        assert_eq!(session.current_step, CurrentStep::Done);
+        assert_eq!(session.status, SessionStatus::Completed);
+    }
+
+    #[test]
+    fn test_old_format_roundtrip_no_extra_keys() {
+        // Verify that old format sessions don't get extra keys when serialized
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: "specks/test-123".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: "/path/to/worktree".to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: CurrentStep::Index(1),
+            total_steps: 3,
+            beads_root: Some("bd-test".to_string()),
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+
+        let json = serde_json::to_string_pretty(&session).unwrap();
+
+        // Verify no implementer-specific keys in serialized JSON
+        assert!(!json.contains("session_id"));
+        assert!(!json.contains("last_updated_at"));
+        assert!(!json.contains("steps_completed"));
+        assert!(!json.contains("steps_remaining"));
+        assert!(!json.contains("bead_mapping"));
+        assert!(!json.contains("step_summaries"));
+
+        // Verify current_step is a number
+        assert!(json.contains(r#""current_step": 1"#));
+    }
+
+    #[test]
+    fn test_beads_root_alias() {
+        // Verify that "root_bead" is accepted as alias for "beads_root"
+        let json = r#"{
+            "speck_path": ".specks/specks-15.md",
+            "branch_name": "specks/15-123",
+            "base_branch": "main",
+            "worktree_path": "/path/to/worktree",
+            "created_at": "2026-02-08T12:00:00Z",
+            "status": "pending",
+            "root_bead": "specks-15g"
+        }"#;
+
+        let session: Session = serde_json::from_str(json).unwrap();
+        assert_eq!(session.beads_root, Some("specks-15g".to_string()));
+    }
+
+    #[test]
+    fn test_reconcile_with_anchor_current_step() {
+        // Test bead lookup with CurrentStep::Anchor
+        let mut bead_mapping = std::collections::HashMap::new();
+        bead_mapping.insert("#step-2".to_string(), "bd-test.3".to_string());
+
+        let current_step = CurrentStep::Anchor("#step-2".to_string());
+
+        match current_step {
+            CurrentStep::Anchor(ref anchor) => {
+                let bead_id = bead_mapping.get(anchor).unwrap();
+                assert_eq!(bead_id, "bd-test.3");
+            }
+            _ => panic!("Expected Anchor variant"),
+        }
+    }
+
+    #[test]
+    fn test_reconcile_with_index_current_step() {
+        // Test bead ID calculation with CurrentStep::Index
+        let beads_root = "bd-test";
+        let current_step = CurrentStep::Index(2);
+
+        match current_step {
+            CurrentStep::Index(n) => {
+                let bead_id = format!("{}.{}", beads_root, n + 1);
+                assert_eq!(bead_id, "bd-test.3");
+            }
+            _ => panic!("Expected Index variant"),
+        }
+    }
+
+    #[test]
+    fn test_reconcile_with_done_current_step() {
+        // Test that Done variant is handled correctly
+        let current_step = CurrentStep::Done;
+
+        match current_step {
+            CurrentStep::Done => {
+                // Expected - no bead to close
+            }
+            _ => panic!("Expected Done variant"),
+        }
     }
 }

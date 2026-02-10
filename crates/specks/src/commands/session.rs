@@ -100,18 +100,58 @@ fn run_reconcile(
 
     // Identify the bead to close
     // The current_step field points to the step that was being executed
-    // Bead ID pattern: {beads_root}.{step_number + 1}
-    let bead_id = if let Some(beads_root) = &session.beads_root {
-        // current_step is 0-indexed, bead numbering is 1-indexed
-        format!("{}.{}", beads_root, session.current_step + 1)
-    } else {
-        return output_error(
-            json_output,
-            "E039",
-            "Session has no beads_root - cannot identify bead to close",
-            &session_id,
-            39,
-        );
+    // Pattern matching on CurrentStep to support both formats:
+    // - Index(n): old format, bead ID = {beads_root}.{n + 1}
+    // - Anchor(s): implementer format, lookup via bead_mapping
+    // - Done: no bead to close (implementation completed)
+    let bead_id = match &session.current_step {
+        specks_core::session::CurrentStep::Index(step_index) => {
+            if let Some(beads_root) = &session.beads_root {
+                // current_step is 0-indexed, bead numbering is 1-indexed
+                format!("{}.{}", beads_root, step_index + 1)
+            } else {
+                return output_error(
+                    json_output,
+                    "E039",
+                    "Session has no beads_root - cannot identify bead to close",
+                    &session_id,
+                    39,
+                );
+            }
+        }
+        specks_core::session::CurrentStep::Anchor(step_anchor) => {
+            if let Some(bead_mapping) = &session.bead_mapping {
+                bead_mapping
+                    .get(step_anchor)
+                    .cloned()
+                    .ok_or_else(|| {
+                        format!(
+                            "Step anchor '{}' not found in bead_mapping",
+                            step_anchor
+                        )
+                    })
+                    .map_err(|msg| {
+                        output_error(json_output, "E042", &msg, &session_id, 42).unwrap_err()
+                    })?
+            } else {
+                return output_error(
+                    json_output,
+                    "E043",
+                    "Session with anchor current_step has no bead_mapping",
+                    &session_id,
+                    43,
+                );
+            }
+        }
+        specks_core::session::CurrentStep::Done => {
+            return output_error(
+                json_output,
+                "E044",
+                "Session current_step is Done (null) - no bead to close",
+                &session_id,
+                44,
+            );
+        }
     };
 
     if dry_run {

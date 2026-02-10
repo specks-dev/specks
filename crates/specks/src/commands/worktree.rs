@@ -443,10 +443,34 @@ pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> 
                         println!("  Branch: {}", session.branch_name);
                         println!("  Path:   {}", session.worktree_path);
                         println!("  Speck:  {}", session.speck_path);
-                        println!(
-                            "  Status: {:?} (step {}/{})",
-                            session.status, session.current_step, session.total_steps
-                        );
+
+                        // Format progress string based on CurrentStep variant
+                        let progress_str = match &session.current_step {
+                            specks_core::session::CurrentStep::Index(n) => {
+                                format!("step {}/{}", n, session.total_steps)
+                            }
+                            specks_core::session::CurrentStep::Anchor(anchor) => {
+                                // Try to extract numeric step from anchor (e.g., "#step-3" -> 3)
+                                let step_num = anchor
+                                    .strip_prefix("#step-")
+                                    .and_then(|s| s.parse::<usize>().ok())
+                                    .map(|n| n + 1); // Convert to 1-indexed for display
+
+                                if let Some(num) = step_num {
+                                    // Calculate total from steps_completed + steps_remaining
+                                    let total = session.steps_completed.as_ref().map(|c| c.len()).unwrap_or(0)
+                                        + session.steps_remaining.as_ref().map(|r| r.len()).unwrap_or(0);
+                                    format!("step {}/{}", num, total)
+                                } else {
+                                    format!("at {}", anchor)
+                                }
+                            }
+                            specks_core::session::CurrentStep::Done => {
+                                "completed".to_string()
+                            }
+                        };
+
+                        println!("  Status: {:?} ({})", session.status, progress_str);
                         println!();
                     }
                 }

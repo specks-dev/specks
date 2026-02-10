@@ -1209,10 +1209,16 @@ mod tests {
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-09T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 0,
+            current_step: specks_core::session::CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1247,10 +1253,16 @@ mod tests {
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-09T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 0,
+            current_step: specks_core::session::CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1290,10 +1302,16 @@ mod tests {
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-09T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 0,
+            current_step: specks_core::session::CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();
@@ -1340,10 +1358,16 @@ mod tests {
             worktree_path: worktree2.display().to_string(),
             created_at: "2026-02-09T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 0,
+            current_step: specks_core::session::CurrentStep::Index(0),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         let session_json = serde_json::to_string_pretty(&session).unwrap();

@@ -5,7 +5,7 @@
 
 use crate::error::SpecksError;
 use crate::parser::parse_speck;
-use crate::session::{Session, SessionStatus, load_session, now_iso8601, save_session};
+use crate::session::{CurrentStep, Session, SessionStatus, load_session, now_iso8601, save_session};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -535,10 +535,16 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         worktree_path: worktree_path.display().to_string(),
         created_at: now_iso8601(),
         status: SessionStatus::Pending,
-        current_step: 0,
+        current_step: CurrentStep::Index(0),
         total_steps: speck.steps.len(),
         beads_root: None,
         reused: false,
+        session_id: None,
+        last_updated_at: None,
+        steps_completed: None,
+        steps_remaining: None,
+        bead_mapping: None,
+        step_summaries: None,
     };
 
     // Save session (with partial failure recovery)
@@ -928,10 +934,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 1,
+            current_step: CurrentStep::Index(1),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         save_session(&session, temp_dir).unwrap();
@@ -1200,10 +1212,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 1,
+            current_step: CurrentStep::Index(1),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         save_session(&session, temp_dir).unwrap();
