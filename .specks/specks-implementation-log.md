@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-3
+date: 2026-02-10T02:56:23Z
+bead: specks-15g.4
+---
+
+## #step-3: Added second check_main_sync() call immediately before git push with code comment documenting race window limitation
+
+**Files changed:**
+- crates/specks/src/commands/merge.rs
+
+---
+
+---
 step: #step-2
 date: 2026-02-10T02:52:00Z
 bead: specks-15g.3

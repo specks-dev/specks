@@ -840,6 +840,32 @@ pub fn run_merge(
 
     // Step 9: Push main to origin
     if infrastructure_committed {
+        // Re-check main sync immediately before push to minimize race window
+        // Note: A tiny race window still exists between this check and the actual push
+        // (unavoidable without distributed locking), but this reduces the window significantly
+        if let Err(e) = check_main_sync() {
+            let data = MergeData {
+                status: "error".to_string(),
+                pr_url: Some(pr_info.url.clone()),
+                pr_number: Some(pr_info.number),
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: Some(infrastructure_committed),
+                infrastructure_files: Some(infrastructure.clone()),
+                worktree_cleaned: None,
+                dry_run: false,
+                would_commit: None,
+                would_merge_pr: None,
+                would_cleanup_worktree: None,
+                error: Some(format!("Pre-push sync check failed: {}", e)),
+                message: None,
+            };
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            return Err(format!("Pre-push sync check failed: {}", e));
+        }
+
         let push_output = Command::new("git")
             .args(["push", "origin", "main"])
             .output()
