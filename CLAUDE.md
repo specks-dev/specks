@@ -4,6 +4,12 @@
 
 Specks transforms ideas into working software through orchestrated LLM agents. A multi-agent suite collaborates to create structured plans and execute them to completion—from initial idea through implementation, review, and delivery.
 
+## Git Policy
+
+**ONLY THE USER CAN COMMIT TO GIT.** Do not run `git commit`, `git push`, or any git commands that modify the repository history unless explicitly instructed by the user. You may run read-only git commands like `git status`, `git diff`, `git log`, etc.
+
+**Exception:** The `committer-agent` is explicitly given the job to make commits during the implementer workflow.
+
 ## Crate Structure
 
 ```

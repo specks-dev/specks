@@ -271,6 +271,7 @@ mod tests {
 
     #[test]
     fn test_log_rotation_line_threshold() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -306,10 +307,14 @@ mod tests {
         let new_content = fs::read_to_string(&log_path).unwrap();
         assert!(new_content.contains("# Specks Implementation Log"));
         assert!(new_content.len() < 500); // Fresh log is much smaller
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_rotation_byte_threshold() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -336,10 +341,14 @@ mod tests {
         // Verify archive was created
         let archive_dir = temp_path.join(".specks/archive");
         assert!(archive_dir.exists());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_rotation_under_thresholds() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -370,10 +379,14 @@ mod tests {
         assert!(log_path.exists());
         let new_content = fs::read_to_string(&log_path).unwrap();
         assert!(new_content.contains("Line 99"));
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_rotation_force() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -404,10 +417,14 @@ mod tests {
         assert!(log_path.exists());
         let new_content = fs::read_to_string(&log_path).unwrap();
         assert!(new_content.contains("# Specks Implementation Log"));
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_rotation_nonexistent_log() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -425,10 +442,14 @@ mod tests {
         // Verify no archive created
         let archive_dir = temp_path.join(".specks/archive");
         assert!(!archive_dir.exists());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_archive_filename_format() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -460,6 +481,9 @@ mod tests {
         // Check timestamp format: YYYY-MM-DD-HHMMSS (17 chars between prefix and .md)
         let timestamp_part = &filename["implementation-log-".len()..filename.len() - 3];
         assert_eq!(timestamp_part.len(), 17);
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
@@ -530,6 +554,7 @@ mod tests {
 
     #[test]
     fn test_log_prepend_full_flow() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -573,10 +598,14 @@ Entries are sorted newest-first.
         let separator_pos = new_content.find("---\n\n").unwrap();
         let entry_pos = new_content.find("step: #step-0").unwrap();
         assert!(entry_pos > separator_pos);
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_prepend_multiple_entries() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -615,10 +644,14 @@ Entries are sorted newest-first.
         let step0_pos = new_content.find("step: #step-0").unwrap();
         let step1_pos = new_content.find("step: #step-1").unwrap();
         assert!(step1_pos < step0_pos, "Newest entry should be first");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_log_prepend_nonexistent_log() {
+        let original_dir = std::env::current_dir().unwrap();
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
@@ -636,6 +669,9 @@ Entries are sorted newest-first.
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("does not exist"));
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 }
 
