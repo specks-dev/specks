@@ -156,6 +156,7 @@ Then use the skills:
 /specks:planner "add user authentication"    # Create a new speck
 /specks:planner .specks/specks-auth.md       # Revise existing speck
 /specks:implementer .specks/specks-auth.md   # Execute a speck
+/specks:merge .specks/specks-auth.md         # Merge PR and clean up
 ```
 
 ## Error Codes
@@ -186,15 +187,17 @@ Specks is a Claude Code plugin. Planning and execution are invoked via skills, n
 |-------|---------|
 | `/specks:planner` | Create or revise a speck through agent collaboration |
 | `/specks:implementer` | Execute a speck through agent orchestration |
+| `/specks:merge` | Merge implementation PR and clean up worktree |
 
-### Orchestrator Skills (2)
+### Orchestrator Skills (3)
 
-Two orchestrator skills contain the main workflow logic and spawn sub-agents via Task tool:
+Three skills contain the main workflow logic:
 
 | Skill | Role |
 |-------|------|
 | **planner** | Orchestrates planning loop: clarifier → author → critic |
 | **implementer** | Orchestrates implementation loop: architect → coder → reviewer → committer |
+| **merge** | Wraps `specks merge` CLI with dry-run preview, confirmation, and post-merge health checks |
 
 ### Sub-Agents (7)
 
