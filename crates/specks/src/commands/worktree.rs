@@ -7,7 +7,7 @@ use clap::Subcommand;
 use serde::Serialize;
 use specks_core::{
     session::Session,
-    worktree::{WorktreeConfig, cleanup_worktrees, create_worktree, list_worktrees},
+    worktree::{CleanupMode, WorktreeConfig, cleanup_worktrees, create_worktree, list_worktrees},
 };
 use std::path::{Path, PathBuf};
 
@@ -45,20 +45,32 @@ pub enum WorktreeCommands {
     )]
     List,
 
-    /// Remove worktrees for merged PRs
+    /// Remove worktrees based on cleanup mode
     ///
-    /// Cleans up worktrees whose branches have been merged.
+    /// Cleans up worktrees based on PR state and session status.
     #[command(
-        long_about = "Remove worktrees for merged branches.\n\nUses git merge-base to detect merged branches.\nRemoves both the worktree directory and the branch.\n\nRequires --merged flag for safety.\nUse --dry-run to preview what would be removed.\n\nNote: Squash/rebase merges may not be detected. See speck D09 for details."
+        long_about = "Remove worktrees based on cleanup mode.\n\nModes:\n  --merged: Remove worktrees with merged PRs\n  --orphaned: Remove worktrees with no PR (not InProgress)\n  --all: Remove all eligible worktrees (merged + orphaned + closed)\n\nUse --dry-run to preview what would be removed.\nUse --force to override PR state unknown skips.\n\nInProgress sessions are always protected."
     )]
     Cleanup {
-        /// Only remove merged worktrees (required)
-        #[arg(long, required = true)]
+        /// Only remove merged worktrees
+        #[arg(long)]
         merged: bool,
+
+        /// Only remove orphaned worktrees (no PR, not InProgress)
+        #[arg(long)]
+        orphaned: bool,
+
+        /// Remove all eligible worktrees (merged + orphaned + closed)
+        #[arg(long)]
+        all: bool,
 
         /// Show what would be removed without removing
         #[arg(long)]
         dry_run: bool,
+
+        /// Force removal even when PR state is unknown
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -93,7 +105,10 @@ pub struct ListData {
 /// JSON output for cleanup command
 #[derive(Serialize)]
 pub struct CleanupData {
-    pub removed: Vec<String>,
+    pub merged_removed: Vec<String>,
+    pub orphaned_removed: Vec<String>,
+    pub stale_branches_removed: Vec<String>,
+    pub skipped: Vec<(String, String)>,
     pub dry_run: bool,
 }
 
@@ -490,18 +505,36 @@ pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> 
 
 /// Run worktree cleanup command
 pub fn run_worktree_cleanup(
-    _merged: bool, // Required by clap, but not used (always true due to clap required)
+    merged: bool,
+    orphaned: bool,
+    all: bool,
     dry_run: bool,
+    force: bool,
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
     let repo_root = std::env::current_dir().map_err(|e| e.to_string())?;
 
-    match cleanup_worktrees(&repo_root, dry_run) {
-        Ok(removed) => {
+    // Determine cleanup mode
+    let mode = if all {
+        CleanupMode::All
+    } else if orphaned {
+        CleanupMode::Orphaned
+    } else if merged {
+        CleanupMode::Merged
+    } else {
+        // Default to Merged for backward compatibility
+        CleanupMode::Merged
+    };
+
+    match cleanup_worktrees(&repo_root, mode, dry_run, force) {
+        Ok(result) => {
             if json_output {
                 let data = CleanupData {
-                    removed: removed.clone(),
+                    merged_removed: result.merged_removed.clone(),
+                    orphaned_removed: result.orphaned_removed.clone(),
+                    stale_branches_removed: result.stale_branches_removed.clone(),
+                    skipped: result.skipped.clone(),
                     dry_run,
                 };
                 println!(
@@ -509,21 +542,48 @@ pub fn run_worktree_cleanup(
                     serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
                 );
             } else if !quiet {
+                let total_removed = result.merged_removed.len() + result.orphaned_removed.len();
+
                 if dry_run {
-                    if removed.is_empty() {
-                        println!("No merged worktrees to remove");
+                    if total_removed == 0 {
+                        println!("No worktrees to remove");
                     } else {
-                        println!("Would remove {} merged worktree(s):", removed.len());
-                        for branch in removed {
+                        println!("Would remove {} worktree(s):", total_removed);
+                        if !result.merged_removed.is_empty() {
+                            println!("\nMerged PRs:");
+                            for branch in &result.merged_removed {
+                                println!("  - {}", branch);
+                            }
+                        }
+                        if !result.orphaned_removed.is_empty() {
+                            println!("\nOrphaned (no PR):");
+                            for branch in &result.orphaned_removed {
+                                println!("  - {}", branch);
+                            }
+                        }
+                    }
+                } else if total_removed == 0 {
+                    println!("No worktrees removed");
+                } else {
+                    println!("Removed {} worktree(s):", total_removed);
+                    if !result.merged_removed.is_empty() {
+                        println!("\nMerged PRs:");
+                        for branch in &result.merged_removed {
                             println!("  - {}", branch);
                         }
                     }
-                } else if removed.is_empty() {
-                    println!("No merged worktrees removed");
-                } else {
-                    println!("Removed {} merged worktree(s):", removed.len());
-                    for branch in removed {
-                        println!("  - {}", branch);
+                    if !result.orphaned_removed.is_empty() {
+                        println!("\nOrphaned (no PR):");
+                        for branch in &result.orphaned_removed {
+                            println!("  - {}", branch);
+                        }
+                    }
+                }
+
+                if !result.skipped.is_empty() {
+                    println!("\nSkipped {} worktree(s):", result.skipped.len());
+                    for (branch, reason) in &result.skipped {
+                        println!("  - {}: {}", branch, reason);
                     }
                 }
             }
@@ -576,12 +636,18 @@ mod tests {
     #[test]
     fn test_cleanup_data_serialization() {
         let data = CleanupData {
-            removed: vec!["specks/test-123".to_string()],
+            merged_removed: vec!["specks/merged-123".to_string()],
+            orphaned_removed: vec!["specks/orphan-456".to_string()],
+            stale_branches_removed: vec![],
+            skipped: vec![("specks/skip-789".to_string(), "InProgress".to_string())],
             dry_run: true,
         };
 
         let json = serde_json::to_string(&data).expect("serialization should succeed");
-        assert!(json.contains("removed"));
+        assert!(json.contains("merged_removed"));
+        assert!(json.contains("orphaned_removed"));
+        assert!(json.contains("stale_branches_removed"));
+        assert!(json.contains("skipped"));
         assert!(json.contains("dry_run"));
     }
 
@@ -622,6 +688,7 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use specks_core::worktree::CleanupMode;
     use std::fs;
     use std::process::Command;
     use tempfile::TempDir;
@@ -874,24 +941,31 @@ mod integration_tests {
             .expect("failed to git commit");
 
         // Merge the branch into main
-        Command::new("git")
+        let checkout_output = Command::new("git")
             .args(["checkout", "main"])
             .current_dir(&repo_path)
             .output()
             .expect("failed to checkout main");
+        assert!(checkout_output.status.success(), "checkout should succeed: {}", String::from_utf8_lossy(&checkout_output.stderr));
 
-        Command::new("git")
+        let merge_output = Command::new("git")
             .args(["merge", &session.branch_name])
             .current_dir(&repo_path)
             .output()
             .expect("failed to merge");
+        assert!(merge_output.status.success(), "merge should succeed: {}", String::from_utf8_lossy(&merge_output.stderr));
 
         // Dry run should detect merged worktree but not remove it
-        let removed =
-            cleanup_worktrees(&repo_path, true).expect("cleanup_worktrees dry run should succeed");
+        // Use force=true since gh CLI is not available in test environment
+        let result = cleanup_worktrees(&repo_path, CleanupMode::Merged, true, true)
+            .expect("cleanup_worktrees dry run should succeed");
 
-        assert_eq!(removed.len(), 1, "should detect one merged worktree");
-        assert_eq!(removed[0], session.branch_name);
+        assert_eq!(
+            result.merged_removed.len(),
+            1,
+            "should detect one merged worktree"
+        );
+        assert_eq!(result.merged_removed[0], session.branch_name);
         assert!(
             worktree_path.exists(),
             "worktree directory should still exist after dry run"

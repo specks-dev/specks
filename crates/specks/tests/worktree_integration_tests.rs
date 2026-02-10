@@ -330,10 +330,12 @@ fn test_worktree_lifecycle() {
     let is_merged = merge_check.status.success();
 
     // Step 7: Run cleanup --merged and verify worktree is removed
+    // Use --force since gh CLI is not available in test environment
     let output = Command::new(specks_binary())
         .arg("worktree")
         .arg("cleanup")
         .arg("--merged")
+        .arg("--force")
         .current_dir(temp.path())
         .output()
         .expect("failed to run specks worktree cleanup");
@@ -533,11 +535,13 @@ fn test_worktree_cleanup_dry_run() {
         .expect("failed to merge branch");
 
     // Run cleanup with dry-run
+    // Use --force since gh CLI is not available in test environment
     let output = Command::new(specks_binary())
         .arg("worktree")
         .arg("cleanup")
         .arg("--merged")
         .arg("--dry-run")
+        .arg("--force")
         .current_dir(temp.path())
         .output()
         .expect("failed to run specks worktree cleanup --dry-run");

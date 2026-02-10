@@ -9,9 +9,32 @@ Entries are sorted newest-first.
 ---
 
 ---
+<<<<<<< HEAD
 step: #step-4
 date: 2026-02-10T16:15:30Z
 bead: specks-dqg.5
+=======
+step: #step-2
+date: 2026-02-10T23:01:58Z
+bead: specks-dqg.3
+---
+
+## #step-2: Added CleanupMode enum (Merged, Orphaned, Stale, All), CleanupResult struct, CLI flags (--orphaned, --all, --force), InProgress protection, NeedsReconcile handling, closed PR protection, dirty worktree skip, and 11 unit tests.
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/lib.rs
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/main.rs
+- crates/specks/tests/worktree_integration_tests.rs
+
+---
+
+---
+step: #step-1
+date: 2026-02-10T23:01:16Z
+bead: specks-dqg.2
+>>>>>>> ab54852 (feat(worktree): add CleanupMode for orphaned and multi-mode cleanup)
 ---
 
 ## #step-4: Added list_specks_branches() and cleanup_stale_branches() functions. Implements safe delete (git branch -d) first, escalates to force delete (git branch -D) only if PR is confirmed merged via gh CLI. Added --stale flag to CLI with integration into --all mode.
