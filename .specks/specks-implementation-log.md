@@ -9,9 +9,66 @@ Entries are sorted newest-first.
 ---
 
 ---
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
 step: #step-4
 date: 2026-02-10T16:15:30Z
 bead: specks-dqg.5
+=======
+=======
+=======
+step: #step-5
+date: 2026-02-10T23:35:00Z
+bead: specks-dqg.6
+---
+
+## #step-5: Fixed check_worktrees() false positive by filtering to specks__* directories. Added health checks: check_stale_branches() for branches without worktrees, check_orphaned_worktrees() for worktrees without PRs, check_sessionless_worktrees() for worktree directories without sessions, and check_closed_pr_worktrees() for closed-but-unmerged PRs with actionable recommendations.
+
+**Files changed:**
+- crates/specks/src/commands/doctor.rs
+
+---
+
+---
+>>>>>>> 2fd0a8e (feat(doctor): extend health checks for worktree diagnostics)
+step: #step-3
+date: 2026-02-10T23:02:30Z
+bead: specks-dqg.4
+---
+
+## #step-3: Added specks worktree remove command supporting identification by speck path, branch name, or worktree path. Implements ambiguity handling per D10 (fail fast with candidate list), --force flag for dirty worktrees, and full cleanup of session, artifacts, directory, and branch.
+
+**Files changed:**
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/commands/mod.rs
+- crates/specks/src/main.rs
+
+---
+
+---
+>>>>>>> 62409a8 (feat(worktree): add specks worktree remove command)
+step: #step-2
+date: 2026-02-10T23:01:58Z
+bead: specks-dqg.3
+---
+
+## #step-2: Added CleanupMode enum (Merged, Orphaned, Stale, All), CleanupResult struct, CLI flags (--orphaned, --all, --force), InProgress protection, NeedsReconcile handling, closed PR protection, dirty worktree skip, and 11 unit tests.
+
+**Files changed:**
+- crates/specks-core/src/worktree.rs
+- crates/specks-core/src/lib.rs
+- crates/specks/src/commands/worktree.rs
+- crates/specks/src/main.rs
+- crates/specks/tests/worktree_integration_tests.rs
+
+---
+
+---
+step: #step-1
+date: 2026-02-10T23:01:16Z
+bead: specks-dqg.2
+>>>>>>> ab54852 (feat(worktree): add CleanupMode for orphaned and multi-mode cleanup)
 ---
 
 ## #step-4: Added list_specks_branches() and cleanup_stale_branches() functions. Implements safe delete (git branch -d) first, escalates to force delete (git branch -D) only if PR is confirmed merged via gh CLI. Added --stale flag to CLI with integration into --all mode.

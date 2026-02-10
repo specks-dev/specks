@@ -74,8 +74,18 @@ fn main() -> ExitCode {
                 cli.quiet,
             ),
             WorktreeCommands::List => commands::run_worktree_list(cli.json, cli.quiet),
-            WorktreeCommands::Cleanup { merged, dry_run } => {
-                commands::run_worktree_cleanup(merged, dry_run, cli.json, cli.quiet)
+            WorktreeCommands::Cleanup {
+                merged,
+                orphaned,
+                stale,
+                all,
+                dry_run,
+                force,
+            } => commands::run_worktree_cleanup(
+                merged, orphaned, stale, all, dry_run, force, cli.json, cli.quiet,
+            ),
+            WorktreeCommands::Remove { target, force } => {
+                commands::run_worktree_remove(target, force, cli.json, cli.quiet)
             }
         },
         Some(Commands::Merge {

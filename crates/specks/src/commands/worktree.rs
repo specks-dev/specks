@@ -6,8 +6,8 @@
 use clap::Subcommand;
 use serde::Serialize;
 use specks_core::{
-    session::Session,
-    worktree::{WorktreeConfig, cleanup_worktrees, create_worktree, list_worktrees},
+    session::{Session, delete_session, session_id_from_worktree},
+    worktree::{CleanupMode, WorktreeConfig, cleanup_worktrees, create_worktree, list_worktrees, remove_worktree},
 };
 use std::path::{Path, PathBuf};
 
@@ -45,20 +45,51 @@ pub enum WorktreeCommands {
     )]
     List,
 
-    /// Remove worktrees for merged PRs
+    /// Remove worktrees based on cleanup mode
     ///
-    /// Cleans up worktrees whose branches have been merged.
+    /// Cleans up worktrees based on PR state and session status.
     #[command(
-        long_about = "Remove worktrees for merged branches.\n\nUses git merge-base to detect merged branches.\nRemoves both the worktree directory and the branch.\n\nRequires --merged flag for safety.\nUse --dry-run to preview what would be removed.\n\nNote: Squash/rebase merges may not be detected. See speck D09 for details."
+        long_about = "Remove worktrees based on cleanup mode.\n\nModes:\n  --merged: Remove worktrees with merged PRs\n  --orphaned: Remove worktrees with no PR (not InProgress)\n  --stale: Remove specks/* branches without worktrees\n  --all: Remove all eligible worktrees (merged + orphaned + closed + stale branches)\n\nUse --dry-run to preview what would be removed.\nUse --force to override PR state unknown skips and force-delete stale branches.\n\nInProgress sessions are always protected."
     )]
     Cleanup {
-        /// Only remove merged worktrees (required)
-        #[arg(long, required = true)]
+        /// Only remove merged worktrees
+        #[arg(long)]
         merged: bool,
+
+        /// Only remove orphaned worktrees (no PR, not InProgress)
+        #[arg(long)]
+        orphaned: bool,
+
+        /// Only remove stale branches (specks/* branches without worktrees)
+        #[arg(long)]
+        stale: bool,
+
+        /// Remove all eligible worktrees (merged + orphaned + closed + stale branches)
+        #[arg(long)]
+        all: bool,
 
         /// Show what would be removed without removing
         #[arg(long)]
         dry_run: bool,
+
+        /// Force removal even when PR state is unknown
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Remove a specific worktree
+    ///
+    /// Removes a worktree identified by speck path, branch name, or worktree path.
+    #[command(
+        long_about = "Remove a specific worktree.\n\nIdentifies worktree by:\n  - Speck path (e.g., .specks/specks-14.md)\n  - Branch name (e.g., specks/14-20250209-172637)\n  - Worktree path (e.g., .specks-worktrees/specks__14-...)\n\nIf multiple worktrees match a speck path, an error is returned\nlisting all candidates. Use branch name or worktree path to disambiguate.\n\nUse --force to remove dirty worktrees with uncommitted changes."
+    )]
+    Remove {
+        /// Target identifier (speck path, branch name, or worktree path)
+        target: String,
+
+        /// Force removal of dirty worktree
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -93,8 +124,19 @@ pub struct ListData {
 /// JSON output for cleanup command
 #[derive(Serialize)]
 pub struct CleanupData {
-    pub removed: Vec<String>,
+    pub merged_removed: Vec<String>,
+    pub orphaned_removed: Vec<String>,
+    pub stale_branches_removed: Vec<String>,
+    pub skipped: Vec<(String, String)>,
     pub dry_run: bool,
+}
+
+/// JSON output for remove command
+#[derive(Serialize)]
+pub struct RemoveData {
+    pub worktree_path: String,
+    pub branch_name: String,
+    pub speck_path: String,
 }
 
 /// Sync beads within the worktree and return bead mapping
@@ -443,10 +485,34 @@ pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> 
                         println!("  Branch: {}", session.branch_name);
                         println!("  Path:   {}", session.worktree_path);
                         println!("  Speck:  {}", session.speck_path);
-                        println!(
-                            "  Status: {:?} (step {}/{})",
-                            session.status, session.current_step, session.total_steps
-                        );
+
+                        // Format progress string based on CurrentStep variant
+                        let progress_str = match &session.current_step {
+                            specks_core::session::CurrentStep::Index(n) => {
+                                format!("step {}/{}", n, session.total_steps)
+                            }
+                            specks_core::session::CurrentStep::Anchor(anchor) => {
+                                // Try to extract numeric step from anchor (e.g., "#step-3" -> 3)
+                                let step_num = anchor
+                                    .strip_prefix("#step-")
+                                    .and_then(|s| s.parse::<usize>().ok())
+                                    .map(|n| n + 1); // Convert to 1-indexed for display
+
+                                if let Some(num) = step_num {
+                                    // Calculate total from steps_completed + steps_remaining
+                                    let total = session.steps_completed.as_ref().map(|c| c.len()).unwrap_or(0)
+                                        + session.steps_remaining.as_ref().map(|r| r.len()).unwrap_or(0);
+                                    format!("step {}/{}", num, total)
+                                } else {
+                                    format!("at {}", anchor)
+                                }
+                            }
+                            specks_core::session::CurrentStep::Done => {
+                                "completed".to_string()
+                            }
+                        };
+
+                        println!("  Status: {:?} ({})", session.status, progress_str);
                         println!();
                     }
                 }
@@ -466,18 +532,39 @@ pub fn run_worktree_list(json_output: bool, quiet: bool) -> Result<i32, String> 
 
 /// Run worktree cleanup command
 pub fn run_worktree_cleanup(
-    _merged: bool, // Required by clap, but not used (always true due to clap required)
+    merged: bool,
+    orphaned: bool,
+    stale: bool,
+    all: bool,
     dry_run: bool,
+    force: bool,
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
     let repo_root = std::env::current_dir().map_err(|e| e.to_string())?;
 
-    match cleanup_worktrees(&repo_root, dry_run) {
-        Ok(removed) => {
+    // Determine cleanup mode
+    let mode = if all {
+        CleanupMode::All
+    } else if stale {
+        CleanupMode::Stale
+    } else if orphaned {
+        CleanupMode::Orphaned
+    } else if merged {
+        CleanupMode::Merged
+    } else {
+        // Default to Merged for backward compatibility
+        CleanupMode::Merged
+    };
+
+    match cleanup_worktrees(&repo_root, mode, dry_run, force) {
+        Ok(result) => {
             if json_output {
                 let data = CleanupData {
-                    removed: removed.clone(),
+                    merged_removed: result.merged_removed.clone(),
+                    orphaned_removed: result.orphaned_removed.clone(),
+                    stale_branches_removed: result.stale_branches_removed.clone(),
+                    skipped: result.skipped.clone(),
                     dry_run,
                 };
                 println!(
@@ -485,21 +572,62 @@ pub fn run_worktree_cleanup(
                     serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
                 );
             } else if !quiet {
+                let total_removed = result.merged_removed.len()
+                    + result.orphaned_removed.len()
+                    + result.stale_branches_removed.len();
+
                 if dry_run {
-                    if removed.is_empty() {
-                        println!("No merged worktrees to remove");
+                    if total_removed == 0 {
+                        println!("No worktrees or branches to remove");
                     } else {
-                        println!("Would remove {} merged worktree(s):", removed.len());
-                        for branch in removed {
+                        println!("Would remove {} item(s):", total_removed);
+                        if !result.merged_removed.is_empty() {
+                            println!("\nMerged PRs:");
+                            for branch in &result.merged_removed {
+                                println!("  - {}", branch);
+                            }
+                        }
+                        if !result.orphaned_removed.is_empty() {
+                            println!("\nOrphaned (no PR):");
+                            for branch in &result.orphaned_removed {
+                                println!("  - {}", branch);
+                            }
+                        }
+                        if !result.stale_branches_removed.is_empty() {
+                            println!("\nStale branches (no worktree):");
+                            for branch in &result.stale_branches_removed {
+                                println!("  - {}", branch);
+                            }
+                        }
+                    }
+                } else if total_removed == 0 {
+                    println!("No worktrees or branches removed");
+                } else {
+                    println!("Removed {} item(s):", total_removed);
+                    if !result.merged_removed.is_empty() {
+                        println!("\nMerged PRs:");
+                        for branch in &result.merged_removed {
                             println!("  - {}", branch);
                         }
                     }
-                } else if removed.is_empty() {
-                    println!("No merged worktrees removed");
-                } else {
-                    println!("Removed {} merged worktree(s):", removed.len());
-                    for branch in removed {
-                        println!("  - {}", branch);
+                    if !result.orphaned_removed.is_empty() {
+                        println!("\nOrphaned (no PR):");
+                        for branch in &result.orphaned_removed {
+                            println!("  - {}", branch);
+                        }
+                    }
+                    if !result.stale_branches_removed.is_empty() {
+                        println!("\nStale branches (no worktree):");
+                        for branch in &result.stale_branches_removed {
+                            println!("  - {}", branch);
+                        }
+                    }
+                }
+
+                if !result.skipped.is_empty() {
+                    println!("\nSkipped {} item(s):", result.skipped.len());
+                    for (branch, reason) in &result.skipped {
+                        println!("  - {}: {}", branch, reason);
                     }
                 }
             }
@@ -514,6 +642,204 @@ pub fn run_worktree_cleanup(
             Ok(1)
         }
     }
+}
+
+/// Run worktree remove command
+pub fn run_worktree_remove(
+    target: String,
+    force: bool,
+    json_output: bool,
+    quiet: bool,
+) -> Result<i32, String> {
+    use std::process::Command;
+
+    let repo_root = std::env::current_dir().map_err(|e| e.to_string())?;
+
+    // List all worktrees
+    let worktrees = list_worktrees(&repo_root).map_err(|e| e.to_string())?;
+
+    // Try to identify the worktree by:
+    // 1. Speck path (can match multiple - error if so)
+    // 2. Branch name (exact match)
+    // 3. Worktree path (exact match)
+
+    let mut matching_sessions: Vec<&Session> = Vec::new();
+
+    // Check if target is a speck path
+    let target_path = PathBuf::from(&target);
+    let canonical_target = if target_path.is_absolute() {
+        target_path.clone()
+    } else {
+        repo_root.join(&target_path)
+    };
+
+    // Try to match by speck path
+    for session in &worktrees {
+        let session_speck_path = PathBuf::from(&session.speck_path);
+        let canonical_session_speck = if session_speck_path.is_absolute() {
+            session_speck_path.clone()
+        } else {
+            repo_root.join(&session_speck_path)
+        };
+
+        // Compare canonical paths
+        if canonical_session_speck == canonical_target {
+            matching_sessions.push(session);
+        }
+    }
+
+    // If multiple matches by speck path, error with candidate list (D10)
+    if matching_sessions.len() > 1 {
+        if json_output {
+            eprintln!(
+                r#"{{"error": "Multiple worktrees found for {}"}}"#,
+                target
+            );
+        } else if !quiet {
+            eprintln!("Error: Multiple worktrees found for {}\n", target);
+            for session in &matching_sessions {
+                let status_str = format!("{:?}", session.status);
+                eprintln!(
+                    "  {}  {}  {}",
+                    session.branch_name, status_str, session.created_at
+                );
+            }
+            eprintln!("\nUse branch name or worktree path to disambiguate:");
+            if let Some(first) = matching_sessions.first() {
+                eprintln!("  specks worktree remove {}", first.branch_name);
+            }
+        }
+        return Ok(1);
+    }
+
+    // If exactly one match by speck path, use it
+    let session = if matching_sessions.len() == 1 {
+        matching_sessions[0]
+    } else {
+        // Try to match by branch name or worktree path
+        worktrees
+            .iter()
+            .find(|s| s.branch_name == target || s.worktree_path == target)
+            .ok_or_else(|| {
+                if json_output {
+                    format!(r#"{{"error": "No worktree found matching: {}"}}"#, target)
+                } else {
+                    format!("error: No worktree found matching: {}", target)
+                }
+            })?
+    };
+
+    // Check if worktree has uncommitted changes (unless --force)
+    if !force {
+        let status_output = Command::new("git")
+            .args(["-C", &session.worktree_path, "status", "--porcelain"])
+            .output()
+            .map_err(|e| format!("failed to check git status: {}", e))?;
+
+        if status_output.status.success() {
+            let stdout = String::from_utf8_lossy(&status_output.stdout);
+            if !stdout.trim().is_empty() {
+                if json_output {
+                    eprintln!(
+                        r#"{{"error": "Worktree has uncommitted changes. Use --force to override."}}"#
+                    );
+                } else if !quiet {
+                    eprintln!("error: Worktree has uncommitted changes");
+                    eprintln!("Use --force to override:");
+                    eprintln!("  specks worktree remove {} --force", target);
+                }
+                return Ok(1);
+            }
+        }
+    }
+
+    // Remove the worktree
+    let worktree_path = PathBuf::from(&session.worktree_path);
+
+    // If --force is passed, we need to manually force-remove the worktree
+    if force {
+        // Use git worktree remove --force directly
+        let remove_output = Command::new("git")
+            .args([
+                "-C",
+                &repo_root.to_string_lossy(),
+                "worktree",
+                "remove",
+                "--force",
+                &session.worktree_path,
+            ])
+            .output()
+            .map_err(|e| format!("failed to remove worktree: {}", e))?;
+
+        if !remove_output.status.success() {
+            let stderr = String::from_utf8_lossy(&remove_output.stderr);
+            if json_output {
+                eprintln!(r#"{{"error": "Failed to remove worktree: {}"}}"#, stderr);
+            } else if !quiet {
+                eprintln!("error: Failed to remove worktree: {}", stderr);
+            }
+            return Ok(1);
+        }
+
+        // Clean up session files manually
+        if let Some(session_id) = session_id_from_worktree(&worktree_path) {
+            let _ = delete_session(&session_id, &repo_root);
+        }
+    } else {
+        // Use the remove_worktree function which handles session cleanup
+        if let Err(e) = remove_worktree(&worktree_path, &repo_root) {
+            if json_output {
+                eprintln!(r#"{{"error": "{}"}}"#, e);
+            } else if !quiet {
+                eprintln!("error: {}", e);
+            }
+            return Ok(1);
+        }
+    }
+
+    // Delete the branch
+    let delete_output = Command::new("git")
+        .args([
+            "-C",
+            &repo_root.to_string_lossy(),
+            "branch",
+            "-D",
+            &session.branch_name,
+        ])
+        .output()
+        .map_err(|e| format!("failed to delete branch: {}", e))?;
+
+    if !delete_output.status.success() {
+        let stderr = String::from_utf8_lossy(&delete_output.stderr);
+        // Warn but don't fail - worktree removal succeeded
+        if !quiet && !json_output {
+            eprintln!("warning: Failed to delete branch: {}", stderr);
+        }
+    }
+
+    // Prune stale worktree metadata
+    let _ = Command::new("git")
+        .args(["-C", &repo_root.to_string_lossy(), "worktree", "prune"])
+        .output();
+
+    if json_output {
+        let data = RemoveData {
+            worktree_path: session.worktree_path.clone(),
+            branch_name: session.branch_name.clone(),
+            speck_path: session.speck_path.clone(),
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
+        );
+    } else if !quiet {
+        println!("Removed worktree:");
+        println!("  Branch: {}", session.branch_name);
+        println!("  Worktree: {}", session.worktree_path);
+        println!("  Speck: {}", session.speck_path);
+    }
+
+    Ok(0)
 }
 
 #[cfg(test)]
@@ -552,13 +878,33 @@ mod tests {
     #[test]
     fn test_cleanup_data_serialization() {
         let data = CleanupData {
-            removed: vec!["specks/test-123".to_string()],
+            merged_removed: vec!["specks/merged-123".to_string()],
+            orphaned_removed: vec!["specks/orphan-456".to_string()],
+            stale_branches_removed: vec![],
+            skipped: vec![("specks/skip-789".to_string(), "InProgress".to_string())],
             dry_run: true,
         };
 
         let json = serde_json::to_string(&data).expect("serialization should succeed");
-        assert!(json.contains("removed"));
+        assert!(json.contains("merged_removed"));
+        assert!(json.contains("orphaned_removed"));
+        assert!(json.contains("stale_branches_removed"));
+        assert!(json.contains("skipped"));
         assert!(json.contains("dry_run"));
+    }
+
+    #[test]
+    fn test_remove_data_serialization() {
+        let data = RemoveData {
+            worktree_path: ".specks-worktrees/specks__test-20260210-120000".to_string(),
+            branch_name: "specks/test-20260210-120000".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+        };
+
+        let json = serde_json::to_string(&data).expect("serialization should succeed");
+        assert!(json.contains("worktree_path"));
+        assert!(json.contains("branch_name"));
+        assert!(json.contains("speck_path"));
     }
 
     #[test]
@@ -598,6 +944,7 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use specks_core::worktree::CleanupMode;
     use std::fs;
     use std::process::Command;
     use tempfile::TempDir;
@@ -850,24 +1197,31 @@ mod integration_tests {
             .expect("failed to git commit");
 
         // Merge the branch into main
-        Command::new("git")
+        let checkout_output = Command::new("git")
             .args(["checkout", "main"])
             .current_dir(&repo_path)
             .output()
             .expect("failed to checkout main");
+        assert!(checkout_output.status.success(), "checkout should succeed: {}", String::from_utf8_lossy(&checkout_output.stderr));
 
-        Command::new("git")
+        let merge_output = Command::new("git")
             .args(["merge", &session.branch_name])
             .current_dir(&repo_path)
             .output()
             .expect("failed to merge");
+        assert!(merge_output.status.success(), "merge should succeed: {}", String::from_utf8_lossy(&merge_output.stderr));
 
         // Dry run should detect merged worktree but not remove it
-        let removed =
-            cleanup_worktrees(&repo_path, true).expect("cleanup_worktrees dry run should succeed");
+        // Use force=true since gh CLI is not available in test environment
+        let result = cleanup_worktrees(&repo_path, CleanupMode::Merged, true, true)
+            .expect("cleanup_worktrees dry run should succeed");
 
-        assert_eq!(removed.len(), 1, "should detect one merged worktree");
-        assert_eq!(removed[0], session.branch_name);
+        assert_eq!(
+            result.merged_removed.len(),
+            1,
+            "should detect one merged worktree"
+        );
+        assert_eq!(result.merged_removed[0], session.branch_name);
         assert!(
             worktree_path.exists(),
             "worktree directory should still exist after dry run"
@@ -876,5 +1230,280 @@ mod integration_tests {
         // Verify worktree is still listed
         let worktrees = list_worktrees(&repo_path).expect("list_worktrees should succeed");
         assert_eq!(worktrees.len(), 1, "worktree should still be listed");
+    }
+
+    #[test]
+    fn test_remove_by_branch_name() {
+        let (_temp, repo_path) = setup_test_repo();
+        let speck_path = ".specks/specks-test.md";
+
+        let config = WorktreeConfig {
+            speck_path: PathBuf::from(speck_path),
+            base_branch: "main".to_string(),
+            repo_root: repo_path.clone(),
+            reuse_existing: false,
+        };
+
+        // Create a worktree
+        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let worktree_path = PathBuf::from(&session.worktree_path);
+
+        // Verify worktree exists
+        assert!(worktree_path.exists(), "worktree should exist");
+
+        // Save current directory to restore later
+        let original_dir = std::env::current_dir().expect("failed to get current dir");
+
+        // Change to repo directory so run_worktree_remove works correctly
+        std::env::set_current_dir(&repo_path).expect("failed to change directory");
+
+        // Remove by branch name
+        let result = run_worktree_remove(session.branch_name.clone(), false, false, true);
+
+        // Restore original directory
+        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
+
+        assert!(result.is_ok(), "remove should succeed: {:?}", result.err());
+        assert_eq!(result.unwrap(), 0, "exit code should be 0");
+
+        // Verify worktree is removed
+        assert!(
+            !worktree_path.exists(),
+            "worktree directory should be removed"
+        );
+
+        // Verify branch is removed
+        let branch_exists = Command::new("git")
+            .args(["-C", &repo_path.to_string_lossy(), "rev-parse", "--verify", &session.branch_name])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        assert!(!branch_exists, "branch should be deleted");
+    }
+
+    #[test]
+    fn test_remove_by_speck_path() {
+        let (_temp, repo_path) = setup_test_repo();
+        let speck_path = ".specks/specks-test.md";
+
+        let config = WorktreeConfig {
+            speck_path: PathBuf::from(speck_path),
+            base_branch: "main".to_string(),
+            repo_root: repo_path.clone(),
+            reuse_existing: false,
+        };
+
+        // Create a worktree
+        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let worktree_path = PathBuf::from(&session.worktree_path);
+
+        // Verify worktree exists
+        assert!(worktree_path.exists(), "worktree should exist");
+
+        // Save current directory to restore later
+        let original_dir = std::env::current_dir().expect("failed to get current dir");
+
+        // Change to repo directory so run_worktree_remove works correctly
+        std::env::set_current_dir(&repo_path).expect("failed to change directory");
+
+        // Remove by speck path
+        let result = run_worktree_remove(speck_path.to_string(), false, false, true);
+
+        // Restore original directory
+        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
+
+        assert!(result.is_ok(), "remove should succeed: {:?}", result.err());
+        assert_eq!(result.unwrap(), 0, "exit code should be 0");
+
+        // Verify worktree is removed
+        assert!(
+            !worktree_path.exists(),
+            "worktree directory should be removed"
+        );
+    }
+
+    #[test]
+    fn test_remove_by_worktree_path() {
+        let (_temp, repo_path) = setup_test_repo();
+        let speck_path = ".specks/specks-test.md";
+
+        let config = WorktreeConfig {
+            speck_path: PathBuf::from(speck_path),
+            base_branch: "main".to_string(),
+            repo_root: repo_path.clone(),
+            reuse_existing: false,
+        };
+
+        // Create a worktree
+        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let worktree_path = PathBuf::from(&session.worktree_path);
+
+        // Verify worktree exists
+        assert!(worktree_path.exists(), "worktree should exist");
+
+        // Save current directory to restore later
+        let original_dir = std::env::current_dir().expect("failed to get current dir");
+
+        // Change to repo directory so run_worktree_remove works correctly
+        std::env::set_current_dir(&repo_path).expect("failed to change directory");
+
+        // Remove by worktree path
+        let result = run_worktree_remove(session.worktree_path.clone(), false, false, true);
+
+        // Restore original directory
+        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
+
+        assert!(result.is_ok(), "remove should succeed: {:?}", result.err());
+        assert_eq!(result.unwrap(), 0, "exit code should be 0");
+
+        // Verify worktree is removed
+        assert!(
+            !worktree_path.exists(),
+            "worktree directory should be removed"
+        );
+    }
+
+    #[test]
+    fn test_remove_refuses_dirty_without_force() {
+        let (_temp, repo_path) = setup_test_repo();
+        let speck_path = ".specks/specks-test.md";
+
+        let config = WorktreeConfig {
+            speck_path: PathBuf::from(speck_path),
+            base_branch: "main".to_string(),
+            repo_root: repo_path.clone(),
+            reuse_existing: false,
+        };
+
+        // Create a worktree
+        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let worktree_path = PathBuf::from(&session.worktree_path);
+
+        // Make worktree dirty
+        fs::write(worktree_path.join("dirty.txt"), "uncommitted")
+            .expect("failed to create dirty file");
+
+        // Save current directory to restore later
+        let original_dir = std::env::current_dir().expect("failed to get current dir");
+
+        // Change to repo directory so run_worktree_remove works correctly
+        std::env::set_current_dir(&repo_path).expect("failed to change directory");
+
+        // Try to remove without --force (should fail)
+        let result = run_worktree_remove(session.branch_name.clone(), false, false, true);
+        assert!(result.is_ok(), "command should return result");
+        assert_eq!(result.unwrap(), 1, "exit code should be 1 (error)");
+
+        // Verify worktree still exists
+        assert!(worktree_path.exists(), "worktree should still exist");
+
+        // Now try with --force (should succeed)
+        let result_force = run_worktree_remove(session.branch_name.clone(), true, false, true);
+        assert!(result_force.is_ok(), "remove with force should succeed");
+        assert_eq!(result_force.unwrap(), 0, "exit code should be 0");
+
+        // Restore original directory
+        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
+
+        // Verify worktree is removed
+        assert!(
+            !worktree_path.exists(),
+            "worktree should be removed with --force"
+        );
+    }
+
+    #[test]
+    fn test_remove_ambiguous_fails_fast() {
+        let (_temp, repo_path) = setup_test_repo();
+        let speck_path = ".specks/specks-test.md";
+
+        // For this test, we need to create two worktrees with different branches manually
+        // because create_worktree enforces unique branch names
+        let config1 = WorktreeConfig {
+            speck_path: PathBuf::from(speck_path),
+            base_branch: "main".to_string(),
+            repo_root: repo_path.clone(),
+            reuse_existing: false,
+        };
+        let session1 = create_worktree(&config1).expect("first create should succeed");
+
+        // Wait a moment to ensure different timestamps
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        // Create a second worktree for the same speck by creating a second git branch manually
+        let branch_name_2 = "specks/test-second";
+        Command::new("git")
+            .args(["-C", &repo_path.to_string_lossy(), "branch", branch_name_2, "main"])
+            .output()
+            .expect("failed to create second branch");
+
+        let worktree_path_2 = repo_path.join(".specks-worktrees/specks__test-second");
+        Command::new("git")
+            .args([
+                "-C",
+                &repo_path.to_string_lossy(),
+                "worktree",
+                "add",
+                &worktree_path_2.to_string_lossy(),
+                branch_name_2,
+            ])
+            .output()
+            .expect("failed to add second worktree");
+
+        // Create a session file for the second worktree with the same speck_path
+        let session2 = Session {
+            schema_version: "1".to_string(),
+            speck_path: speck_path.to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: branch_name_2.to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path_2.to_string_lossy().to_string(),
+            created_at: specks_core::session::now_iso8601(),
+            status: specks_core::session::SessionStatus::Pending,
+            current_step: specks_core::session::CurrentStep::Index(0),
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        specks_core::session::save_session(&session2, &repo_path).expect("failed to save session2");
+
+        // Save current directory to restore later
+        let original_dir = std::env::current_dir().expect("failed to get current dir");
+
+        // Change to repo directory so run_worktree_remove works correctly
+        std::env::set_current_dir(&repo_path).expect("failed to change directory");
+
+        // Try to remove by speck path (should fail with ambiguity error)
+        let result = run_worktree_remove(speck_path.to_string(), false, false, true);
+        assert!(result.is_ok(), "command should return result");
+        assert_eq!(
+            result.unwrap(),
+            1,
+            "exit code should be 1 (ambiguous match)"
+        );
+
+        // Verify both worktrees still exist
+        let worktree_path1 = PathBuf::from(&session1.worktree_path);
+        assert!(
+            worktree_path1.exists(),
+            "first worktree should still exist"
+        );
+        assert!(
+            worktree_path_2.exists(),
+            "second worktree should still exist"
+        );
+
+        // Clean up - remove by specific branch names
+        let _ = run_worktree_remove(session1.branch_name.clone(), false, false, true);
+        let _ = run_worktree_remove(branch_name_2.to_string(), false, false, true);
+
+        // Restore original directory
+        std::env::set_current_dir(&original_dir).expect("failed to restore directory");
     }
 }

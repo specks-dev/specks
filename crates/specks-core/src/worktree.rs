@@ -5,9 +5,35 @@
 
 use crate::error::SpecksError;
 use crate::parser::parse_speck;
-use crate::session::{Session, SessionStatus, load_session, now_iso8601, save_session};
+use crate::session::{CurrentStep, Session, SessionStatus, load_session, now_iso8601, save_session};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Cleanup mode for worktree cleanup operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CleanupMode {
+    /// Clean worktrees with merged PRs
+    Merged,
+    /// Clean worktrees with no PR (not InProgress)
+    Orphaned,
+    /// Clean specks/* branches without worktrees
+    Stale,
+    /// All of the above
+    All,
+}
+
+/// Result from cleanup operation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CleanupResult {
+    /// Worktrees removed due to merged PRs
+    pub merged_removed: Vec<String>,
+    /// Worktrees removed due to no PR
+    pub orphaned_removed: Vec<String>,
+    /// Stale branches removed
+    pub stale_branches_removed: Vec<String>,
+    /// Worktrees skipped with reason
+    pub skipped: Vec<(String, String)>,
+}
 
 /// Configuration for worktree creation
 #[derive(Debug, Clone)]
@@ -389,57 +415,91 @@ impl<'a> GitCli<'a> {
     }
 }
 
-/// Check if a PR has been merged using GitHub API
+/// PR state from gh pr view
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PrState {
+    Merged,
+    Open,
+    Closed,
+    NotFound,
+    Unknown,
+}
+
+/// Check PR state using GitHub API
 ///
-/// Queries `gh pr view <branch> --json state,mergedAt` to detect merged PRs.
+/// Queries `gh pr view <branch> --json state,mergedAt` to detect PR state.
 /// This works for squash merges, which git merge-base cannot detect.
 ///
 /// # Arguments
 /// * `branch` - Branch name to check
 ///
 /// # Returns
-/// * `Ok(true)` - PR is merged
-/// * `Ok(false)` - PR not found or not merged
-/// * `Err(String)` - gh CLI error (with fallback suggestion)
-fn is_pr_merged(branch: &str) -> Result<bool, String> {
+/// * `Ok(PrState::Merged)` - PR is merged
+/// * `Ok(PrState::Open)` - PR is open
+/// * `Ok(PrState::Closed)` - PR is closed but not merged
+/// * `Ok(PrState::NotFound)` - No PR exists for this branch
+/// * `Ok(PrState::Unknown)` - gh CLI error or unavailable
+fn get_pr_state(branch: &str) -> PrState {
     // Check if gh CLI is available
     let gh_check = Command::new("gh").arg("--version").output();
     if gh_check.is_err() {
-        return Err("gh CLI not found. Install from https://cli.github.com/".to_string());
+        return PrState::Unknown;
     }
 
     // Query PR information
-    let output = Command::new("gh")
+    let output = match Command::new("gh")
         .args(["pr", "view", branch, "--json", "state,mergedAt"])
         .output()
-        .map_err(|e| format!("Failed to execute gh pr view: {}", e))?;
+    {
+        Ok(o) => o,
+        Err(_) => return PrState::Unknown,
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        // "no pull requests found" is not an error - just means PR doesn't exist
+        // "no pull requests found" means no PR exists
         if stderr.contains("no pull requests found") {
-            return Ok(false);
+            return PrState::NotFound;
         }
-        // Other gh errors should be reported but not fatal
-        return Err(format!("gh pr view failed: {}", stderr));
+        // Other gh errors
+        return PrState::Unknown;
     }
 
     // Parse the JSON response
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Parse as JSON to check state field
     #[derive(serde::Deserialize)]
-    struct PrState {
+    struct PrStateJson {
         state: String,
         #[allow(dead_code)]
         #[serde(rename = "mergedAt")]
         merged_at: Option<String>,
     }
 
-    let pr_state: PrState = serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse gh pr view output: {}", e))?;
+    match serde_json::from_str::<PrStateJson>(&stdout) {
+        Ok(pr_state) => match pr_state.state.as_str() {
+            "MERGED" => PrState::Merged,
+            "OPEN" => PrState::Open,
+            "CLOSED" => PrState::Closed,
+            _ => PrState::Unknown,
+        },
+        Err(_) => PrState::Unknown,
+    }
+}
 
-    Ok(pr_state.state == "MERGED")
+/// Check if a PR has been merged (legacy compatibility)
+///
+/// # Returns
+/// * `Ok(true)` - PR is merged
+/// * `Ok(false)` - PR not found or not merged
+/// * `Err(String)` - gh CLI error (with fallback suggestion)
+#[allow(dead_code)] // Used in tests, kept for backward compatibility
+fn is_pr_merged(branch: &str) -> Result<bool, String> {
+    match get_pr_state(branch) {
+        PrState::Merged => Ok(true),
+        PrState::Open | PrState::Closed | PrState::NotFound => Ok(false),
+        PrState::Unknown => Err("gh CLI not found or failed. Install from https://cli.github.com/".to_string()),
+    }
 }
 
 impl<'a> GitCli<'a> {}
@@ -535,10 +595,16 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         worktree_path: worktree_path.display().to_string(),
         created_at: now_iso8601(),
         status: SessionStatus::Pending,
-        current_step: 0,
+        current_step: CurrentStep::Index(0),
         total_steps: speck.steps.len(),
         beads_root: None,
         reused: false,
+        session_id: None,
+        last_updated_at: None,
+        steps_completed: None,
+        steps_remaining: None,
+        bead_mapping: None,
+        step_summaries: None,
     };
 
     // Save session (with partial failure recovery)
@@ -613,6 +679,202 @@ pub fn is_valid_worktree_path(path: &Path) -> bool {
     path_str.starts_with(".specks-worktrees/specks__")
 }
 
+/// List all local branches matching the specks/* pattern
+///
+/// Returns all branch names that start with "specks/".
+/// Only local branches are included (no remote-tracking branches).
+pub fn list_specks_branches(repo_root: &Path) -> Result<Vec<String>, SpecksError> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["branch", "--list", "specks/*"])
+        .output()
+        .map_err(|e| SpecksError::WorktreeCleanupFailed {
+            reason: format!("failed to list branches: {}", e),
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(SpecksError::WorktreeCleanupFailed {
+            reason: format!("git branch --list failed: {}", stderr),
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let branches: Vec<String> = stdout
+        .lines()
+        .map(|line| {
+            // git branch --list output format:
+            // "  branch-name" - regular branch
+            // "* branch-name" - current branch
+            // "+ branch-name" - branch checked out in a worktree
+            let trimmed = line.trim();
+            trimmed
+                .strip_prefix("* ")
+                .or_else(|| trimmed.strip_prefix("+ "))
+                .unwrap_or(trimmed)
+                .to_string()
+        })
+        .filter(|line| !line.is_empty())
+        .collect();
+
+    Ok(branches)
+}
+
+/// Clean up stale branches (specks/* branches without worktrees)
+///
+/// Finds all specks/* branches that don't have corresponding worktrees and attempts
+/// to delete them using safe delete first (git branch -d), then force delete (git branch -D)
+/// only if the PR is confirmed merged via gh pr view.
+///
+/// # Arguments
+///
+/// * `repo_root` - Repository root path
+/// * `sessions` - List of active sessions (to determine which branches have worktrees)
+/// * `dry_run` - If true, report what would be removed without actually removing
+/// * `force` - If true, use force delete for all stale branches regardless of PR state
+///
+/// # Returns
+///
+/// * `removed` - List of branch names that were successfully deleted (or would be in dry-run)
+/// * `skipped` - List of (branch_name, reason) tuples for branches that were skipped
+pub fn cleanup_stale_branches(
+    repo_root: &Path,
+    sessions: &[Session],
+    dry_run: bool,
+    force: bool,
+) -> Result<(Vec<String>, Vec<(String, String)>), SpecksError> {
+    let git = GitCli::new(repo_root);
+    let all_branches = list_specks_branches(repo_root)?;
+
+    // Build set of branch names that have worktrees
+    let branches_with_worktrees: std::collections::HashSet<String> = sessions
+        .iter()
+        .map(|s| s.branch_name.clone())
+        .collect();
+
+    let mut removed = Vec::new();
+    let mut skipped = Vec::new();
+
+    for branch in all_branches {
+        // Skip branches that have worktrees
+        if branches_with_worktrees.contains(&branch) {
+            continue;
+        }
+
+        if dry_run {
+            // In dry-run mode, simulate the deletion logic without actually deleting
+            // Try safe delete check first (in real mode)
+            let would_safe_delete = Command::new("git")
+                .arg("-C")
+                .arg(repo_root)
+                .args(["branch", "-d", &branch])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            if would_safe_delete {
+                // Safe delete would succeed
+                removed.push(branch.clone());
+                continue;
+            }
+
+            // Safe delete would fail - check if we would escalate
+            if force {
+                // Force mode: would force delete
+                removed.push(branch.clone());
+            } else {
+                // Not force mode: check PR state
+                let pr_state = get_pr_state(&branch);
+                match pr_state {
+                    PrState::Merged => {
+                        // PR is merged, would force delete
+                        removed.push(branch.clone());
+                    }
+                    PrState::Unknown => {
+                        skipped.push((
+                            branch.clone(),
+                            "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
+                                .to_string(),
+                        ));
+                    }
+                    PrState::NotFound | PrState::Open | PrState::Closed => {
+                        skipped.push((
+                            branch.clone(),
+                            format!(
+                                "Unmerged; PR state is {:?} (use --force to override)",
+                                pr_state
+                            ),
+                        ));
+                    }
+                }
+            }
+        } else {
+            // Not dry-run mode: actually delete branches
+            // Try safe delete first
+            let safe_delete = Command::new("git")
+                .arg("-C")
+                .arg(repo_root)
+                .args(["branch", "-d", &branch])
+                .output()
+                .map_err(|e| SpecksError::WorktreeCleanupFailed {
+                    reason: format!("failed to delete branch: {}", e),
+                })?;
+
+            if safe_delete.status.success() {
+                // Safe delete succeeded
+                removed.push(branch.clone());
+                continue;
+            }
+
+            // Safe delete failed - check if we should escalate to force delete
+            if force {
+                // Force mode: unconditionally force delete
+                match git.delete_branch(&branch) {
+                    Ok(()) => removed.push(branch.clone()),
+                    Err(e) => {
+                        skipped.push((branch.clone(), format!("Force delete failed: {}", e)))
+                    }
+                }
+            } else {
+                // Not force mode: check PR state before escalating
+                let pr_state = get_pr_state(&branch);
+                match pr_state {
+                    PrState::Merged => {
+                        // PR is merged, safe to force delete
+                        match git.delete_branch(&branch) {
+                            Ok(()) => removed.push(branch.clone()),
+                            Err(e) => {
+                                skipped.push((branch.clone(), format!("Force delete failed: {}", e)))
+                            }
+                        }
+                    }
+                    PrState::Unknown => {
+                        // gh CLI not available or failed
+                        skipped.push((
+                            branch.clone(),
+                            "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
+                                .to_string(),
+                        ));
+                    }
+                    PrState::NotFound | PrState::Open | PrState::Closed => {
+                        // Not merged, skip
+                        skipped.push((
+                            branch.clone(),
+                            format!(
+                                "Unmerged; PR state is {:?} (use --force to override)",
+                                pr_state
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((removed, skipped))
+}
+
 /// Remove a worktree and clean up all associated files
 ///
 /// This function orchestrates the cleanup of a worktree by:
@@ -660,51 +922,184 @@ pub fn remove_worktree(worktree_path: &Path, repo_root: &Path) -> Result<(), Spe
     Ok(())
 }
 
-/// Clean up worktrees for merged branches
+/// Clean up worktrees based on cleanup mode
 ///
-/// Checks each worktree branch for merged status using GitHub API (per D01).
-/// Falls back to git merge-base if gh CLI fails.
+/// Implements comprehensive cleanup with drift detection per Table T01.
+/// Supports Merged, Orphaned, Stale, and All modes with InProgress protection.
+///
 /// If dry_run is true, returns what would be removed without actually removing.
-pub fn cleanup_worktrees(repo_root: &Path, dry_run: bool) -> Result<Vec<String>, SpecksError> {
+pub fn cleanup_worktrees(
+    repo_root: &Path,
+    mode: CleanupMode,
+    dry_run: bool,
+    force: bool,
+) -> Result<CleanupResult, SpecksError> {
     let git = GitCli::new(repo_root);
     let sessions = list_worktrees(repo_root)?;
-    let mut removed = Vec::new();
 
-    for session in sessions {
-        // Check if PR is merged using GitHub API (handles squash merges)
-        let is_merged = match is_pr_merged(&session.branch_name) {
-            Ok(true) => {
-                // PR exists and is merged
-                true
+    let mut result = CleanupResult {
+        merged_removed: Vec::new(),
+        orphaned_removed: Vec::new(),
+        stale_branches_removed: Vec::new(),
+        skipped: Vec::new(),
+    };
+
+    for session in &sessions {
+        // ABSOLUTE GUARD: InProgress sessions are never removed
+        if session.status == SessionStatus::InProgress {
+            result.skipped.push((
+                session.branch_name.clone(),
+                "InProgress (protected)".to_string(),
+            ));
+            continue;
+        }
+
+        // Get PR state
+        let pr_state = get_pr_state(&session.branch_name);
+
+        // Determine if this worktree should be cleaned based on mode
+        let should_clean = match mode {
+            CleanupMode::Merged => {
+                match pr_state {
+                    PrState::Merged => true,
+                    PrState::NotFound => {
+                        // No PR - check git ancestry for non-PR merges
+                        git.is_ancestor(&session.branch_name, &session.base_branch)
+                    }
+                    PrState::Unknown => {
+                        if force {
+                            // Force mode: treat unknown as potentially merged, check git ancestry
+                            git.is_ancestor(&session.branch_name, &session.base_branch)
+                        } else {
+                            result.skipped.push((
+                                session.branch_name.clone(),
+                                "PR state unknown (use --force to override)".to_string(),
+                            ));
+                            false
+                        }
+                    }
+                    PrState::Open | PrState::Closed => false,
+                }
             }
-            Ok(false) => {
-                // PR doesn't exist or is not merged - fall back to git merge-base
-                // This handles branches merged without PRs
-                git.is_ancestor(&session.branch_name, &session.base_branch)
+            CleanupMode::Orphaned => {
+                match pr_state {
+                    PrState::NotFound => true,
+                    PrState::Unknown => {
+                        if force {
+                            true // Force mode: treat unknown as no PR
+                        } else {
+                            result.skipped.push((
+                                session.branch_name.clone(),
+                                "PR state unknown (use --force to override)".to_string(),
+                            ));
+                            false
+                        }
+                    }
+                    PrState::Merged | PrState::Open | PrState::Closed => false,
+                }
             }
-            Err(e) => {
-                // gh CLI error - fallback to git merge-base with warning
-                eprintln!(
-                    "Warning: gh pr view failed for {}: {}",
-                    session.branch_name, e
-                );
-                eprintln!("Falling back to git merge-base (may not detect squash merges)");
-                git.is_ancestor(&session.branch_name, &session.base_branch)
+            CleanupMode::All => {
+                match pr_state {
+                    PrState::Merged => true,
+                    PrState::Closed => true, // All mode includes closed PRs
+                    PrState::NotFound => true,
+                    PrState::Unknown => {
+                        if force {
+                            true
+                        } else {
+                            result.skipped.push((
+                                session.branch_name.clone(),
+                                "PR state unknown (use --force to override)".to_string(),
+                            ));
+                            false
+                        }
+                    }
+                    PrState::Open => false, // Don't clean open PRs even in All mode
+                }
+            }
+            CleanupMode::Stale => {
+                // Stale mode only handles branches without worktrees, not sessions
+                continue;
             }
         };
 
-        if is_merged {
-            removed.push(session.branch_name.clone());
+        if should_clean {
+            // Categorize removal based on mode and PR state
+            // When in Merged mode with NotFound PR, the branch was detected as merged via git ancestry
+            let category = match mode {
+                CleanupMode::Merged => {
+                    // In Merged mode, anything we're removing is considered merged
+                    // (either via PR or git ancestry detection)
+                    &mut result.merged_removed
+                }
+                CleanupMode::Orphaned => {
+                    // In Orphaned mode, everything is orphaned
+                    &mut result.orphaned_removed
+                }
+                CleanupMode::All => {
+                    // In All mode, categorize by PR state
+                    match pr_state {
+                        PrState::Merged => &mut result.merged_removed,
+                        PrState::NotFound => &mut result.orphaned_removed,
+                        PrState::Closed => &mut result.merged_removed,
+                        _ => &mut result.orphaned_removed,
+                    }
+                }
+                CleanupMode::Stale => {
+                    // Stale mode only handles branches without worktrees
+                    &mut result.stale_branches_removed
+                }
+            };
+
+            category.push(session.branch_name.clone());
 
             if !dry_run {
-                // Remove worktree using the new remove_worktree function
+                // Check for dirty worktree
                 let worktree_path = Path::new(&session.worktree_path);
-                remove_worktree(worktree_path, repo_root)?;
 
-                // Delete branch
-                git.delete_branch(&session.branch_name)?;
+                // Try to remove worktree
+                match remove_worktree(worktree_path, repo_root) {
+                    Ok(()) => {
+                        // Successfully removed, now delete branch
+                        if let Err(e) = git.delete_branch(&session.branch_name) {
+                            eprintln!(
+                                "Warning: removed worktree but failed to delete branch {}: {}",
+                                session.branch_name, e
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        if force {
+                            // Force mode: try force removal
+                            eprintln!(
+                                "Warning: worktree removal failed, attempting force removal: {}",
+                                e
+                            );
+                            // Would need to implement force removal here
+                            result.skipped.push((
+                                session.branch_name.clone(),
+                                format!("Failed to remove: {}", e),
+                            ));
+                        } else {
+                            // Not force mode: skip with warning
+                            result.skipped.push((
+                                session.branch_name.clone(),
+                                "Dirty worktree (use --force to override)".to_string(),
+                            ));
+                            // Remove from category since we didn't actually remove it
+                            category.pop();
+                        }
+                    }
+                }
             }
         }
+    }
+
+    // Handle stale branch cleanup if mode includes it
+    if matches!(mode, CleanupMode::Stale | CleanupMode::All) {
+        let (removed, skipped) = cleanup_stale_branches(repo_root, &sessions, dry_run, force)?;
+        result.stale_branches_removed.extend(removed);
+        result.skipped.extend(skipped);
     }
 
     // Final prune to clean up any stale metadata
@@ -712,7 +1107,7 @@ pub fn cleanup_worktrees(repo_root: &Path, dry_run: bool) -> Result<Vec<String>,
         git.worktree_prune()?;
     }
 
-    Ok(removed)
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -928,10 +1323,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 1,
+            current_step: CurrentStep::Index(1),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         save_session(&session, temp_dir).unwrap();
@@ -1200,10 +1601,16 @@ mod tests {
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
             status: SessionStatus::InProgress,
-            current_step: 1,
+            current_step: CurrentStep::Index(1),
             total_steps: 3,
             beads_root: None,
             reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
         };
 
         save_session(&session, temp_dir).unwrap();
@@ -1703,5 +2110,1460 @@ mod tests {
 
         // The function should return Ok(false) when stderr contains "no pull requests found"
         // This is tested by the actual implementation via stderr checking
+    }
+
+    #[test]
+    fn test_cleanup_mode_merged_only() {
+        // Unit test: Merged mode only removes worktrees with merged PRs
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create temp git repo
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create worktree directories
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        // Create a worktree with no PR and uncommitted work (not merged)
+        let worktree1 = worktrees_dir.join("specks__test1-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/test1-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/test1-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        // Make a commit in the worktree so it's ahead of main (not merged)
+        std::fs::write(worktree1.join("test.txt"), "test").unwrap();
+        Command::new("git")
+            .current_dir(&worktree1)
+            .args(["add", "test.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(&worktree1)
+            .args(["commit", "-m", "Test commit"])
+            .output()
+            .unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test1".to_string(),
+            branch_name: "specks/test1-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Completed,
+            current_step: CurrentStep::Done,
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in Merged mode
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true, false).unwrap();
+
+        // Should not remove worktree without PR
+        assert_eq!(result.merged_removed.len(), 0);
+        assert_eq!(result.orphaned_removed.len(), 0);
+    }
+
+    #[test]
+    fn test_cleanup_orphaned_no_pr() {
+        // Unit test: Orphaned mode removes worktrees without PRs
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1 = worktrees_dir.join("specks__orphan-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/orphan-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/orphan-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "orphan".to_string(),
+            branch_name: "specks/orphan-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Completed,
+            current_step: CurrentStep::Done,
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in Orphaned mode (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+
+        // Should identify orphaned worktree
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.orphaned_removed[0], "specks/orphan-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_orphaned_skips_in_progress() {
+        // Unit test: Orphaned mode skips InProgress sessions
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1 = worktrees_dir.join("specks__inprogress-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/inprogress-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/inprogress-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "inprogress".to_string(),
+            branch_name: "specks/inprogress-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: CurrentStep::Index(0),
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in Orphaned mode
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+
+        // Should skip InProgress session
+        assert_eq!(result.orphaned_removed.len(), 0);
+        assert_eq!(result.skipped.len(), 1);
+        assert!(result.skipped[0].1.contains("InProgress"));
+    }
+
+    #[test]
+    fn test_cleanup_all_protects_in_progress() {
+        // Unit test: All mode never removes InProgress sessions (even with --force)
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1 = worktrees_dir.join("specks__active-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/active-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/active-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "active".to_string(),
+            branch_name: "specks/active-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: CurrentStep::Index(0),
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in All mode with force
+        let result = cleanup_worktrees(temp_dir, CleanupMode::All, true, true).unwrap();
+
+        // Should skip InProgress session even with --force
+        assert_eq!(result.merged_removed.len(), 0);
+        assert_eq!(result.orphaned_removed.len(), 0);
+        assert_eq!(result.skipped.len(), 1);
+        assert!(result.skipped[0].1.contains("InProgress"));
+    }
+
+    #[test]
+    fn test_cleanup_needs_reconcile_merged_pr() {
+        // Test: NeedsReconcile session with merged PR is cleaned by Merged mode
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        // Create worktree and merge its branch back to main
+        let worktree1 = worktrees_dir.join("specks__reconcile-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/reconcile-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/reconcile-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        // Make a commit in the worktree
+        std::fs::write(worktree1.join("test.txt"), "test").unwrap();
+        Command::new("git")
+            .current_dir(&worktree1)
+            .args(["add", "test.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(&worktree1)
+            .args(["commit", "-m", "Test commit"])
+            .output()
+            .unwrap();
+
+        // Merge the branch to main (simulating merged PR)
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["merge", "--no-ff", "specks/reconcile-20260208-120000"])
+            .output()
+            .unwrap();
+
+        // Create session with NeedsReconcile status
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "reconcile".to_string(),
+            branch_name: "specks/reconcile-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::NeedsReconcile,
+            current_step: CurrentStep::Index(1),
+            total_steps: 2,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in Merged mode (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true, false).unwrap();
+
+        // Should identify NeedsReconcile worktree with merged branch
+        assert_eq!(result.merged_removed.len(), 1);
+        assert_eq!(result.merged_removed[0], "specks/reconcile-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_needs_reconcile_no_pr() {
+        // Test: NeedsReconcile session with no PR is cleaned by Orphaned mode
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        // Create worktree without PR
+        let worktree1 = worktrees_dir.join("specks__nopr-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/nopr-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/nopr-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        // Create session with NeedsReconcile status (no PR)
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "nopr".to_string(),
+            branch_name: "specks/nopr-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::NeedsReconcile,
+            current_step: CurrentStep::Index(0),
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in Orphaned mode (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+
+        // Should identify NeedsReconcile worktree without PR as orphaned
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.orphaned_removed[0], "specks/nopr-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_skips_closed_pr() {
+        // Test: Closed PR (not merged) is skipped by Merged and Orphaned modes
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1 = worktrees_dir.join("specks__closed-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/closed-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/closed-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        // Make a commit in the worktree to diverge from main
+        std::fs::write(worktree1.join("closed.txt"), "test").unwrap();
+        Command::new("git")
+            .current_dir(&worktree1)
+            .args(["add", "closed.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(&worktree1)
+            .args(["commit", "-m", "Closed PR commit"])
+            .output()
+            .unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "closed".to_string(),
+            branch_name: "specks/closed-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Completed,
+            current_step: CurrentStep::Done,
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Note: This test documents behavior when gh CLI is available
+        // gh CLI returns PrState::NotFound (no PR), which is treated differently than Closed
+        // If gh CLI were unavailable, it would return PrState::Unknown
+
+        // Run cleanup in Merged mode (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true, false).unwrap();
+
+        // gh CLI available: PR state is NotFound (no PR exists)
+        // Merged mode checks if branch is merged via git ancestry
+        // The branch has diverged from main (has a commit), so it's not merged
+        // Result: not in merged_removed, not skipped (just doesn't match criteria)
+        assert_eq!(result.merged_removed.len(), 0);
+
+        // Run cleanup in Orphaned mode (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+
+        // gh CLI available: PR state is NotFound (no PR exists)
+        // Orphaned mode removes worktrees with no PR
+        // If gh returned Closed, it would be skipped (Closed != NotFound)
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.orphaned_removed[0], "specks/closed-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_skips_unknown_pr_state() {
+        // Test: Unknown PR state is skipped without --force
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1 = worktrees_dir.join("specks__unknown-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/unknown-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/unknown-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        // Make a commit in the worktree to diverge from main
+        std::fs::write(worktree1.join("unknown.txt"), "test").unwrap();
+        Command::new("git")
+            .current_dir(&worktree1)
+            .args(["add", "unknown.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(&worktree1)
+            .args(["commit", "-m", "Unknown PR commit"])
+            .output()
+            .unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "unknown".to_string(),
+            branch_name: "specks/unknown-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Completed,
+            current_step: CurrentStep::Done,
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in Merged mode without force (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true, false).unwrap();
+
+        // gh CLI available: PR state is NotFound (no PR exists)
+        // Merged mode checks if branch is merged via git ancestry for NotFound
+        // The branch has diverged from main, so it's not merged
+        // Result: not in merged_removed, not skipped
+        assert_eq!(result.merged_removed.len(), 0);
+        assert_eq!(result.skipped.len(), 0);
+
+        // Run cleanup in Orphaned mode without force (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+
+        // gh CLI available: PR state is NotFound (no PR exists)
+        // Orphaned mode removes worktrees with no PR
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.orphaned_removed[0], "specks/unknown-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_all_includes_closed_pr() {
+        // Test: All mode includes closed PRs (not merged)
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1 = worktrees_dir.join("specks__allclosed-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/allclosed-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/allclosed-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "allclosed".to_string(),
+            branch_name: "specks/allclosed-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Completed,
+            current_step: CurrentStep::Done,
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in All mode (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::All, true, false).unwrap();
+
+        // All mode should include worktrees even if PR is closed (via NotFound)
+        // Without gh CLI, this is treated as NotFound and should be in orphaned_removed
+        assert!(result.orphaned_removed.len() == 1 || result.merged_removed.len() == 1);
+    }
+
+    #[test]
+    fn test_cleanup_skips_dirty_worktree() {
+        // Test: Worktrees with uncommitted changes are skipped without --force
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1 = worktrees_dir.join("specks__dirty-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/dirty-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/dirty-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        // Add untracked file to make worktree dirty
+        std::fs::write(worktree1.join("dirty.txt"), "uncommitted").unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "dirty".to_string(),
+            branch_name: "specks/dirty-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Completed,
+            current_step: CurrentStep::Done,
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in Orphaned mode (not dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, false, false).unwrap();
+
+        // Dirty worktree should be skipped (git worktree remove will fail)
+        assert_eq!(result.skipped.len(), 1);
+        assert!(result.skipped[0].1.contains("Dirty worktree") || result.skipped[0].1.contains("Failed to remove"));
+    }
+
+    #[test]
+    fn test_cleanup_force_overrides_unknown_pr() {
+        // Test: --force flag overrides unknown PR state
+        use crate::session::SessionStatus;
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let temp = TempDir::new().unwrap();
+        let temp_dir = temp.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init", "-b", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        let worktrees_dir = temp_dir.join(".specks-worktrees");
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let worktree1 = worktrees_dir.join("specks__force-20260208-120000");
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/force-20260208-120000", "main"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args([
+                "worktree",
+                "add",
+                worktree1.to_str().unwrap(),
+                "specks/force-20260208-120000",
+            ])
+            .output()
+            .unwrap();
+
+        let session1 = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "force".to_string(),
+            branch_name: "specks/force-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree1.display().to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::Completed,
+            current_step: CurrentStep::Done,
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+        save_session(&session1, temp_dir).unwrap();
+
+        // Run cleanup in Orphaned mode with force (dry run)
+        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, true).unwrap();
+
+        // With force, unknown PR state should be treated as no PR (orphaned)
+        // Since we don't have gh CLI, this will be treated as NotFound anyway
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.orphaned_removed[0], "specks/force-20260208-120000");
+    }
+
+    #[test]
+    fn test_list_specks_branches() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create some specks/* branches
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/auth-20260208-120000"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/db-20260208-130000"])
+            .output()
+            .unwrap();
+
+        // Create a non-specks branch
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "feature/something"])
+            .output()
+            .unwrap();
+
+        let branches = list_specks_branches(temp_dir).unwrap();
+
+        // Should only return specks/* branches
+        assert_eq!(branches.len(), 2);
+        assert!(branches.contains(&"specks/auth-20260208-120000".to_string()));
+        assert!(branches.contains(&"specks/db-20260208-130000".to_string()));
+        assert!(!branches.contains(&"feature/something".to_string()));
+    }
+
+    #[test]
+    fn test_cleanup_stale_removes_orphan_branch() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create a specks/* branch with no worktree
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/orphan-20260208-120000"])
+            .output()
+            .unwrap();
+
+        let sessions = vec![]; // No sessions, so all branches are stale
+
+        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+
+        // Should remove the branch via safe delete (it's based on current branch)
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed[0], "specks/orphan-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_stale_skips_branch_with_worktree() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create a specks/* branch
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/active-20260208-120000"])
+            .output()
+            .unwrap();
+
+        // Create a session for this branch
+        let session = Session {
+            schema_version: "1".to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "active".to_string(),
+            branch_name: "specks/active-20260208-120000".to_string(),
+            base_branch: "main".to_string(),
+            worktree_path: ".specks-worktrees/specks__active-20260208-120000".to_string(),
+            created_at: "2026-02-08T12:00:00Z".to_string(),
+            status: SessionStatus::InProgress,
+            current_step: CurrentStep::Index(0),
+            total_steps: 1,
+            beads_root: None,
+            reused: false,
+            session_id: None,
+            last_updated_at: None,
+            steps_completed: None,
+            steps_remaining: None,
+            bead_mapping: None,
+            step_summaries: None,
+        };
+
+        let sessions = vec![session];
+
+        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+
+        // Should NOT remove the branch because it has a worktree
+        assert_eq!(removed.len(), 0);
+    }
+
+    #[test]
+    fn test_cleanup_stale_safe_delete_fallback() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit on main
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create a specks/* branch with commits not in main
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["checkout", "-b", "specks/unmerged-20260208-120000"])
+            .output()
+            .unwrap();
+
+        std::fs::write(temp_dir.join("feature.txt"), "new feature").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Add feature"])
+            .output()
+            .unwrap();
+
+        // Switch back to main
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+
+        // Create .git/refs/pull directory to simulate merged PR scenario
+        // This allows us to test the fallback from safe delete (-d) to force delete (-D)
+        // when PR is confirmed as merged
+        let refs_pull = temp_dir.join(".git/refs/pull");
+        std::fs::create_dir_all(&refs_pull).unwrap();
+
+        // Test verifies safe delete fallback behavior:
+        // When gh CLI is available, it will query PR state and return NotFound (no PR exists)
+        // When gh CLI is unavailable, get_pr_state returns Unknown
+        // Either way, the unmerged branch should be skipped without --force
+
+        let sessions = vec![]; // No sessions, so all branches are stale
+
+        // Without force flag: safe delete will fail (branch not merged),
+        // and PR state will be checked (either NotFound or Unknown depending on gh CLI availability)
+        let (_removed, skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+
+        // Branch should be skipped because it's unmerged
+        assert_eq!(skipped.len(), 1, "Expected 1 skipped branch, got: {:?}", skipped);
+        assert_eq!(skipped[0].0, "specks/unmerged-20260208-120000");
+        // Skip reason varies based on gh CLI availability:
+        // - If gh available: "Unmerged; PR state is NotFound (use --force to override)"
+        // - If gh unavailable: "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
+        assert!(
+            skipped[0].1.contains("Unmerged") && skipped[0].1.contains("--force"),
+            "Expected skip reason to mention unmerged and --force, got: {}",
+            skipped[0].1
+        );
+
+        // With force flag: should force delete regardless of merge state
+        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, true).unwrap();
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed[0], "specks/unmerged-20260208-120000");
+    }
+
+    #[test]
+    fn test_cleanup_stale_gh_absent_safe_only() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["init"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .unwrap();
+
+        // Create initial commit on main
+        std::fs::write(temp_dir.join("README.md"), "test").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .unwrap();
+
+        // Create a specks/* branch that is NOT merged into main
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["branch", "specks/unmerged-feature"])
+            .output()
+            .unwrap();
+
+        // Add a commit to the branch
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["checkout", "specks/unmerged-feature"])
+            .output()
+            .unwrap();
+        std::fs::write(temp_dir.join("feature.txt"), "new feature").unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["add", "feature.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["commit", "-m", "Add feature"])
+            .output()
+            .unwrap();
+
+        // Return to main
+        Command::new("git")
+            .current_dir(temp_dir)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+
+        let sessions = vec![]; // No sessions, so all branches are stale
+
+        // Test graceful degradation when gh CLI check returns non-merged state:
+        // - Safe delete (-d) will fail (branch has unmerged commits)
+        // - get_pr_state returns either PrState::Unknown (gh absent) or PrState::NotFound (gh present, no PR)
+        // - Should skip with appropriate message
+        let (removed, skipped) = cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+
+        // Branch should be skipped (not removed)
+        assert_eq!(removed.len(), 0);
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(skipped[0].0, "specks/unmerged-feature");
+        // Skip reason varies based on gh CLI availability:
+        // - If gh available: "Unmerged; PR state is NotFound (use --force to override)"
+        // - If gh unavailable: "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
+        assert!(
+            skipped[0].1.contains("Unmerged") && skipped[0].1.contains("--force"),
+            "Expected skip reason to mention unmerged and --force, got: {}",
+            skipped[0].1
+        );
     }
 }

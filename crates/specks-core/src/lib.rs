@@ -51,6 +51,7 @@ pub use validator::{
     validate_speck_with_config,
 };
 pub use worktree::{
-    WorktreeConfig, cleanup_worktrees, create_worktree, derive_speck_slug, generate_branch_name,
-    is_valid_worktree_path, list_worktrees, remove_worktree, sanitize_branch_name,
+    CleanupMode, CleanupResult, WorktreeConfig, cleanup_stale_branches, cleanup_worktrees,
+    create_worktree, derive_speck_slug, generate_branch_name, is_valid_worktree_path,
+    list_specks_branches, list_worktrees, remove_worktree, sanitize_branch_name,
 };
