@@ -439,7 +439,7 @@ impl<'a> GitCli<'a> {
 
 /// PR state from gh pr view
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PrState {
+pub(crate) enum PrState {
     Merged,
     Open,
     Closed,
@@ -768,6 +768,22 @@ pub fn cleanup_stale_branches(
     dry_run: bool,
     force: bool,
 ) -> Result<StaleBranchCleanupResult, SpecksError> {
+    cleanup_stale_branches_with_pr_checker(repo_root, sessions, dry_run, force, |branch| {
+        get_pr_state(branch)
+    })
+}
+
+/// Clean up stale branches with an injectable PR state checker.
+///
+/// Same as `cleanup_stale_branches` but accepts a closure to determine PR state,
+/// enabling deterministic testing without GitHub CLI dependency.
+pub(crate) fn cleanup_stale_branches_with_pr_checker(
+    repo_root: &Path,
+    sessions: &[Session],
+    dry_run: bool,
+    force: bool,
+    pr_checker: impl Fn(&str) -> PrState,
+) -> Result<StaleBranchCleanupResult, SpecksError> {
     let git = GitCli::new(repo_root);
     let all_branches = list_specks_branches(repo_root)?;
 
@@ -805,7 +821,7 @@ pub fn cleanup_stale_branches(
                 removed.push(branch.clone());
             } else {
                 // Not force mode: check PR state
-                let pr_state = get_pr_state(&branch);
+                let pr_state = pr_checker(&branch);
                 match pr_state {
                     PrState::Merged => {
                         // PR is merged, would force delete
@@ -856,7 +872,7 @@ pub fn cleanup_stale_branches(
                 }
             } else {
                 // Not force mode: check PR state before escalating
-                let pr_state = get_pr_state(&branch);
+                let pr_state = pr_checker(&branch);
                 match pr_state {
                     PrState::Merged => {
                         // PR is merged, safe to force delete
@@ -951,6 +967,22 @@ pub fn cleanup_worktrees(
     dry_run: bool,
     force: bool,
 ) -> Result<CleanupResult, SpecksError> {
+    cleanup_worktrees_with_pr_checker(repo_root, mode, dry_run, force, |branch| {
+        get_pr_state(branch)
+    })
+}
+
+/// Clean up worktrees with an injectable PR state checker.
+///
+/// Same as `cleanup_worktrees` but accepts a closure to determine PR state,
+/// enabling deterministic testing without GitHub CLI dependency.
+pub(crate) fn cleanup_worktrees_with_pr_checker(
+    repo_root: &Path,
+    mode: CleanupMode,
+    dry_run: bool,
+    force: bool,
+    pr_checker: impl Fn(&str) -> PrState,
+) -> Result<CleanupResult, SpecksError> {
     let git = GitCli::new(repo_root);
     let sessions = list_worktrees(repo_root)?;
 
@@ -972,7 +1004,7 @@ pub fn cleanup_worktrees(
         }
 
         // Get PR state
-        let pr_state = get_pr_state(&session.branch_name);
+        let pr_state = pr_checker(&session.branch_name);
 
         // Determine if this worktree should be cleaned based on mode
         let should_clean = match mode {
@@ -1129,7 +1161,8 @@ pub fn cleanup_worktrees(
 
     // Handle stale branch cleanup if mode includes it
     if matches!(mode, CleanupMode::Stale | CleanupMode::All) {
-        let (removed, skipped) = cleanup_stale_branches(repo_root, &sessions, dry_run, force)?;
+        let (removed, skipped) =
+            cleanup_stale_branches_with_pr_checker(repo_root, &sessions, dry_run, force, &pr_checker)?;
         result.stale_branches_removed.extend(removed);
         result.skipped.extend(skipped);
     }
@@ -2328,8 +2361,15 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in Orphaned mode (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+        // Run cleanup in Orphaned mode (dry run) with mock PR checker
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::Orphaned,
+            true,
+            false,
+            |_| PrState::NotFound,
+        )
+        .unwrap();
 
         // Should identify orphaned worktree
         assert_eq!(result.orphaned_removed.len(), 1);
@@ -2618,8 +2658,15 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in Merged mode (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true, false).unwrap();
+        // Run cleanup in Merged mode (dry run) with mock PR checker
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::Merged,
+            true,
+            false,
+            |_| PrState::NotFound,
+        )
+        .unwrap();
 
         // Should identify NeedsReconcile worktree with merged branch
         assert_eq!(result.merged_removed.len(), 1);
@@ -2709,8 +2756,15 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in Orphaned mode (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+        // Run cleanup in Orphaned mode (dry run) with mock PR checker
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::Orphaned,
+            true,
+            false,
+            |_| PrState::NotFound,
+        )
+        .unwrap();
 
         // Should identify NeedsReconcile worktree without PR as orphaned
         assert_eq!(result.orphaned_removed.len(), 1);
@@ -2811,27 +2865,33 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Note: This test documents behavior when gh CLI is available
-        // gh CLI returns PrState::NotFound (no PR), which is treated differently than Closed
-        // If gh CLI were unavailable, it would return PrState::Unknown
+        // Mock PR checker returns Closed for this branch
 
-        // Run cleanup in Merged mode (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true, false).unwrap();
+        // Run cleanup in Merged mode (dry run) with Closed PR
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::Merged,
+            true,
+            false,
+            |_| PrState::Closed,
+        )
+        .unwrap();
 
-        // gh CLI available: PR state is NotFound (no PR exists)
-        // Merged mode checks if branch is merged via git ancestry
-        // The branch has diverged from main (has a commit), so it's not merged
-        // Result: not in merged_removed, not skipped (just doesn't match criteria)
+        // Closed PR is not treated as merged
         assert_eq!(result.merged_removed.len(), 0);
 
-        // Run cleanup in Orphaned mode (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+        // Run cleanup in Orphaned mode (dry run) with Closed PR
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::Orphaned,
+            true,
+            false,
+            |_| PrState::Closed,
+        )
+        .unwrap();
 
-        // gh CLI available: PR state is NotFound (no PR exists)
-        // Orphaned mode removes worktrees with no PR
-        // If gh returned Closed, it would be skipped (Closed != NotFound)
-        assert_eq!(result.orphaned_removed.len(), 1);
-        assert_eq!(result.orphaned_removed[0], "specks/closed-20260208-120000");
+        // Closed PR is protected from Orphaned mode (Closed != NotFound)
+        assert_eq!(result.orphaned_removed.len(), 0);
     }
 
     #[test]
@@ -2928,23 +2988,33 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in Merged mode without force (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Merged, true, false).unwrap();
+        // Run cleanup in Merged mode without force (dry run) with Unknown PR state
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::Merged,
+            true,
+            false,
+            |_| PrState::Unknown,
+        )
+        .unwrap();
 
-        // gh CLI available: PR state is NotFound (no PR exists)
-        // Merged mode checks if branch is merged via git ancestry for NotFound
-        // The branch has diverged from main, so it's not merged
-        // Result: not in merged_removed, not skipped
+        // Unknown PR state without force: skipped
         assert_eq!(result.merged_removed.len(), 0);
-        assert_eq!(result.skipped.len(), 0);
+        assert_eq!(result.skipped.len(), 1);
 
-        // Run cleanup in Orphaned mode without force (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true, false).unwrap();
+        // Run cleanup in Orphaned mode without force (dry run) with Unknown PR state
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::Orphaned,
+            true,
+            false,
+            |_| PrState::Unknown,
+        )
+        .unwrap();
 
-        // gh CLI available: PR state is NotFound (no PR exists)
-        // Orphaned mode removes worktrees with no PR
-        assert_eq!(result.orphaned_removed.len(), 1);
-        assert_eq!(result.orphaned_removed[0], "specks/unknown-20260208-120000");
+        // Unknown PR state without force: skipped, not removed
+        assert_eq!(result.orphaned_removed.len(), 0);
+        assert_eq!(result.skipped.len(), 1);
     }
 
     #[test]
@@ -3028,12 +3098,19 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in All mode (dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::All, true, false).unwrap();
+        // Run cleanup in All mode (dry run) with Closed PR state
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::All,
+            true,
+            false,
+            |_| PrState::Closed,
+        )
+        .unwrap();
 
-        // All mode should include worktrees even if PR is closed (via NotFound)
-        // Without gh CLI, this is treated as NotFound and should be in orphaned_removed
-        assert!(result.orphaned_removed.len() == 1 || result.merged_removed.len() == 1);
+        // All mode includes closed PRs, categorized as merged_removed
+        assert_eq!(result.merged_removed.len(), 1);
+        assert_eq!(result.merged_removed[0], "specks/allclosed-20260208-120000");
     }
 
     #[test]
@@ -3120,8 +3197,15 @@ mod tests {
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in Orphaned mode (not dry run)
-        let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, false, false).unwrap();
+        // Run cleanup in Orphaned mode (not dry run) with mock PR checker
+        let result = cleanup_worktrees_with_pr_checker(
+            temp_dir,
+            CleanupMode::Orphaned,
+            false,
+            false,
+            |_| PrState::NotFound,
+        )
+        .unwrap();
 
         // Dirty worktree should be skipped (git worktree remove will fail)
         assert_eq!(result.skipped.len(), 1);
@@ -3425,7 +3509,7 @@ mod tests {
         // Initialize git repo
         Command::new("git")
             .current_dir(temp_dir)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .unwrap();
         Command::new("git")
@@ -3484,17 +3568,16 @@ mod tests {
         let refs_pull = temp_dir.join(".git/refs/pull");
         std::fs::create_dir_all(&refs_pull).unwrap();
 
-        // Test verifies safe delete fallback behavior:
-        // When gh CLI is available, it will query PR state and return NotFound (no PR exists)
-        // When gh CLI is unavailable, get_pr_state returns Unknown
-        // Either way, the unmerged branch should be skipped without --force
-
+        // Test verifies safe delete fallback behavior with mock PR checker
         let sessions = vec![]; // No sessions, so all branches are stale
 
         // Without force flag: safe delete will fail (branch not merged),
-        // and PR state will be checked (either NotFound or Unknown depending on gh CLI availability)
+        // PR checker returns NotFound, so branch is skipped
         let (_removed, skipped) =
-            cleanup_stale_branches(temp_dir, &sessions, false, false).unwrap();
+            cleanup_stale_branches_with_pr_checker(temp_dir, &sessions, false, false, |_| {
+                PrState::NotFound
+            })
+            .unwrap();
 
         // Branch should be skipped because it's unmerged
         assert_eq!(
@@ -3504,9 +3587,6 @@ mod tests {
             skipped
         );
         assert_eq!(skipped[0].0, "specks/unmerged-20260208-120000");
-        // Skip reason varies based on gh CLI availability:
-        // - If gh available: "Unmerged; PR state is NotFound (use --force to override)"
-        // - If gh unavailable: "Unmerged; gh CLI needed to confirm PR state (use --force to override)"
         assert!(
             skipped[0].1.contains("Unmerged") && skipped[0].1.contains("--force"),
             "Expected skip reason to mention unmerged and --force, got: {}",
@@ -3514,7 +3594,11 @@ mod tests {
         );
 
         // With force flag: should force delete regardless of merge state
-        let (removed, _skipped) = cleanup_stale_branches(temp_dir, &sessions, false, true).unwrap();
+        let (removed, _skipped) =
+            cleanup_stale_branches_with_pr_checker(temp_dir, &sessions, false, true, |_| {
+                PrState::NotFound
+            })
+            .unwrap();
         assert_eq!(removed.len(), 1);
         assert_eq!(removed[0], "specks/unmerged-20260208-120000");
     }
