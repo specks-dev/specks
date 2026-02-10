@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use specks_core::session::Session;
-use std::fs;
+use specks_core::list_worktrees;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -93,11 +93,12 @@ pub struct PrInfo {
 
 /// Find the worktree directory and session for a given speck path
 ///
-/// Searches all session.json files in .specks-worktrees/ directories
-/// and returns the session that matches the given speck path.
+/// Uses list_worktrees() from specks-core to discover sessions from both
+/// external and internal storage locations.
 ///
 /// When multiple worktrees exist for the same speck, prefers the one
 /// that has an open PR (indicating it's the complete/active worktree).
+/// Falls back to most recent by created_at timestamp if no open PR.
 ///
 /// # Arguments
 /// * `root` - Optional root directory (uses current directory if None)
@@ -121,51 +122,40 @@ fn find_worktree_for_speck(
         format!(".specks/{}", speck_path)
     };
 
-    // Find the worktrees directory
-    let base = root
+    // Determine repo root
+    let repo_root = root
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
-    let worktrees_dir = base.join(".specks-worktrees");
-    if !worktrees_dir.exists() {
-        return Err("No worktrees directory found (.specks-worktrees)".to_string());
-    }
 
-    // Scan all worktree directories for session.json files
-    let entries = fs::read_dir(worktrees_dir)
-        .map_err(|e| format!("Failed to read worktrees directory: {}", e))?;
+    // Use list_worktrees() from specks-core
+    let all_sessions = list_worktrees(&repo_root)
+        .map_err(|e| format!("Failed to list worktrees: {}", e))?;
 
-    // Collect all matching worktrees
-    let mut matching_worktrees: Vec<(PathBuf, Session)> = Vec::new();
+    // Filter sessions that match the speck path
+    let matching_worktrees: Vec<Session> = all_sessions
+        .into_iter()
+        .filter(|session| {
+            // Normalize session.speck_path for comparison
+            // Session may have absolute or relative path
+            let session_path = if session.speck_path.starts_with('/') {
+                // Absolute path - strip repo_root prefix to get relative
+                PathBuf::from(&session.speck_path)
+                    .strip_prefix(&repo_root)
+                    .ok()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or(&session.speck_path)
+                    .to_string()
+            } else {
+                // Already relative - normalize ./ prefix
+                session.speck_path
+                    .strip_prefix("./")
+                    .unwrap_or(&session.speck_path)
+                    .to_string()
+            };
 
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
-        let worktree_path = entry.path();
-
-        if !worktree_path.is_dir() {
-            continue;
-        }
-
-        let session_path = worktree_path.join(".specks").join("session.json");
-        if !session_path.exists() {
-            continue;
-        }
-
-        // Try to load and parse the session
-        let session_content = match fs::read_to_string(&session_path) {
-            Ok(content) => content,
-            Err(_) => continue, // Skip corrupt files
-        };
-
-        let session: Session = match serde_json::from_str(&session_content) {
-            Ok(s) => s,
-            Err(_) => continue, // Skip invalid JSON
-        };
-
-        // Check if this session matches our speck
-        if session.speck_path == normalized_speck {
-            matching_worktrees.push((worktree_path, session));
-        }
-    }
+            session_path == normalized_speck
+        })
+        .collect();
 
     if matching_worktrees.is_empty() {
         return Err(format!("No worktree found for speck: {}", normalized_speck));
@@ -173,23 +163,31 @@ fn find_worktree_for_speck(
 
     // If only one match, return it
     if matching_worktrees.len() == 1 {
-        return Ok(matching_worktrees.into_iter().next().unwrap());
+        let session = matching_worktrees.into_iter().next().unwrap();
+        let worktree_path = PathBuf::from(&session.worktree_path);
+        return Ok((worktree_path, session));
     }
 
     // Multiple worktrees exist - find the one with an open PR
-    for (worktree_path, session) in &matching_worktrees {
+    for session in &matching_worktrees {
         if let Ok(pr_info) = get_pr_for_branch(&session.branch_name) {
             if pr_info.state == "OPEN" {
-                return Ok((worktree_path.clone(), session.clone()));
+                let worktree_path = PathBuf::from(&session.worktree_path);
+                return Ok((worktree_path, session.clone()));
             }
         }
     }
 
-    // No worktree has an open PR - return the most recent one (last in sorted order)
-    // Sort by worktree path which includes timestamp
+    // No worktree has an open PR - return the most recent one by created_at
     let mut sorted = matching_worktrees;
-    sorted.sort_by(|a, b| a.0.cmp(&b.0));
-    Ok(sorted.into_iter().last().unwrap())
+    sorted.sort_by(|a, b| {
+        // Compare by created_at timestamp (most recent last)
+        a.created_at.cmp(&b.created_at)
+    });
+
+    let session = sorted.into_iter().last().unwrap();
+    let worktree_path = PathBuf::from(&session.worktree_path);
+    Ok((worktree_path, session))
 }
 
 /// Get pull request information for a branch using gh CLI
@@ -1130,6 +1128,29 @@ mod tests {
     use super::*;
     use specks_core::session::{Session, SessionStatus};
     use std::fs;
+    use std::process::Command;
+
+    /// Helper to initialize a git repository in a temporary directory for testing
+    fn init_git_repo(path: &std::path::Path) {
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+        Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+    }
 
     #[test]
     fn test_pr_info_deserialization() {
@@ -1179,11 +1200,12 @@ mod tests {
         // Create a temporary directory that definitely won't have worktrees
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
 
-        // Should fail because .specks-worktrees doesn't exist
+        // Should fail because .specks-worktrees doesn't exist (list_worktrees returns empty vec)
         let result = find_worktree_for_speck(Some(temp_path), ".specks/specks-test.md");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("No worktrees directory found"));
+        assert!(result.unwrap_err().contains("No worktree found"));
     }
 
     #[test]
@@ -1193,6 +1215,7 @@ mod tests {
         // Create a temporary test environment
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
 
         let worktrees_dir = temp_path.join(".specks-worktrees");
         let worktree1 = worktrees_dir.join("specks__test1-20260209-120000");
@@ -1237,6 +1260,7 @@ mod tests {
         // Create a temporary test environment
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
 
         let worktrees_dir = temp_path.join(".specks-worktrees");
         let worktree1 = worktrees_dir.join("specks__test-20260209-120000");
@@ -1286,6 +1310,7 @@ mod tests {
         // Create a temporary test environment
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
 
         let worktrees_dir = temp_path.join(".specks-worktrees");
         let worktree1 = worktrees_dir.join("specks__test-20260209-120000");
@@ -1335,6 +1360,7 @@ mod tests {
         // Create a temporary test environment
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
 
         let worktrees_dir = temp_path.join(".specks-worktrees");
         let worktree1 = worktrees_dir.join("specks__corrupt-20260209-120000");
