@@ -1802,7 +1802,7 @@ mod tests {
         Command::new("git")
             .arg("-C")
             .arg(origin_path)
-            .args(["init", "--bare"])
+            .args(["init", "--bare", "-b", "main"])
             .output()
             .expect("git init --bare");
 
@@ -1868,7 +1868,7 @@ mod tests {
         Command::new("git")
             .arg("-C")
             .arg(origin_path)
-            .args(["init", "--bare"])
+            .args(["init", "--bare", "-b", "main"])
             .output()
             .expect("git init --bare");
 
@@ -2493,7 +2493,7 @@ mod tests {
         Command::new("git")
             .arg("-C")
             .arg(origin_path)
-            .args(["init", "--bare"])
+            .args(["init", "--bare", "-b", "main"])
             .output()
             .expect("git init --bare");
 
@@ -2672,7 +2672,7 @@ mod tests {
         Command::new("git")
             .arg("-C")
             .arg(origin_path)
-            .args(["init", "--bare"])
+            .args(["init", "--bare", "-b", "main"])
             .output()
             .expect("git init --bare");
 
@@ -2753,7 +2753,7 @@ mod tests {
         Command::new("git")
             .arg("-C")
             .arg(origin_path)
-            .args(["init", "--bare"])
+            .args(["init", "--bare", "-b", "main"])
             .output()
             .expect("git init --bare");
 
