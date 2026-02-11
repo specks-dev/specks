@@ -189,23 +189,47 @@ fn squash_merge_branch(repo_root: &Path, branch: &str, message: &str) -> Result<
 
     if !merge_output.status.success() {
         let stderr = String::from_utf8_lossy(&merge_output.stderr);
+        let stdout = String::from_utf8_lossy(&merge_output.stdout);
+        let combined = format!("{}{}", stdout, stderr);
 
-        // Restore clean state
-        let reset = Command::new("git")
-            .current_dir(repo_root)
-            .args(["reset", "--merge"])
-            .output();
-
-        match reset {
-            Ok(r) if r.status.success() => {
+        // Check if the failure is due to merge conflicts we can auto-resolve
+        if combined.contains("CONFLICT") || combined.contains("Automatic merge failed") {
+            if let Ok(resolved) = try_auto_resolve_conflicts(repo_root) {
+                if resolved {
+                    // All conflicts were in infrastructure files and have been resolved
+                    eprintln!("Auto-resolved infrastructure file conflicts (took branch version)");
+                    // Fall through to the commit step below
+                } else {
+                    // Code file conflicts — abort
+                    let _ = Command::new("git")
+                        .current_dir(repo_root)
+                        .args(["reset", "--merge"])
+                        .output();
+                    return Err(format!(
+                        "Merge failed with code file conflicts (repository restored to clean state): {}",
+                        stderr
+                    ));
+                }
+            } else {
+                let _ = Command::new("git")
+                    .current_dir(repo_root)
+                    .args(["reset", "--merge"])
+                    .output();
                 return Err(format!(
                     "Merge failed (repository restored to clean state): {}",
                     stderr
                 ));
             }
-            _ => {
-                return Err(format!("Merge failed and cleanup also failed: {}", stderr));
-            }
+        } else {
+            // Non-conflict failure (e.g., unrelated histories)
+            let _ = Command::new("git")
+                .current_dir(repo_root)
+                .args(["reset", "--merge"])
+                .output();
+            return Err(format!(
+                "Merge failed (repository restored to clean state): {}",
+                stderr
+            ));
         }
     }
 
@@ -242,6 +266,74 @@ fn squash_merge_branch(repo_root: &Path, branch: &str, message: &str) -> Result<
     Ok(String::from_utf8_lossy(&hash_output.stdout)
         .trim()
         .to_string())
+}
+
+/// Check if all merge conflicts are in infrastructure files (.specks/, .beads/)
+/// and auto-resolve them by taking the branch version.
+/// Returns Ok(true) if all conflicts were resolved, Ok(false) if code files conflict.
+fn try_auto_resolve_conflicts(repo_root: &Path) -> Result<bool, String> {
+    // Get list of conflicted files
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(["diff", "--name-only", "--diff-filter=U"])
+        .output()
+        .map_err(|e| format!("Failed to list conflicted files: {}", e))?;
+
+    let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+    let conflicted: Vec<&str> = stdout_str
+        .trim()
+        .lines()
+        .filter(|l| !l.is_empty())
+        .collect();
+
+    if conflicted.is_empty() {
+        return Ok(false);
+    }
+
+    // Check if ALL conflicted files are infrastructure files
+    let is_infrastructure =
+        |path: &str| -> bool { path.starts_with(".specks/") || path.starts_with(".beads/") };
+
+    let code_conflicts: Vec<&&str> = conflicted
+        .iter()
+        .filter(|f| !is_infrastructure(f))
+        .collect();
+    if !code_conflicts.is_empty() {
+        return Ok(false);
+    }
+
+    // Auto-resolve all infrastructure conflicts by taking the branch version
+    for file in &conflicted {
+        let checkout = Command::new("git")
+            .current_dir(repo_root)
+            .args(["checkout", "--theirs", "--", file])
+            .output()
+            .map_err(|e| format!("Failed to resolve conflict in {}: {}", file, e))?;
+
+        if !checkout.status.success() {
+            return Err(format!(
+                "Failed to resolve conflict in {}: {}",
+                file,
+                String::from_utf8_lossy(&checkout.stderr)
+            ));
+        }
+
+        let add = Command::new("git")
+            .current_dir(repo_root)
+            .args(["add", "--", file])
+            .output()
+            .map_err(|e| format!("Failed to stage resolved {}: {}", file, e))?;
+
+        if !add.status.success() {
+            return Err(format!(
+                "Failed to stage resolved {}: {}",
+                file,
+                String::from_utf8_lossy(&add.stderr)
+            ));
+        }
+    }
+
+    Ok(true)
 }
 
 /// Normalize speck path input to a relative path like `.specks/specks-N.md`
@@ -964,7 +1056,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Merge failed"));
-        assert!(err.contains("restored to clean state"));
+        assert!(err.contains("clean state"));
 
         // Verify repo is clean
         let status = Command::new("git")
@@ -1027,6 +1119,153 @@ mod tests {
         let result = squash_merge_branch(temp_path, "nonexistent", "fail");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Merge failed"));
+    }
+
+    // -- auto-resolve infrastructure conflicts tests --
+
+    /// Helper to create a repo with a branch that conflicts on the given file paths.
+    /// Returns (temp_dir, branch_name).
+    fn setup_conflict_repo(
+        paths: &[(&str, &str, &str)], // (path, main_content, branch_content)
+    ) -> (tempfile::TempDir, String) {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let p = temp_dir.path();
+        init_git_repo(p);
+
+        // Initial commit with all files
+        for (path, content, _) in paths {
+            if let Some(parent) = std::path::Path::new(path).parent() {
+                if !parent.as_os_str().is_empty() {
+                    fs::create_dir_all(p.join(parent)).unwrap();
+                }
+            }
+            fs::write(p.join(path), content).unwrap();
+            Command::new("git")
+                .arg("-C")
+                .arg(p)
+                .args(["add", path])
+                .output()
+                .unwrap();
+        }
+        Command::new("git")
+            .arg("-C")
+            .arg(p)
+            .args(["commit", "-m", "initial"])
+            .output()
+            .unwrap();
+
+        // Create branch and modify files there
+        Command::new("git")
+            .arg("-C")
+            .arg(p)
+            .args(["checkout", "-b", "feature"])
+            .output()
+            .unwrap();
+        for (path, _, branch_content) in paths {
+            fs::write(p.join(path), branch_content).unwrap();
+            Command::new("git")
+                .arg("-C")
+                .arg(p)
+                .args(["add", path])
+                .output()
+                .unwrap();
+        }
+        Command::new("git")
+            .arg("-C")
+            .arg(p)
+            .args(["commit", "-m", "branch changes"])
+            .output()
+            .unwrap();
+
+        // Back to main, make conflicting changes
+        Command::new("git")
+            .arg("-C")
+            .arg(p)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+        for (path, _, _) in paths {
+            let main_conflict = format!("main-conflict-{}", path);
+            fs::write(p.join(path), main_conflict).unwrap();
+            Command::new("git")
+                .arg("-C")
+                .arg(p)
+                .args(["add", path])
+                .output()
+                .unwrap();
+        }
+        Command::new("git")
+            .arg("-C")
+            .arg(p)
+            .args(["commit", "-m", "main conflict"])
+            .output()
+            .unwrap();
+
+        (temp_dir, "feature".to_string())
+    }
+
+    #[test]
+    fn test_squash_merge_auto_resolves_infrastructure_conflicts() {
+        let (temp_dir, branch) = setup_conflict_repo(&[
+            (
+                ".specks/specks-implementation-log.md",
+                "# Log\noriginal",
+                "# Log\nstep-0\nstep-1\nstep-2",
+            ),
+            (".beads/beads.jsonl", "original", "updated-beads"),
+        ]);
+        let p = temp_dir.path();
+
+        let result = squash_merge_branch(p, &branch, "Squash with auto-resolve");
+        assert!(result.is_ok(), "Expected success, got: {:?}", result);
+
+        // Verify the branch versions won (theirs)
+        let log = fs::read_to_string(p.join(".specks/specks-implementation-log.md")).unwrap();
+        assert!(
+            log.contains("step-0"),
+            "Log should have branch content: {}",
+            log
+        );
+        let beads = fs::read_to_string(p.join(".beads/beads.jsonl")).unwrap();
+        assert!(
+            beads.contains("updated-beads"),
+            "Beads should have branch content: {}",
+            beads
+        );
+    }
+
+    #[test]
+    fn test_squash_merge_fails_on_code_conflicts() {
+        let (temp_dir, branch) = setup_conflict_repo(&[
+            ("src/main.py", "original", "branch version"),
+            (
+                ".specks/specks-implementation-log.md",
+                "# Log",
+                "# Log\nentry",
+            ),
+        ]);
+        let p = temp_dir.path();
+
+        let result = squash_merge_branch(p, &branch, "Should fail");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("code file conflicts"),
+            "Expected code conflict error, got: {}",
+            err
+        );
+
+        // Verify repo is clean after abort
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(p)
+            .args(["status", "--porcelain"])
+            .output()
+            .unwrap();
+        assert!(
+            String::from_utf8_lossy(&status.stdout).is_empty(),
+            "Repo should be clean after abort"
+        );
     }
 
     // -- run_cmd tests --
