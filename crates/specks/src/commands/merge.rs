@@ -518,8 +518,9 @@ fn validate_pr_state(pr_info: &PrInfo) -> Result<(), String> {
 /// # Returns
 /// * `true` - Remote origin exists
 /// * `false` - No remote origin configured
-fn has_remote_origin() -> bool {
+fn has_remote_origin(repo_root: &std::path::Path) -> bool {
     Command::new("git")
+        .current_dir(repo_root)
         .args(["remote", "get-url", "origin"])
         .output()
         .map(|output| output.status.success())
@@ -541,23 +542,24 @@ fn has_remote_origin() -> bool {
 /// # Returns
 /// * `Ok(String)` - Commit hash of the squashed commit
 /// * `Err(String)` - Detailed error message (includes recovery status)
-fn squash_merge_branch(branch: &str, message: &str) -> Result<String, String> {
+fn squash_merge_branch(
+    repo_root: &std::path::Path,
+    branch: &str,
+    message: &str,
+) -> Result<String, String> {
     // Step 1: Execute git merge --squash
-    // Note: We use Command::new directly here (not run_command_with_context) because we need
-    // to handle merge conflicts specially by running git reset --merge for recovery
     let merge_output = Command::new("git")
+        .current_dir(repo_root)
         .args(["merge", "--squash", branch])
         .output()
         .map_err(|e| format!("Failed to execute git merge --squash: {}", e))?;
 
     if !merge_output.status.success() {
-        // Merge failed - capture stderr for details
         let stderr = String::from_utf8_lossy(&merge_output.stderr);
 
         // Step 2: Run git reset --merge to restore clean state
-        // Note: Also using Command::new directly here because we need to handle the case where
-        // reset itself fails, and combine both error messages
         let reset_output = Command::new("git")
+            .current_dir(repo_root)
             .args(["reset", "--merge"])
             .output()
             .map_err(|e| format!("Merge failed and git reset --merge execution failed: {}", e))?;
@@ -570,7 +572,6 @@ fn squash_merge_branch(branch: &str, message: &str) -> Result<String, String> {
             ));
         }
 
-        // Reset succeeded - return merge error
         return Err(format!(
             "Merge failed (repository restored to clean state): {}",
             stderr
@@ -578,9 +579,8 @@ fn squash_merge_branch(branch: &str, message: &str) -> Result<String, String> {
     }
 
     // Step 3: Create squashed commit
-    // Note: We use Command::new directly here (not run_command_with_context) because we need
-    // to check both stdout and stderr for "nothing to commit" messages
     let commit_output = Command::new("git")
+        .current_dir(repo_root)
         .args(["commit", "-m", message])
         .output()
         .map_err(|e| format!("Failed to execute git commit: {}", e))?;
@@ -589,8 +589,6 @@ fn squash_merge_branch(branch: &str, message: &str) -> Result<String, String> {
         let stderr = String::from_utf8_lossy(&commit_output.stderr);
         let stdout = String::from_utf8_lossy(&commit_output.stdout);
 
-        // Check if it's an empty merge (nothing to commit)
-        // Git may output to either stdout or stderr
         if stderr.contains("nothing to commit")
             || stderr.contains("no changes added to commit")
             || stdout.contains("nothing to commit")
@@ -599,7 +597,6 @@ fn squash_merge_branch(branch: &str, message: &str) -> Result<String, String> {
             return Err("Nothing to commit: merge produced no changes".to_string());
         }
 
-        // Combine stdout and stderr for full error context
         let error_output = if !stderr.is_empty() {
             stderr.to_string()
         } else if !stdout.is_empty() {
@@ -614,9 +611,9 @@ fn squash_merge_branch(branch: &str, message: &str) -> Result<String, String> {
         ));
     }
 
-    // Step 4: Capture commit hash using run_command_with_context
+    // Step 4: Capture commit hash
     let mut hash_cmd = Command::new("git");
-    hash_cmd.args(["rev-parse", "HEAD"]);
+    hash_cmd.current_dir(repo_root).args(["rev-parse", "HEAD"]);
     let hash_output = run_command_with_context(&mut hash_cmd, "git rev-parse HEAD")?;
 
     let commit_hash = String::from_utf8_lossy(&hash_output.stdout)
@@ -695,7 +692,7 @@ pub fn run_merge(
     };
 
     // Step 1a: Detect merge mode (local vs remote)
-    let has_origin = has_remote_origin();
+    let has_origin = has_remote_origin(std::path::Path::new("."));
 
     // Remote-only steps (Steps 2-5): Skip in local mode
     let pr_info = if has_origin {
@@ -1296,7 +1293,11 @@ pub fn run_merge(
         }
 
         let commit_message = format!("Merge branch '{}'", session.branch_name);
-        match squash_merge_branch(&session.branch_name, &commit_message) {
+        match squash_merge_branch(
+            std::path::Path::new("."),
+            &session.branch_name,
+            &commit_message,
+        ) {
             Ok(hash) => {
                 if !quiet {
                     println!("Squash merge successful: {}", hash);
@@ -2765,14 +2766,7 @@ mod tests {
             .output()
             .expect("Failed to add remote");
 
-        // Change to the temp directory and test
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        let result = has_remote_origin();
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let result = has_remote_origin(temp_path);
 
         assert!(
             result,
@@ -2827,15 +2821,7 @@ mod tests {
             .output()
             .expect("Failed to commit");
 
-        // No remote added - test immediately
-        // Change to the temp directory and test
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        let result = has_remote_origin();
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let result = has_remote_origin(temp_path);
 
         assert!(
             !result,
@@ -2978,17 +2964,8 @@ mod tests {
             .output()
             .expect("Failed to checkout main");
 
-        // Change to temp directory for test
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
+        let result = squash_merge_branch(temp_path, "feature-branch", "Squashed feature commits");
 
-        // Perform squash merge
-        let result = squash_merge_branch("feature-branch", "Squashed feature commits");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
-
-        // Verify success
         assert!(
             result.is_ok(),
             "Expected squash merge to succeed, got: {:?}",
@@ -3089,17 +3066,8 @@ mod tests {
             .output()
             .expect("Failed to commit");
 
-        // Change to temp directory for test
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
+        let result = squash_merge_branch(temp_path, "feature-branch", "Should fail");
 
-        // Attempt squash merge (should fail due to conflict)
-        let result = squash_merge_branch("feature-branch", "Should fail");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
-
-        // Verify failure
         assert!(
             result.is_err(),
             "Expected squash merge to fail due to conflict"
@@ -3177,15 +3145,7 @@ mod tests {
             .output()
             .expect("Failed to checkout main");
 
-        // Change to temp directory for test
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        // Attempt squash merge (should produce no changes)
-        let result = squash_merge_branch("feature-branch", "Should have no changes");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let result = squash_merge_branch(temp_path, "feature-branch", "Should have no changes");
 
         // Verify failure with appropriate message
         assert!(
@@ -3229,15 +3189,7 @@ mod tests {
             .output()
             .expect("Failed to commit");
 
-        // Change to temp directory for test
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        // Attempt squash merge of nonexistent branch
-        let result = squash_merge_branch("nonexistent-branch", "Should fail");
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let result = squash_merge_branch(temp_path, "nonexistent-branch", "Should fail");
 
         // Verify failure
         assert!(
@@ -3515,16 +3467,8 @@ mod tests {
             "Feature branch should have 2 commits ahead"
         );
 
-        // Change to temp directory for squash merge
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        // Perform squash merge using our function
         let commit_message = "Merge feature-branch";
-        let result = squash_merge_branch("feature-branch", commit_message);
-
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
+        let result = squash_merge_branch(temp_path, "feature-branch", commit_message);
 
         // Verify squash merge succeeded
         assert!(
