@@ -3,10 +3,12 @@
 //! Provides commands for managing implementation session state, including
 //! recovery from NeedsReconcile state when a commit succeeds but bead close fails.
 
+#![allow(deprecated)] // SessionReconcileData is deprecated but still used for backward compat
+
 use clap::Subcommand;
 use specks_core::{
     BeadsCli, Config, find_project_root,
-    session::{SessionStatus, save_session, session_file_path},
+    session::{save_session, session_file_path},
 };
 
 use crate::output::{JsonIssue, JsonResponse, SessionReconcileData};
@@ -45,13 +47,28 @@ pub fn run_session(
 }
 
 /// Reconcile a session stuck in NeedsReconcile state
+/// DEPRECATED in v2: Session no longer tracks status. Beads is source of truth.
+#[allow(deprecated)]
 fn run_reconcile(
-    session_id: String,
-    dry_run: bool,
+    _session_id: String,
+    _dry_run: bool,
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
-    // Find project root
+    // V2: Reconcile command is deprecated
+    if !quiet {
+        eprintln!("Error: 'session reconcile' is deprecated in v2. Use 'specks beads close <bead-id>' instead.");
+    }
+    if json_output {
+        println!(r#"{{"status":"error","message":"session reconcile is deprecated; use specks beads close <bead-id> instead"}}"#);
+    }
+    return Err("session reconcile is deprecated; use specks beads close <bead-id> instead".to_string());
+
+    // Old code preserved but unreachable:
+    #[allow(unreachable_code, unused_variables)]
+    {
+    let session_id = _session_id;
+    let dry_run = _dry_run;
     let project_root = match find_project_root() {
         Ok(root) => root,
         Err(_) => {
@@ -85,71 +102,21 @@ fn run_reconcile(
         .map_err(|e| format!("Failed to parse session file: {}", e))?;
 
     // Verify session is in NeedsReconcile state
-    if session.status != SessionStatus::NeedsReconcile {
+    if true /* v2: reconcile deprecated */ {
         return output_error(
             json_output,
             "E038",
             &format!(
                 "Session is not in NeedsReconcile state (current: {})",
-                session.status
+                "pending" /* v2: no status */
             ),
             &session_id,
             38,
         );
     }
 
-    // Identify the bead to close
-    // The current_step field points to the step that was being executed
-    // Pattern matching on CurrentStep to support both formats:
-    // - Index(n): old format, bead ID = {beads_root}.{n + 1}
-    // - Anchor(s): implementer format, lookup via bead_mapping
-    // - Done: no bead to close (implementation completed)
-    let bead_id = match &session.current_step {
-        specks_core::session::CurrentStep::Index(step_index) => {
-            if let Some(beads_root) = &session.beads_root {
-                // current_step is 0-indexed, bead numbering is 1-indexed
-                format!("{}.{}", beads_root, step_index + 1)
-            } else {
-                return output_error(
-                    json_output,
-                    "E039",
-                    "Session has no beads_root - cannot identify bead to close",
-                    &session_id,
-                    39,
-                );
-            }
-        }
-        specks_core::session::CurrentStep::Anchor(step_anchor) => {
-            if let Some(bead_mapping) = &session.bead_mapping {
-                bead_mapping
-                    .get(step_anchor)
-                    .cloned()
-                    .ok_or_else(|| {
-                        format!("Step anchor '{}' not found in bead_mapping", step_anchor)
-                    })
-                    .map_err(|msg| {
-                        output_error(json_output, "E042", &msg, &session_id, 42).unwrap_err()
-                    })?
-            } else {
-                return output_error(
-                    json_output,
-                    "E043",
-                    "Session with anchor current_step has no bead_mapping",
-                    &session_id,
-                    43,
-                );
-            }
-        }
-        specks_core::session::CurrentStep::Done => {
-            return output_error(
-                json_output,
-                "E044",
-                "Session current_step is Done (null) - no bead to close",
-                &session_id,
-                44,
-            );
-        }
-    };
+    // Identify the bead to close (v2: deprecated logic)
+    let bead_id = "bd-deprecated".to_string();
 
     if dry_run {
         // Dry run: just report what would happen
@@ -157,7 +124,7 @@ fn run_reconcile(
             let data = SessionReconcileData {
                 session_id: session_id.clone(),
                 reconciled: false,
-                previous_status: session.status.to_string(),
+                previous_status: "pending" /* v2: no status */.to_string(),
                 new_status: "completed".to_string(),
                 bead_closed: Some(bead_id.clone()),
             };
@@ -170,7 +137,7 @@ fn run_reconcile(
             println!("  1. Close bead: {}", bead_id);
             println!(
                 "  2. Update session status: {} -> Completed",
-                session.status
+                "pending" /* v2: no status */
             );
         }
         return Ok(0);
@@ -194,7 +161,7 @@ fn run_reconcile(
     }
 
     // Close the bead
-    let previous_status = session.status.to_string();
+    let previous_status = "pending" /* v2: no status */.to_string();
     if let Err(e) = beads.close(&bead_id, Some("Session reconciliation")) {
         return output_error(
             json_output,
@@ -206,7 +173,7 @@ fn run_reconcile(
     }
 
     // Update session status to Completed
-    session.status = SessionStatus::Completed;
+    // v2: no session status to update
 
     // Save updated session
     if let Err(e) = save_session(&session, &project_root) {
@@ -220,7 +187,7 @@ fn run_reconcile(
     }
 
     // Success output
-    let new_status = session.status.to_string();
+    let new_status = "pending" /* v2: no status */.to_string();
     let data = SessionReconcileData {
         session_id: session_id.clone(),
         reconciled: true,
@@ -241,9 +208,11 @@ fn run_reconcile(
     }
 
     Ok(0)
+    } // end unreachable block
 }
 
 /// Output an error in JSON or text format
+#[allow(deprecated)]
 fn output_error(
     json_output: bool,
     code: &str,
@@ -281,52 +250,14 @@ fn output_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use specks_core::session::SessionStatus;
 
     #[test]
-    fn test_reconcile_changes_status_from_needs_reconcile_to_completed() {
-        // This test verifies the core reconcile logic in isolation
-        // It will be implemented with mocked beads CLI in full integration
-
-        // Verify the session status enum can transition
-        let mut status = SessionStatus::NeedsReconcile;
-        assert_eq!(status, SessionStatus::NeedsReconcile);
-
-        status = SessionStatus::Completed;
-        assert_eq!(status, SessionStatus::Completed);
-    }
-
-    #[test]
-    fn test_reconcile_fails_for_non_needs_reconcile_session() {
-        // This test verifies that reconcile rejects sessions not in NeedsReconcile state
-        // Unit test with mock would be needed for full end-to-end testing
-
-        // Verify that we can distinguish session states
-        let in_progress = SessionStatus::InProgress;
-        let needs_reconcile = SessionStatus::NeedsReconcile;
-
-        assert_ne!(in_progress, needs_reconcile);
-        assert_eq!(in_progress.to_string(), "in_progress");
-        assert_eq!(needs_reconcile.to_string(), "needs_reconcile");
-    }
-
-    #[test]
-    fn test_dry_run_does_not_modify_session() {
-        // This test would verify dry-run behavior with a mocked environment
-        // For now, we verify the logic that dry-run should not modify state
-
-        // Simulate the dry-run code path
-        let dry_run = true;
-        let session_status = SessionStatus::NeedsReconcile;
-
-        // In dry-run mode, status should not change
-        if !dry_run {
-            // This block would not execute in dry-run
-            let _ = SessionStatus::Completed;
-        }
-
-        // Status remains unchanged in dry-run
-        assert_eq!(session_status, SessionStatus::NeedsReconcile);
+    fn test_reconcile_deprecated() {
+        // V2: Reconcile command is deprecated
+        // Verify it returns an error with the correct message
+        let result = run_reconcile("test-session".to_string(), false, false, true);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("specks beads close"));
     }
 
     #[test]
@@ -341,6 +272,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_session_reconcile_data_serialization() {
         let data = SessionReconcileData {
             session_id: "test-20260210-120000".to_string(),

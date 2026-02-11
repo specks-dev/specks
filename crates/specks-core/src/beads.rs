@@ -489,6 +489,40 @@ impl BeadsCli {
             SpecksError::BeadsCommand(format!("failed to parse bd children output: {}", e))
         })
     }
+
+    /// Get all ready beads (open beads with all dependencies complete).
+    /// Uses: `bd ready --json` (all ready beads) or `bd ready <parent_id> --json` (ready children of parent).
+    pub fn ready(&self, parent_id: Option<&str>) -> Result<Vec<Issue>, SpecksError> {
+        let mut cmd = Command::new(&self.bd_path);
+        cmd.arg("ready");
+
+        if let Some(parent) = parent_id {
+            cmd.arg(parent);
+        }
+
+        cmd.arg("--json");
+
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::BeadsNotInstalled
+            } else {
+                SpecksError::BeadsCommand(format!("failed to run bd ready: {}", e))
+            }
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SpecksError::BeadsCommand(format!(
+                "bd ready failed: {}",
+                stderr
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        serde_json::from_str(&stdout).map_err(|e| {
+            SpecksError::BeadsCommand(format!("failed to parse bd ready output: {}", e))
+        })
+    }
 }
 
 /// Validate bead ID format

@@ -54,13 +54,13 @@ fn parse_agent_frontmatter(content: &str) -> Option<(String, String, String)> {
     }
 }
 
-/// List of all sub-agents (Phase 4.0+: 9 agents invoked via Task)
+/// List of all sub-agents (8 agents invoked via Task)
 /// Per specks-4.md and specks-5.md, these are the sub-agents.
+/// Note: planner-setup-agent was removed — its work is now a pre-hook.
 const ALL_AGENTS: &[&str] = &[
     "clarifier-agent",
     "author-agent",
     "critic-agent",
-    "planner-setup-agent",
     "architect-agent",
     "coder-agent",
     "reviewer-agent",
@@ -140,8 +140,8 @@ fn test_only_expected_agents_exist() {
 
     assert_eq!(
         entries.len(),
-        9,
-        "Expected exactly 9 agent files, found {}",
+        8,
+        "Expected exactly 8 agent files, found {}",
         entries.len()
     );
 

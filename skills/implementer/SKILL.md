@@ -141,12 +141,12 @@ All failures use:
   Halting: {reason}
 ```
 
-For `needs_reconcile`:
+For `bead_close_failed` (warn and continue):
 ```
-**specks:committer-agent**(WARNING: needs reconcile)
+**specks:committer-agent**(WARNING: bead close failed)
   Commit: {commit_hash} succeeded
   Bead: {bead_id} close FAILED
-  Halting: manual bead close required
+  Continuing: worktree state is clean, bead can be closed manually if needed
 ```
 
 ---
@@ -256,6 +256,8 @@ Task(
 - Otherwise: output the Setup post-call message and proceed to the step loop
 
 Store in memory: `worktree_path`, `branch_name`, `base_branch`, `resolved_steps`, `bead_mapping`, `root_bead`, `session.session_id`, `session.session_file`, `session.artifacts_base`
+
+**Note:** Session tracking is infrastructure-only (file paths, branch names, commit hashes). For step state (ready/blocked/complete), always use `bd ready` via beads integration. The session object does not track step completion state.
 
 ### 3. For Each Step in `resolved_steps`
 
@@ -484,7 +486,7 @@ Task(
 
 Parse the committer's JSON output. Record `commit_hash` for step summary.
 
-If `needs_reconcile == true`: output the needs_reconcile warning message and HALT.
+If `bead_close_failed == true`: output the bead_close_failed warning message and continue (worktree is clean).
 If `aborted == true`: output failure message with reason and HALT.
 
 Output the Committer post-call message.

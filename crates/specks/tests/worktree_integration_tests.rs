@@ -148,6 +148,7 @@ Test context paragraph.
 "#;
 
 #[test]
+#[ignore = "requires beads service (beads sync is always-on)"]
 fn test_worktree_lifecycle() {
     let temp = setup_test_git_repo();
     create_test_speck(&temp, "test-worktree", MINIMAL_SPECK);
@@ -390,6 +391,7 @@ fn test_worktree_lifecycle() {
 }
 
 #[test]
+#[ignore = "requires beads service (beads sync is always-on)"]
 fn test_worktree_list_json_output() {
     let temp = setup_test_git_repo();
     create_test_speck(&temp, "test-json", MINIMAL_SPECK);
@@ -445,6 +447,7 @@ fn test_worktree_list_json_output() {
 }
 
 #[test]
+#[ignore = "requires beads service (beads sync is always-on)"]
 fn test_worktree_cleanup_dry_run() {
     let temp = setup_test_git_repo();
     create_test_speck(&temp, "test-cleanup", MINIMAL_SPECK);

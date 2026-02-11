@@ -5,9 +5,7 @@
 
 use crate::error::SpecksError;
 use crate::parser::parse_speck;
-use crate::session::{
-    CurrentStep, Session, SessionStatus, load_session, now_iso8601, save_session,
-};
+use crate::session::{Session, load_session, now_iso8601};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -49,8 +47,6 @@ pub struct WorktreeConfig {
     pub base_branch: String,
     /// Repository root directory
     pub repo_root: PathBuf,
-    /// If true, reuse existing worktree for this speck instead of creating new one
-    pub reuse_existing: bool,
 }
 
 /// Derive speck slug from speck path per Spec S05
@@ -575,15 +571,16 @@ impl<'a> GitCli<'a> {}
 /// Create a worktree for speck implementation
 ///
 /// Validates speck has at least one execution step, generates branch name,
-/// creates branch from base, creates worktree, and initializes session.json.
+/// creates branch from base, creates worktree. Returns infrastructure tuple
+/// (worktree_path, branch_name, speck_slug). Session creation is now handled
+/// by CLI layer.
 ///
-/// If `config.reuse_existing` is true, searches for existing worktrees with
-/// matching speck_path and returns the most recent one instead of creating new.
+/// Always searches for existing worktrees with matching speck_path and returns
+/// the most recent one instead of creating new. This makes the command idempotent.
 ///
 /// Implements partial failure recovery:
 /// - If branch creation succeeds but worktree creation fails: delete the branch
-/// - If worktree creation succeeds but session.json write fails: remove worktree and delete branch
-pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> {
+pub fn create_worktree(config: &WorktreeConfig) -> Result<(PathBuf, String, String), SpecksError> {
     let git = GitCli::new(&config.repo_root);
 
     // Check git version
@@ -612,15 +609,14 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         return Err(SpecksError::SpeckHasNoSteps);
     }
 
-    // Check for existing worktrees for this speck
+    // Check for existing worktrees for this speck and reuse if found
     if let Some(existing_session) = find_existing_worktree(config)? {
-        if config.reuse_existing {
-            // Reuse the existing worktree
-            return Ok(existing_session);
-        } else {
-            // Fail because a worktree already exists and we're not allowed to reuse
-            return Err(SpecksError::WorktreeAlreadyExists);
-        }
+        // Reuse path: return infrastructure tuple from existing session
+        return Ok((
+            PathBuf::from(&existing_session.worktree_path),
+            existing_session.branch_name,
+            existing_session.speck_slug,
+        ));
     }
     // No existing worktree found, proceed to create new one
 
@@ -633,16 +629,6 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         .join(".specks-worktrees")
         .join(&worktree_dir_name);
 
-    // Check if worktree already exists
-    if worktree_path.exists() {
-        return Err(SpecksError::WorktreeAlreadyExists);
-    }
-
-    // Check if branch already exists
-    if git.branch_exists(&branch_name) {
-        return Err(SpecksError::WorktreeAlreadyExists);
-    }
-
     // Create branch from base
     git.create_branch(&config.base_branch, &branch_name)?;
 
@@ -653,37 +639,8 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         return Err(e);
     }
 
-    // Create session
-    let session = Session {
-        schema_version: "1".to_string(),
-        speck_path: config.speck_path.display().to_string(),
-        speck_slug: slug,
-        branch_name: branch_name.clone(),
-        base_branch: config.base_branch.clone(),
-        worktree_path: worktree_path.display().to_string(),
-        created_at: now_iso8601(),
-        status: SessionStatus::Pending,
-        current_step: CurrentStep::Index(0),
-        total_steps: speck.steps.len(),
-        beads_root: None,
-        reused: false,
-        session_id: None,
-        last_updated_at: None,
-        steps_completed: None,
-        steps_remaining: None,
-        bead_mapping: None,
-        step_summaries: None,
-    };
-
-    // Save session (with partial failure recovery)
-    if let Err(e) = save_session(&session, &config.repo_root) {
-        // Clean up: remove worktree and delete branch
-        let _ = git.worktree_remove(&worktree_path);
-        let _ = git.delete_branch(&branch_name);
-        return Err(e);
-    }
-
-    Ok(session)
+    // Return infrastructure tuple (CLI layer creates Session)
+    Ok((worktree_path, branch_name, slug))
 }
 
 /// List all active worktrees
@@ -1154,15 +1111,7 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
     };
 
     for session in &sessions {
-        // ABSOLUTE GUARD: InProgress sessions are never removed
-        if session.status == SessionStatus::InProgress {
-            result.skipped.push((
-                session.branch_name.clone(),
-                "InProgress (protected)".to_string(),
-            ));
-            continue;
-        }
-
+        // Note: Session status removed in v2. Protection now relies on PR state and user confirmation.
         // Get PR state
         let pr_state = pr_checker(&session.branch_name);
 
@@ -1270,6 +1219,7 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session::save_session;
 
     #[test]
     fn test_derive_speck_slug() {
@@ -1369,7 +1319,7 @@ mod tests {
     #[test]
     fn test_remove_worktree_with_external_session() {
         use crate::session::{
-            Session, SessionStatus, artifacts_dir, save_session, session_file_path,
+            Session, artifacts_dir, save_session, session_file_path,
         };
         use std::process::Command;
         use tempfile::TempDir;
@@ -1472,24 +1422,20 @@ mod tests {
 
         // Create session with external storage
         let session = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "test".to_string(),
             branch_name: "specks/test-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::InProgress,
-            current_step: CurrentStep::Index(1),
-            total_steps: 3,
-            beads_root: None,
-            reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
+            total_steps: 3,
+            root_bead_id: None,
+            reused: false,
             step_summaries: None,
+            ..Default::default()
         };
 
         save_session(&session, temp_dir).unwrap();
@@ -1647,7 +1593,7 @@ mod tests {
     #[test]
     fn test_remove_worktree_with_both_locations() {
         use crate::session::{
-            Session, SessionStatus, artifacts_dir, save_session, session_file_path,
+            Session, artifacts_dir, save_session, session_file_path,
         };
         use std::process::Command;
         use tempfile::TempDir;
@@ -1750,24 +1696,20 @@ mod tests {
 
         // Create external session
         let session = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+            session_id: "both-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "both".to_string(),
             branch_name: "specks/both-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree_path.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::InProgress,
-            current_step: CurrentStep::Index(1),
-            total_steps: 3,
-            beads_root: None,
-            reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
+            total_steps: 3,
+            root_bead_id: None,
+            reused: false,
             step_summaries: None,
+            ..Default::default()
         };
 
         save_session(&session, temp_dir).unwrap();
@@ -1851,19 +1793,6 @@ mod tests {
             extract_timestamp_from_worktree_path(".specks-worktrees/specks__auth-20260208"),
             ""
         );
-    }
-
-    #[test]
-    fn test_worktree_config_default_reuse_existing() {
-        // Ensure default behavior is backward compatible (reuse_existing: false)
-        let config = WorktreeConfig {
-            speck_path: PathBuf::from(".specks/specks-1.md"),
-            base_branch: "main".to_string(),
-            repo_root: PathBuf::from("/tmp/test"),
-            reuse_existing: false,
-        };
-
-        assert!(!config.reuse_existing);
     }
 
     #[test]
@@ -1969,23 +1898,39 @@ mod tests {
             speck_path: PathBuf::from(".specks/specks-test.md"),
             base_branch: "main".to_string(),
             repo_root: temp_dir.clone(),
-            reuse_existing: false,
         };
 
-        let session1 = create_worktree(&config1).unwrap();
-        assert!(!session1.reused);
+        let (worktree_path1, branch_name1, _slug1) = create_worktree(&config1).unwrap();
 
-        // Try to create with reuse_existing: true
+        // Create Session for first worktree so it can be found by reuse logic
+        let session1 = Session {
+            schema_version: "2".to_string(),
+            session_id: branch_name1.strip_prefix("specks/").unwrap_or(&branch_name1).to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: branch_name1.clone(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path1.display().to_string(),
+            created_at: crate::session::now_iso8601(),
+            last_updated_at: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
+            step_summaries: None,
+            ..Default::default()
+        };
+        crate::session::save_session(&session1, &temp_dir).unwrap();
+
+        // Try to create again - should reuse existing worktree (idempotent)
         let config2 = WorktreeConfig {
             speck_path: PathBuf::from(".specks/specks-test.md"),
             base_branch: "main".to_string(),
             repo_root: temp_dir.clone(),
-            reuse_existing: true,
         };
 
-        let session2 = create_worktree(&config2).unwrap();
-        assert_eq!(session2.worktree_path, session1.worktree_path);
-        assert_eq!(session2.branch_name, session1.branch_name);
+        let (worktree_path2, branch_name2, _slug2) = create_worktree(&config2).unwrap();
+        assert_eq!(worktree_path1, worktree_path2);
+        assert_eq!(branch_name1, branch_name2);
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
@@ -2092,12 +2037,10 @@ mod tests {
             speck_path: PathBuf::from(".specks/specks-test.md"),
             base_branch: "main".to_string(),
             repo_root: temp_dir.clone(),
-            reuse_existing: true,
         };
 
-        let session = create_worktree(&config).unwrap();
-        assert!(!session.reused);
-        assert!(session.worktree_path.contains(".specks-worktrees"));
+        let (worktree_path, _branch_name, _slug) = create_worktree(&config).unwrap();
+        assert!(worktree_path.to_string_lossy().contains(".specks-worktrees"));
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
@@ -2204,7 +2147,6 @@ mod tests {
             speck_path: PathBuf::from(".specks/specks-test.md"),
             base_branch: "main".to_string(),
             repo_root: temp_dir.clone(),
-            reuse_existing: false,
         };
 
         create_worktree(&config1).unwrap();
@@ -2272,7 +2214,6 @@ mod tests {
     #[test]
     fn test_cleanup_mode_merged_only() {
         // Unit test: Merged mode only removes worktrees with merged PRs
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -2344,24 +2285,19 @@ mod tests {
             .unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "test1".to_string(),
             branch_name: "specks/test1-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::Completed,
-            current_step: CurrentStep::Done,
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -2376,7 +2312,6 @@ mod tests {
     #[test]
     fn test_cleanup_orphaned_no_pr() {
         // Unit test: Orphaned mode removes worktrees without PRs
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -2432,24 +2367,19 @@ mod tests {
             .unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "orphan".to_string(),
             branch_name: "specks/orphan-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::Completed,
-            current_step: CurrentStep::Done,
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -2466,9 +2396,8 @@ mod tests {
     }
 
     #[test]
-    fn test_cleanup_orphaned_skips_in_progress() {
-        // Unit test: Orphaned mode skips InProgress sessions
-        use crate::session::SessionStatus;
+    fn test_cleanup_orphaned_removes_worktrees_without_pr() {
+        // V2: Orphaned mode removes worktrees without PRs (no status field)
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -2506,10 +2435,10 @@ mod tests {
         let worktrees_dir = temp_dir.join(".specks-worktrees");
         std::fs::create_dir_all(&worktrees_dir).unwrap();
 
-        let worktree1 = worktrees_dir.join("specks__inprogress-20260208-120000");
+        let worktree1 = worktrees_dir.join("specks__orphaned-20260208-120000");
         Command::new("git")
             .current_dir(temp_dir)
-            .args(["branch", "specks/inprogress-20260208-120000", "main"])
+            .args(["branch", "specks/orphaned-20260208-120000", "main"])
             .output()
             .unwrap();
         Command::new("git")
@@ -2518,46 +2447,39 @@ mod tests {
                 "worktree",
                 "add",
                 worktree1.to_str().unwrap(),
-                "specks/inprogress-20260208-120000",
+                "specks/orphaned-20260208-120000",
             ])
             .output()
             .unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
-            speck_slug: "inprogress".to_string(),
-            branch_name: "specks/inprogress-20260208-120000".to_string(),
+            speck_slug: "orphaned".to_string(),
+            branch_name: "specks/orphaned-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::InProgress,
-            current_step: CurrentStep::Index(0),
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in Orphaned mode
+        // Run cleanup in Orphaned mode (dry run)
         let result = cleanup_worktrees(temp_dir, CleanupMode::Orphaned, true).unwrap();
 
-        // Should skip InProgress session
-        assert_eq!(result.orphaned_removed.len(), 0);
-        assert_eq!(result.skipped.len(), 1);
-        assert!(result.skipped[0].1.contains("InProgress"));
+        // V2: Worktrees without PRs are removed in Orphaned mode
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.skipped.len(), 0);
     }
 
     #[test]
-    fn test_cleanup_all_protects_in_progress() {
-        // Unit test: All mode never removes InProgress sessions (even with --force)
-        use crate::session::SessionStatus;
+    fn test_cleanup_all_removes_worktrees_without_pr() {
+        // V2: All mode removes worktrees without PRs (no status protection)
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -2613,41 +2535,33 @@ mod tests {
             .unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "active".to_string(),
             branch_name: "specks/active-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::InProgress,
-            current_step: CurrentStep::Index(0),
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
-        // Run cleanup in All mode with force
+        // Run cleanup in All mode (dry run)
         let result = cleanup_worktrees(temp_dir, CleanupMode::All, true).unwrap();
 
-        // Should skip InProgress session even with --force
-        assert_eq!(result.merged_removed.len(), 0);
-        assert_eq!(result.orphaned_removed.len(), 0);
-        assert_eq!(result.skipped.len(), 1);
-        assert!(result.skipped[0].1.contains("InProgress"));
+        // V2: Worktrees without PRs are removed in All mode
+        assert_eq!(result.orphaned_removed.len(), 1);
+        assert_eq!(result.skipped.len(), 0);
     }
 
     #[test]
     fn test_cleanup_needs_reconcile_merged_pr() {
         // Test: NeedsReconcile session with merged PR is cleaned by Merged mode
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -2726,24 +2640,19 @@ mod tests {
 
         // Create session with NeedsReconcile status
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "reconcile".to_string(),
             branch_name: "specks/reconcile-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::NeedsReconcile,
-            current_step: CurrentStep::Index(1),
             total_steps: 2,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -2761,7 +2670,6 @@ mod tests {
     #[test]
     fn test_cleanup_needs_reconcile_no_pr() {
         // Test: NeedsReconcile session with no PR is cleaned by Orphaned mode
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -2820,24 +2728,19 @@ mod tests {
 
         // Create session with NeedsReconcile status (no PR)
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "nopr".to_string(),
             branch_name: "specks/nopr-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::NeedsReconcile,
-            current_step: CurrentStep::Index(0),
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -2856,7 +2759,6 @@ mod tests {
     #[test]
     fn test_cleanup_skips_closed_pr() {
         // Test: Closed PR (not merged) is skipped by Merged and Orphaned modes
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -2926,24 +2828,19 @@ mod tests {
             .unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "closed".to_string(),
             branch_name: "specks/closed-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::Completed,
-            current_step: CurrentStep::Done,
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -2974,7 +2871,6 @@ mod tests {
         // Test: Unknown PR state (gh unavailable) uses fallback behavior per mode
         // - Merged mode: falls back to git ancestry check
         // - Orphaned mode: treats as no PR → cleanable
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -3044,24 +2940,19 @@ mod tests {
             .unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "unknown".to_string(),
             branch_name: "specks/unknown-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::Completed,
-            current_step: CurrentStep::Done,
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -3089,7 +2980,6 @@ mod tests {
     #[test]
     fn test_cleanup_all_includes_closed_pr() {
         // Test: All mode includes closed PRs (not merged)
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -3146,24 +3036,19 @@ mod tests {
             .unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "allclosed".to_string(),
             branch_name: "specks/allclosed-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::Completed,
-            current_step: CurrentStep::Done,
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -3181,7 +3066,6 @@ mod tests {
     #[test]
     fn test_cleanup_force_removes_dirty_worktree() {
         // Test: Dirty worktrees are force-removed (escalate from normal → force)
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -3241,24 +3125,19 @@ mod tests {
         std::fs::write(worktree1.join("dirty.txt"), "uncommitted").unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "dirty".to_string(),
             branch_name: "specks/dirty-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::Completed,
-            current_step: CurrentStep::Done,
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -3278,7 +3157,6 @@ mod tests {
     #[test]
     fn test_cleanup_unknown_pr_falls_back_gracefully() {
         // Test: unknown PR state (gh unavailable) falls back gracefully
-        use crate::session::SessionStatus;
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -3335,24 +3213,19 @@ mod tests {
             .unwrap();
 
         let session1 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+        session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "force".to_string(),
             branch_name: "specks/force-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree1.display().to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::Completed,
-            current_step: CurrentStep::Done,
             total_steps: 1,
-            beads_root: None,
             reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
             step_summaries: None,
+            ..Default::default()
         };
         save_session(&session1, temp_dir).unwrap();
 
@@ -3528,24 +3401,20 @@ mod tests {
 
         // Create a session for this branch
         let session = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+            session_id: "active-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "active".to_string(),
             branch_name: "specks/active-20260208-120000".to_string(),
             base_branch: "main".to_string(),
             worktree_path: ".specks-worktrees/specks__active-20260208-120000".to_string(),
             created_at: "2026-02-08T12:00:00Z".to_string(),
-            status: SessionStatus::InProgress,
-            current_step: CurrentStep::Index(0),
-            total_steps: 1,
-            beads_root: None,
-            reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
             step_summaries: None,
+            ..Default::default()
         };
 
         let sessions = vec![session];

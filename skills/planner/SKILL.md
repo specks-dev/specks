@@ -14,7 +14,9 @@ hooks:
 
 **YOUR TOOLS:** `Task` and `AskUserQuestion` ONLY. You have no other tools. You cannot read files, write files, edit files, or run commands. Everything happens through agents you spawn via `Task`.
 
-**FIRST ACTION:** Your very first tool call MUST be `Task` with `specks:planner-setup-agent`. No exceptions. Do not think. Do not analyze. Just spawn the agent.
+**FIRST ACTION:** Your very first tool call MUST be `Task` with `specks:clarifier-agent`. No exceptions. Do not think. Do not analyze. Just spawn the agent.
+
+**Prerequisites are handled automatically.** A pre-hook runs `specks init` before this skill starts. Do not check or run initialization yourself.
 
 **FORBIDDEN:**
 - Answering the user's request directly
@@ -38,12 +40,6 @@ Follow these formats exactly.
 ### Post-call messages
 
 Output these as text immediately after parsing the agent's JSON result:
-
-**planner-setup-agent:**
-```
-**specks:planner-setup-agent**(Complete)
-  Mode: {mode} | Path: {speck_path}
-```
 
 **clarifier-agent:**
 ```
@@ -106,9 +102,6 @@ or:
 ## Orchestration Loop
 
 ```
-  Task: planner-setup-agent (FRESH spawn, one time)
-       │  → setup_id
-       ▼
   SPAWN clarifier-agent → clarifier_id (ONE TIME ONLY)
        │
        ▼
@@ -144,27 +137,9 @@ or:
 
 ## Execute This Sequence
 
-### 1. Spawn Setup Agent
+### 1. Initialize State
 
 Output the session start message.
-
-```
-Task(
-  subagent_type: "specks:planner-setup-agent",
-  prompt: '{"mode": "<new|revise>", "idea": "<idea or null>", "speck_path": "<path or null>"}',
-  description: "Check prerequisites and determine mode"
-)
-```
-
-**Save the `agentId` as `setup_id`.**
-
-Parse the setup agent's JSON response. Extract `mode`, `initialized`, `speck_path`, and `idea`.
-
-If `success == false`: output the Setup failure message and HALT.
-
-Output the Setup post-call message.
-
-### 2. Initialize State
 
 ```
 clarifier_id = null
@@ -174,7 +149,7 @@ critic_feedback = null
 revision_count = 0
 ```
 
-### 3. Clarifier: Analyze and Question (First Pass Only)
+### 2. Clarifier: Analyze and Question (First Pass Only)
 
 The clarifier runs ONCE to understand the idea and gather user input. It is NOT resumed for revision loops.
 
@@ -210,7 +185,7 @@ AskUserQuestion(
 
 Store user answers in memory.
 
-### 4. Author: Write or Revise Speck
+### 3. Author: Write or Revise Speck
 
 **First pass (author_id is null) — FRESH spawn:**
 
@@ -220,7 +195,7 @@ Task(
   prompt: '{
     "idea": "<idea or null>",
     "speck_path": "<path or null>",
-    "user_answers": <answers from step 3>,
+    "user_answers": <answers from step 2>,
     "clarifier_assumptions": <assumptions from clarifier>,
     "critic_feedback": null
   }',
@@ -246,7 +221,7 @@ If `validation_status == "errors"`: output the Author failure message and HALT.
 
 Output the Author post-call message.
 
-### 5. Critic: Review Speck
+### 4. Critic: Review Speck
 
 **First pass (critic_id is null) — FRESH spawn:**
 
@@ -276,7 +251,7 @@ Store response in memory.
 
 Output the Critic post-call message.
 
-### 6. Handle Critic Recommendation
+### 5. Handle Critic Recommendation
 
 **APPROVE:**
 - Output the session end message and HALT with success.
@@ -296,7 +271,7 @@ AskUserQuestion(
   }]
 )
 ```
-- If "Revise": set `critic_feedback = critic response`, increment `revision_count`, **GO TO STEP 4** (author, not clarifier)
+- If "Revise": set `critic_feedback = critic response`, increment `revision_count`, **GO TO STEP 3** (author, not clarifier)
 - If "Accept": output the session end message, HALT with success
 - If "Abort": output `**Planner** — Aborted by user` and HALT
 
@@ -314,7 +289,7 @@ AskUserQuestion(
   }]
 )
 ```
-- If "Start over": set `critic_feedback = critic response`, increment `revision_count`, **GO TO STEP 4** (author, not clarifier)
+- If "Start over": set `critic_feedback = critic response`, increment `revision_count`, **GO TO STEP 3** (author, not clarifier)
 - If "Abort": output `**Planner** — Aborted by user` and HALT
 
 ---

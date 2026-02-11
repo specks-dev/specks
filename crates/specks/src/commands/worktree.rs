@@ -21,7 +21,7 @@ pub enum WorktreeCommands {
     ///
     /// Creates a git worktree and branch for implementing a speck in isolation.
     #[command(
-        long_about = "Create worktree for speck implementation.\n\nCreates:\n  - Branch: specks/<slug>-<timestamp>\n  - Worktree: .specks-worktrees/<sanitized-branch-name>/\n  - Session: session.json tracking state\n\nWith --sync-beads:\n  - Atomically syncs beads and commits annotations in worktree\n  - Full rollback if sync or commit fails\n\nWith --reuse-existing:\n  - Returns existing worktree if one exists for this speck\n  - Creates new worktree if none exists\n  - Default behavior (without flag) fails if worktree exists\n\nValidates that the speck has at least one execution step."
+        long_about = "Create worktree for speck implementation.\n\nCreates:\n  - Branch: specks/<slug>-<timestamp>\n  - Worktree: .specks-worktrees/<sanitized-branch-name>/\n  - Session: session.json tracking state\n\nBeads sync is always-on:\n  - Atomically syncs beads and commits annotations in worktree\n  - Full rollback if sync or commit fails\n\nWorktree creation is idempotent:\n  - Returns existing worktree if one exists for this speck\n  - Creates new worktree if none exists\n\nValidates that the speck has at least one execution step."
     )]
     Create {
         /// Speck file to implement
@@ -30,14 +30,6 @@ pub enum WorktreeCommands {
         /// Base branch to create worktree from (default: main)
         #[arg(long, default_value = "main")]
         base: String,
-
-        /// Sync beads and commit annotations after worktree creation
-        #[arg(long)]
-        sync_beads: bool,
-
-        /// Reuse existing worktree if one exists for this speck
-        #[arg(long)]
-        reuse_existing: bool,
     },
 
     /// List active worktrees with status
@@ -105,9 +97,18 @@ pub struct CreateData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root_bead_id: Option<String>,
     #[serde(skip_serializing_if = "is_false")]
-    pub rollback_performed: bool,
-    #[serde(skip_serializing_if = "is_false")]
     pub reused: bool,
+    // V2 enriched fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifacts_base: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub all_steps: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ready_steps: Option<Vec<String>>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -216,7 +217,21 @@ fn commit_bead_annotations(
 ) -> Result<(), specks_core::error::SpecksError> {
     use std::process::Command;
 
-    // Stage the speck file
+    // Stage the .specks/ directory (includes init files: config, log, skeleton)
+    let status = Command::new("git")
+        .args(["-C", &worktree_path.to_string_lossy(), "add", ".specks/"])
+        .status()
+        .map_err(|e| specks_core::error::SpecksError::BeadCommitFailed {
+            reason: format!("failed to stage .specks/ directory: {}", e),
+        })?;
+
+    if !status.success() {
+        return Err(specks_core::error::SpecksError::BeadCommitFailed {
+            reason: "git add .specks/ failed".to_string(),
+        });
+    }
+
+    // Stage the speck file (includes bead annotations)
     let status = Command::new("git")
         .args(["-C", &worktree_path.to_string_lossy(), "add", speck_path])
         .status()
@@ -226,12 +241,12 @@ fn commit_bead_annotations(
 
     if !status.success() {
         return Err(specks_core::error::SpecksError::BeadCommitFailed {
-            reason: "git add failed".to_string(),
+            reason: "git add speck failed".to_string(),
         });
     }
 
-    // Commit the changes
-    let commit_msg = format!("chore(beads): sync bead annotations for {}", speck_name);
+    // Commit the changes (both init files and bead annotations)
+    let commit_msg = format!("chore: init worktree and sync beads for {}", speck_name);
     let status = Command::new("git")
         .args([
             "-C",
@@ -295,16 +310,12 @@ fn rollback_worktree_creation(
 pub fn run_worktree_create(
     speck: String,
     base: String,
-    sync_beads: bool,
-    reuse_existing: bool,
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
     run_worktree_create_with_root(
         speck,
         base,
-        sync_beads,
-        reuse_existing,
         json_output,
         quiet,
         None,
@@ -315,8 +326,6 @@ pub fn run_worktree_create(
 pub fn run_worktree_create_with_root(
     speck: String,
     base: String,
-    sync_beads: bool,
-    reuse_existing: bool,
     json_output: bool,
     quiet: bool,
     override_root: Option<&Path>,
@@ -344,123 +353,276 @@ pub fn run_worktree_create_with_root(
         speck_path: speck_path.clone(),
         base_branch: base,
         repo_root: repo_root.clone(),
-        reuse_existing,
     };
 
     match create_worktree(&config) {
-        Ok(session) => {
-            let mut bead_mapping = None;
-            let mut root_bead_id = None;
+        Ok((worktree_path, branch_name, speck_slug)) => {
+            let speck_name = speck_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
 
-            // If --sync-beads flag is set, sync beads and commit
-            if sync_beads {
-                let worktree_path = PathBuf::from(&session.worktree_path);
-                let speck_name = speck_path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown");
+            // Check if this is a reused worktree by looking for existing session
+            let existing_session = specks_core::session::load_session(&worktree_path, Some(&repo_root)).ok();
+            let reused = existing_session.is_some();
 
-                // Try to sync beads
-                match sync_beads_in_worktree(&worktree_path, &speck) {
-                    Ok((mapping, root_id)) => {
-                        // Try to commit the changes
-                        match commit_bead_annotations(&worktree_path, &speck, speck_name) {
-                            Ok(()) => {
-                                bead_mapping = Some(mapping);
-                                root_bead_id = root_id;
-                            }
-                            Err(e) => {
-                                // Commit failed - rollback
-                                let _ = rollback_worktree_creation(
-                                    &worktree_path,
-                                    &session.branch_name,
-                                    &repo_root,
-                                );
-
-                                if json_output {
-                                    let data = CreateData {
-                                        worktree_path: String::new(),
-                                        branch_name: String::new(),
-                                        base_branch: session.base_branch.clone(),
-                                        speck_path: session.speck_path.clone(),
-                                        total_steps: 0,
-                                        bead_mapping: None,
-                                        root_bead_id: None,
-                                        rollback_performed: true,
-                                        reused: false,
-                                    };
-                                    eprintln!(
-                                        "{}",
-                                        serde_json::to_string_pretty(&data)
-                                            .map_err(|e| e.to_string())?
-                                    );
-                                } else if !quiet {
-                                    eprintln!("error: {}", e);
-                                    eprintln!("Rolled back worktree creation");
-                                }
-                                return Ok(e.exit_code());
-                            }
-                        }
+            // Run specks init in the worktree (idempotent, creates .specks/ infrastructure)
+            let init_result = std::env::current_exe()
+                .map_err(|e| specks_core::error::SpecksError::InitFailed {
+                    reason: format!("failed to get current executable: {}", e),
+                })
+                .and_then(|exe| {
+                    use std::process::Command;
+                    Command::new(exe)
+                        .arg("init")
+                        .current_dir(&worktree_path)
+                        .output()
+                        .map_err(|e| specks_core::error::SpecksError::InitFailed {
+                            reason: format!("failed to execute init: {}", e),
+                        })
+                })
+                .and_then(|output| {
+                    if output.status.success() {
+                        Ok(())
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        Err(specks_core::error::SpecksError::InitFailed {
+                            reason: format!("init failed: {}", stderr),
+                        })
                     }
-                    Err(e) => {
-                        // Sync failed - rollback
-                        let worktree_path = PathBuf::from(&session.worktree_path);
-                        let _ = rollback_worktree_creation(
-                            &worktree_path,
-                            &session.branch_name,
-                            &repo_root,
-                        );
+                });
 
-                        if json_output {
-                            let data = CreateData {
-                                worktree_path: String::new(),
-                                branch_name: String::new(),
-                                base_branch: session.base_branch.clone(),
-                                speck_path: session.speck_path.clone(),
-                                total_steps: 0,
-                                bead_mapping: None,
-                                root_bead_id: None,
-                                rollback_performed: true,
-                                reused: false,
-                            };
-                            eprintln!(
-                                "{}",
-                                serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
+            if let Err(e) = init_result {
+                // Init failed - rollback
+                let _ = rollback_worktree_creation(
+                    &worktree_path,
+                    &branch_name,
+                    &repo_root,
+                );
+
+                if json_output {
+                    let data = CreateData {
+                        worktree_path: String::new(),
+                        branch_name: String::new(),
+                        base_branch: config.base_branch.clone(),
+                        speck_path: speck.clone(),
+                        total_steps: 0,
+                        bead_mapping: None,
+                        root_bead_id: None,
+                        reused: false,
+                        session_id: None,
+                        session_file: None,
+                        artifacts_base: None,
+                        all_steps: None,
+                        ready_steps: None,
+                    };
+                    eprintln!(
+                        "{}",
+                        serde_json::to_string_pretty(&data)
+                            .map_err(|e| e.to_string())?
+                    );
+                } else if !quiet {
+                    eprintln!("error: {}", e);
+                    eprintln!("Rolled back worktree creation");
+                }
+                return Ok(e.exit_code());
+            }
+
+            // Sync beads and commit (always-on)
+            // Try to sync beads
+            let (bead_mapping, root_bead_id) = match sync_beads_in_worktree(&worktree_path, &speck) {
+                Ok((mapping, root_id)) => {
+                    // Try to commit the changes
+                    match commit_bead_annotations(&worktree_path, &speck, speck_name) {
+                        Ok(()) => (Some(mapping), root_id),
+                        Err(e) => {
+                            // Commit failed - rollback
+                            let _ = rollback_worktree_creation(
+                                &worktree_path,
+                                &branch_name,
+                                &repo_root,
                             );
-                        } else if !quiet {
-                            eprintln!("error: {}", e);
-                            eprintln!("Rolled back worktree creation");
+
+                            if json_output {
+                                let data = CreateData {
+                                    worktree_path: String::new(),
+                                    branch_name: String::new(),
+                                    base_branch: config.base_branch.clone(),
+                                    speck_path: speck.clone(),
+                                    total_steps: 0,
+                                    bead_mapping: None,
+                                    root_bead_id: None,
+                                    reused: false,
+                                    session_id: None,
+                                    session_file: None,
+                                    artifacts_base: None,
+                                    all_steps: None,
+                                    ready_steps: None,
+                                };
+                                eprintln!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&data)
+                                        .map_err(|e| e.to_string())?
+                                );
+                            } else if !quiet {
+                                eprintln!("error: {}", e);
+                                eprintln!("Rolled back worktree creation");
+                            }
+                            return Ok(e.exit_code());
                         }
-                        return Ok(e.exit_code());
                     }
+                }
+                Err(e) => {
+                    // Sync failed - rollback
+                    let _ = rollback_worktree_creation(
+                        &worktree_path,
+                        &branch_name,
+                        &repo_root,
+                    );
+
+                    if json_output {
+                        let data = CreateData {
+                            worktree_path: String::new(),
+                            branch_name: String::new(),
+                            base_branch: config.base_branch.clone(),
+                            speck_path: speck.clone(),
+                            total_steps: 0,
+                            bead_mapping: None,
+                            root_bead_id: None,
+                            reused: false,
+                            session_id: None,
+                            session_file: None,
+                            artifacts_base: None,
+                            all_steps: None,
+                            ready_steps: None,
+                        };
+                        eprintln!(
+                            "{}",
+                            serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
+                        );
+                    } else if !quiet {
+                        eprintln!("error: {}", e);
+                        eprintln!("Rolled back worktree creation");
+                    }
+                    return Ok(e.exit_code());
+                }
+            };
+
+            // Parse the synced speck to extract all_steps (already have bead_mapping from sync_beads_in_worktree)
+            let synced_speck_path = worktree_path.join(&speck);
+            let synced_speck_content = std::fs::read_to_string(&synced_speck_path)
+                .map_err(|e| format!("failed to read synced speck: {}", e))?;
+            let synced_speck = specks_core::parse_speck(&synced_speck_content)
+                .map_err(|e| format!("failed to parse synced speck: {}", e))?;
+
+            let all_steps: Vec<String> = synced_speck.steps.iter().map(|s| s.anchor.clone()).collect();
+            let total_steps = synced_speck.steps.len();
+
+            // Query bd ready to get ready_steps (only if root_bead_id is available)
+            let ready_steps: Option<Vec<String>> = if let Some(ref root_id) = root_bead_id {
+                use specks_core::beads::BeadsCli;
+                let bd = BeadsCli::default();
+                match bd.ready(Some(root_id)) {
+                    Ok(ready_beads) => {
+                        // Map bead IDs to step anchors using bead_mapping
+                        if let Some(ref mapping) = bead_mapping {
+                            let ready_anchors: Vec<String> = ready_beads
+                                .iter()
+                                .filter_map(|bead| {
+                                    // Find step anchor for this bead ID
+                                    mapping.iter()
+                                        .find(|(_, bid)| *bid == &bead.id)
+                                        .map(|(anchor, _)| anchor.clone())
+                                })
+                                .collect();
+                            Some(ready_anchors)
+                        } else {
+                            None
+                        }
+                    }
+                    Err(_) => None, // bd not available or failed - continue without ready_steps
+                }
+            } else {
+                None
+            };
+
+            // Derive session_id from branch name: "specks/auth-20260208-143022" -> "auth-20260208-143022"
+            let session_id = branch_name
+                .strip_prefix("specks/")
+                .unwrap_or(&branch_name)
+                .to_string();
+
+            // Create artifact directories
+            let artifacts_base = repo_root.join(".specks-worktrees/.artifacts").join(&session_id);
+            if let Err(e) = std::fs::create_dir_all(&artifacts_base) {
+                eprintln!("warning: failed to create artifacts base directory: {}", e);
+            }
+
+            // Create per-step artifact directories
+            for (idx, _step_anchor) in all_steps.iter().enumerate() {
+                let step_dir = artifacts_base.join(format!("step-{}", idx));
+                if let Err(e) = std::fs::create_dir_all(&step_dir) {
+                    eprintln!("warning: failed to create step-{} artifact directory: {}", idx, e);
                 }
             }
 
+            // Create Session in CLI layer (schema v2)
+            let session = Session {
+                schema_version: "2".to_string(),
+                session_id: session_id.clone(),
+                speck_path: speck.clone(),
+                speck_slug: speck_slug.clone(),
+                branch_name: branch_name.clone(),
+                base_branch: config.base_branch.clone(),
+                worktree_path: worktree_path.display().to_string(),
+                created_at: specks_core::session::now_iso8601(),
+                last_updated_at: None,
+                total_steps,
+                root_bead_id: root_bead_id.clone(),
+                reused,
+                step_summaries: None,
+                ..Default::default()
+            };
+
+            // Save session to external sessions dir
+            if let Err(e) = specks_core::session::save_session(&session, &repo_root) {
+                eprintln!("warning: failed to save session: {}", e);
+            }
+
+            // Compute session_file path for output
+            let session_file = repo_root
+                .join(".specks-worktrees/.sessions")
+                .join(format!("{}.json", session_id));
+
             if json_output {
                 let data = CreateData {
-                    worktree_path: session.worktree_path.clone(),
-                    branch_name: session.branch_name.clone(),
-                    base_branch: session.base_branch.clone(),
-                    speck_path: session.speck_path.clone(),
-                    total_steps: session.total_steps,
+                    worktree_path: worktree_path.display().to_string(),
+                    branch_name: branch_name.clone(),
+                    base_branch: config.base_branch.clone(),
+                    speck_path: speck.clone(),
+                    total_steps,
                     bead_mapping,
                     root_bead_id,
-                    rollback_performed: false,
-                    reused: session.reused,
+                    reused,
+                    session_id: Some(session_id),
+                    session_file: Some(session_file.display().to_string()),
+                    artifacts_base: Some(artifacts_base.display().to_string()),
+                    all_steps: Some(all_steps),
+                    ready_steps,
                 };
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
                 );
             } else if !quiet {
-                if session.reused {
-                    println!("Reused existing worktree for speck: {}", session.speck_path);
+                if reused {
+                    println!("Reused existing worktree for speck: {}", speck);
                 } else {
-                    println!("Created worktree for speck: {}", session.speck_path);
+                    println!("Created worktree for speck: {}", speck);
                 }
-                println!("  Branch: {}", session.branch_name);
-                println!("  Worktree: {}", session.worktree_path);
-                println!("  Steps: {}", session.total_steps);
+                println!("  Branch: {}", branch_name);
+                println!("  Worktree: {}", worktree_path.display());
+                println!("  Steps: {}", total_steps);
                 if bead_mapping.is_some() {
                     println!("  Beads synced and committed");
                 }
@@ -524,39 +686,9 @@ pub fn run_worktree_list_with_root(
                         println!("  Path:   {}", session.worktree_path);
                         println!("  Speck:  {}", session.speck_path);
 
-                        // Format progress string based on CurrentStep variant
-                        let progress_str = match &session.current_step {
-                            specks_core::session::CurrentStep::Index(n) => {
-                                format!("step {}/{}", n, session.total_steps)
-                            }
-                            specks_core::session::CurrentStep::Anchor(anchor) => {
-                                // Try to extract numeric step from anchor (e.g., "#step-3" -> 3)
-                                let step_num = anchor
-                                    .strip_prefix("#step-")
-                                    .and_then(|s| s.parse::<usize>().ok())
-                                    .map(|n| n + 1); // Convert to 1-indexed for display
-
-                                if let Some(num) = step_num {
-                                    // Calculate total from steps_completed + steps_remaining
-                                    let total = session
-                                        .steps_completed
-                                        .as_ref()
-                                        .map(|c| c.len())
-                                        .unwrap_or(0)
-                                        + session
-                                            .steps_remaining
-                                            .as_ref()
-                                            .map(|r| r.len())
-                                            .unwrap_or(0);
-                                    format!("step {}/{}", num, total)
-                                } else {
-                                    format!("at {}", anchor)
-                                }
-                            }
-                            specks_core::session::CurrentStep::Done => "completed".to_string(),
-                        };
-
-                        println!("  Status: {:?} ({})", session.status, progress_str);
+                        // V2: No status field - just show "active" label
+                        let completed = session.step_summaries.as_ref().map(|s| s.len()).unwrap_or(0);
+                        println!("  Progress: {}/{} steps completed", completed, session.total_steps);
                         println!();
                     }
                 }
@@ -779,7 +911,7 @@ pub fn run_worktree_remove_with_root(
         } else if !quiet {
             eprintln!("Error: Multiple worktrees found for {}\n", target);
             for session in &matching_sessions {
-                let status_str = format!("{:?}", session.status);
+                let status_str = format!("{:?}", "active" /* v2 */);
                 eprintln!(
                     "  {}  {}  {}",
                     session.branch_name, status_str, session.created_at
@@ -937,8 +1069,12 @@ mod tests {
             total_steps: 5,
             bead_mapping: None,
             root_bead_id: None,
-            rollback_performed: false,
             reused: false,
+            session_id: None,
+            session_file: None,
+            artifacts_base: None,
+            all_steps: None,
+            ready_steps: None,
         };
 
         let json = serde_json::to_string(&data).expect("serialization should succeed");
@@ -989,7 +1125,7 @@ mod tests {
     }
 
     #[test]
-    fn test_worktree_create_help_includes_sync_beads() {
+    fn test_worktree_create_help_documents_always_on_beads() {
         use crate::cli::Cli;
         use clap::CommandFactory;
 
@@ -1009,10 +1145,10 @@ mod tests {
             .get_long_about()
             .expect("create should have long_about");
 
-        // Verify --sync-beads flag is documented
+        // Verify beads sync is documented as always-on
         assert!(
-            long_about.to_string().contains("--sync-beads"),
-            "create help should document --sync-beads flag"
+            long_about.to_string().contains("always-on"),
+            "create help should document always-on beads sync"
         );
         assert!(
             long_about.to_string().contains("atomically")
@@ -1109,7 +1245,6 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
         let result = create_worktree(&config);
@@ -1119,13 +1254,11 @@ mod integration_tests {
             result.err()
         );
 
-        let session = result.unwrap();
-        assert_eq!(session.total_steps, 1);
-        assert_eq!(session.base_branch, "main");
-        assert!(session.branch_name.starts_with("specks/test-"));
+        let (worktree_path, branch_name, speck_slug) = result.unwrap();
+        assert_eq!(speck_slug, "test");
+        assert!(branch_name.starts_with("specks/test-"));
 
         // Verify worktree directory exists
-        let worktree_path = PathBuf::from(&session.worktree_path);
         assert!(worktree_path.exists(), "worktree directory should exist");
     }
 
@@ -1138,21 +1271,39 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
         // Create a worktree
-        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let (_worktree_path, branch_name, _speck_slug) = create_worktree(&config).expect("create_worktree should succeed");
+
+        // Create Session manually for list_worktrees to find
+        let session = Session {
+            schema_version: "2".to_string(),
+            session_id: branch_name.strip_prefix("specks/").unwrap_or(&branch_name).to_string(),
+            speck_path: speck_path.to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: branch_name.clone(),
+            base_branch: "main".to_string(),
+            worktree_path: _worktree_path.display().to_string(),
+            created_at: specks_core::session::now_iso8601(),
+            last_updated_at: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
+            step_summaries: None,
+            ..Default::default()
+        };
+        specks_core::session::save_session(&session, &repo_path).expect("save_session should succeed");
 
         // List worktrees
         let worktrees = list_worktrees(&repo_path).expect("list_worktrees should succeed");
 
         assert_eq!(worktrees.len(), 1, "should have one worktree");
-        assert_eq!(worktrees[0].branch_name, session.branch_name);
+        assert_eq!(worktrees[0].branch_name, branch_name);
     }
 
     #[test]
-    fn test_worktree_create_with_reuse_existing_flag() {
+    fn test_worktree_create_reuses_existing() {
         let (_temp, repo_path) = setup_test_repo();
         let speck_path = ".specks/specks-test.md";
 
@@ -1161,31 +1312,46 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
-        let session1 = create_worktree(&config1).expect("first create_worktree should succeed");
+        let (worktree_path1, branch_name1, _slug1) = create_worktree(&config1).expect("first create_worktree should succeed");
 
-        // Try to create again with reuse_existing: true
+        // Create Session for first worktree
+        let session1 = Session {
+            schema_version: "2".to_string(),
+            session_id: branch_name1.strip_prefix("specks/").unwrap_or(&branch_name1).to_string(),
+            speck_path: speck_path.to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: branch_name1.clone(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path1.display().to_string(),
+            created_at: specks_core::session::now_iso8601(),
+            last_updated_at: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
+            step_summaries: None,
+            ..Default::default()
+        };
+        specks_core::session::save_session(&session1, &repo_path).expect("save_session should succeed");
+
+        // Try to create again - should reuse existing (always-on behavior)
         let config2 = WorktreeConfig {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: true,
         };
 
-        let session2 =
-            create_worktree(&config2).expect("second create_worktree with reuse should succeed");
+        let (worktree_path2, branch_name2, _slug2) =
+            create_worktree(&config2).expect("second create_worktree should succeed");
 
         // Verify we got back the same worktree
-        assert_eq!(session1.worktree_path, session2.worktree_path);
-        assert_eq!(session1.branch_name, session2.branch_name);
-        assert!(session2.reused, "session2 should be marked as reused");
-        assert!(!session1.reused, "session1 should not be marked as reused");
+        assert_eq!(worktree_path1, worktree_path2);
+        assert_eq!(branch_name1, branch_name2);
     }
 
     #[test]
-    fn test_worktree_create_without_reuse_existing_flag_fails() {
+    fn test_worktree_create_is_idempotent() {
         let (_temp, repo_path) = setup_test_repo();
         let speck_path = ".specks/specks-test.md";
 
@@ -1194,56 +1360,62 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
-        let _session1 = create_worktree(&config1).expect("first create_worktree should succeed");
+        let (worktree_path1, branch_name1, _slug1) = create_worktree(&config1).expect("first create_worktree should succeed");
 
-        // Try to create again without reuse_existing flag (should fail)
+        // Create Session for first worktree
+        let session1 = Session {
+            schema_version: "2".to_string(),
+            session_id: branch_name1.strip_prefix("specks/").unwrap_or(&branch_name1).to_string(),
+            speck_path: speck_path.to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: branch_name1.clone(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path1.display().to_string(),
+            created_at: specks_core::session::now_iso8601(),
+            last_updated_at: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
+            step_summaries: None,
+            ..Default::default()
+        };
+        specks_core::session::save_session(&session1, &repo_path).expect("save_session should succeed");
+
+        // Try to create again - should return same worktree (idempotent)
         let config2 = WorktreeConfig {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
-        let result = create_worktree(&config2);
-        assert!(
-            result.is_err(),
-            "second create_worktree without reuse should fail"
-        );
+        let (worktree_path2, branch_name2, _slug2) = create_worktree(&config2).expect("second create_worktree should succeed");
 
-        match result {
-            Err(specks_core::error::SpecksError::WorktreeAlreadyExists) => {
-                // Expected error
-            }
-            _ => panic!("Expected WorktreeAlreadyExists error"),
-        }
+        // Verify we got back the same worktree
+        assert_eq!(worktree_path1, worktree_path2);
+        assert_eq!(branch_name1, branch_name2);
     }
 
     #[test]
-    fn test_worktree_create_with_reuse_when_none_exists() {
+    fn test_worktree_create_when_none_exists() {
         let (_temp, repo_path) = setup_test_repo();
         let speck_path = ".specks/specks-test.md";
 
-        // Try to create with reuse_existing when no worktree exists
+        // Try to create when no worktree exists
         let config = WorktreeConfig {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: true,
         };
 
-        let session = create_worktree(&config)
-            .expect("create_worktree with reuse should create new when none exists");
+        let (worktree_path, branch_name, speck_slug) = create_worktree(&config)
+            .expect("create_worktree should create new when none exists");
 
         // Verify a new worktree was created
-        assert!(
-            !session.reused,
-            "session should not be marked as reused when creating new"
-        );
-        assert_eq!(session.total_steps, 1);
-        assert_eq!(session.base_branch, "main");
+        assert!(worktree_path.exists(), "worktree should exist");
+        assert!(branch_name.starts_with("specks/test-"));
+        assert_eq!(speck_slug, "test");
     }
 
     #[test]
@@ -1255,12 +1427,29 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
         // Create a worktree
-        let session = create_worktree(&config).expect("create_worktree should succeed");
-        let worktree_path = PathBuf::from(&session.worktree_path);
+        let (worktree_path, branch_name, _slug) = create_worktree(&config).expect("create_worktree should succeed");
+
+        // Create Session
+        let session = Session {
+            schema_version: "2".to_string(),
+            session_id: branch_name.strip_prefix("specks/").unwrap_or(&branch_name).to_string(),
+            speck_path: speck_path.to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: branch_name.clone(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: specks_core::session::now_iso8601(),
+            last_updated_at: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
+            step_summaries: None,
+            ..Default::default()
+        };
+        specks_core::session::save_session(&session, &repo_path).expect("save_session should succeed");
 
         // Switch to worktree and make a commit
         fs::write(worktree_path.join("test.txt"), "test").expect("failed to write test file");
@@ -1321,6 +1510,29 @@ mod integration_tests {
         assert_eq!(worktrees.len(), 1, "worktree should still be listed");
     }
 
+    /// Helper to create worktree and session for tests
+    fn create_worktree_with_session(config: &WorktreeConfig) -> Session {
+        let (worktree_path, branch_name, speck_slug) = create_worktree(config).expect("create_worktree should succeed");
+        let session = Session {
+            schema_version: "2".to_string(),
+            session_id: branch_name.strip_prefix("specks/").unwrap_or(&branch_name).to_string(),
+            speck_path: config.speck_path.display().to_string(),
+            speck_slug,
+            branch_name,
+            base_branch: config.base_branch.clone(),
+            worktree_path: worktree_path.display().to_string(),
+            created_at: specks_core::session::now_iso8601(),
+            last_updated_at: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
+            step_summaries: None,
+            ..Default::default()
+        };
+        specks_core::session::save_session(&session, &config.repo_root).expect("save_session should succeed");
+        session
+    }
+
     #[test]
     fn test_remove_by_branch_name() {
         let (_temp, repo_path) = setup_test_repo();
@@ -1330,11 +1542,10 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
         // Create a worktree
-        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let session = create_worktree_with_session(&config);
         let worktree_path = PathBuf::from(&session.worktree_path);
 
         // Verify worktree exists
@@ -1382,11 +1593,10 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
         // Create a worktree
-        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let session = create_worktree_with_session(&config);
         let worktree_path = PathBuf::from(&session.worktree_path);
 
         // Verify worktree exists
@@ -1420,11 +1630,10 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
         // Create a worktree
-        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let session = create_worktree_with_session(&config);
         let worktree_path = PathBuf::from(&session.worktree_path);
 
         // Verify worktree exists
@@ -1458,11 +1667,10 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
 
         // Create a worktree
-        let session = create_worktree(&config).expect("create_worktree should succeed");
+        let session = create_worktree_with_session(&config);
         let worktree_path = PathBuf::from(&session.worktree_path);
 
         // Make worktree dirty
@@ -1512,9 +1720,8 @@ mod integration_tests {
             speck_path: PathBuf::from(speck_path),
             base_branch: "main".to_string(),
             repo_root: repo_path.clone(),
-            reuse_existing: false,
         };
-        let session1 = create_worktree(&config1).expect("first create should succeed");
+        let session1 = create_worktree_with_session(&config1);
 
         // Wait a moment to ensure different timestamps
         std::thread::sleep(std::time::Duration::from_millis(1100));
@@ -1547,24 +1754,20 @@ mod integration_tests {
 
         // Create a session file for the second worktree with the same speck_path
         let session2 = Session {
-            schema_version: "1".to_string(),
+            schema_version: "2".to_string(),
+            session_id: "test2-timestamp".to_string(),
             speck_path: speck_path.to_string(),
             speck_slug: "test".to_string(),
             branch_name: branch_name_2.to_string(),
             base_branch: "main".to_string(),
             worktree_path: worktree_path_2.to_string_lossy().to_string(),
             created_at: specks_core::session::now_iso8601(),
-            status: specks_core::session::SessionStatus::Pending,
-            current_step: specks_core::session::CurrentStep::Index(0),
-            total_steps: 1,
-            beads_root: None,
-            reused: false,
-            session_id: None,
             last_updated_at: None,
-            steps_completed: None,
-            steps_remaining: None,
-            bead_mapping: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
             step_summaries: None,
+            ..Default::default()
         };
         specks_core::session::save_session(&session2, &repo_path).expect("failed to save session2");
 

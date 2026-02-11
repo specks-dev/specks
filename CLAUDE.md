@@ -164,7 +164,7 @@ specks merge <speck>                # Merge PR and clean up (recommended approac
 
 ### Claude Code Skills (Planning and Execution)
 
-**IMPORTANT: Initialize first!** Before using the planner or implementer, run:
+**Initialization is automatic.** A pre-hook runs `specks init` before the planner and implementer skills start. You can also run it manually:
 ```bash
 specks init
 ```
@@ -174,7 +174,7 @@ This creates the `.specks/` directory with required files:
 - `config.toml` - Configuration settings
 - `specks-implementation-log.md` - Progress tracking
 
-Then use the skills:
+Use the skills:
 ```
 /specks:planner "add user authentication"    # Create a new speck
 /specks:planner .specks/specks-auth.md       # Revise existing speck
@@ -222,7 +222,7 @@ Three skills contain the main workflow logic. Orchestrators are **pure dispatche
 | **implementer** | Orchestrates implementation loop: setup → architect → coder → reviewer → committer |
 | **merge** | Wraps `specks merge` CLI with dry-run preview, confirmation, and post-merge health checks |
 
-### Sub-Agents (9)
+### Sub-Agents (8)
 
 Sub-agents are invoked via Task tool and return JSON results. Each has specific tools and contracts.
 
@@ -230,7 +230,6 @@ Sub-agents are invoked via Task tool and return JSON results. Each has specific 
 
 | Agent | Role | Tools |
 |-------|------|-------|
-| **planner-setup-agent** | Check prerequisites, determine planning mode | Bash |
 | **clarifier-agent** | Analyzes ideas, generates clarifying questions | Read, Grep, Glob |
 | **author-agent** | Creates and revises speck documents | Read, Grep, Glob, Write, Edit |
 | **critic-agent** | Reviews speck quality and skeleton compliance | Read, Grep, Glob |

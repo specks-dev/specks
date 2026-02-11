@@ -8,6 +8,97 @@ date: 2026-02-10T19:14:40Z
 bead: specks-jlu.4
 ---
 
+---
+step: #step-6
+date: 2025-02-11T18:35:20Z
+bead: specks-tgg.7
+---
+
+## #step-6: Simplify implementer-setup-agent: 636→233 lines, 8→3 phases, delegate infrastructure to enriched CLI
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
+step: #step-5
+date: 2025-02-11T18:29:20Z
+bead: specks-tgg.6
+---
+
+## #step-5: Update implementer SKILL.md: replace needs_reconcile with bead_close_failed, change HALT to warn-and-continue, add session infrastructure-only note
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
+step: #step-4
+date: 2025-02-11T18:24:33Z
+bead: specks-tgg.5
+---
+
+## #step-4: Add bd ready query and extend CreateData with complete infrastructure fields for setup agent
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
+step: #step-3
+date: 2025-02-11T18:13:32Z
+bead: specks-tgg.4
+---
+
+## #step-3: Slim Session struct: remove step-tracking fields, make beads single source of truth
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
+step: #step-2
+date: 2025-02-11T17:47:12Z
+bead: specks-tgg.3
+---
+
+## #step-2: Add automatic specks init inside worktree creation, before beads sync
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
+step: #step-1
+date: 2025-02-11T17:41:55Z
+bead: specks-tgg.2
+---
+
+## #step-1: Remove --sync-beads flag, make beads sync always-on during worktree creation
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
+step: #step-0
+date: 2025-02-11T17:33:54Z
+bead: specks-tgg.1
+---
+
+## #step-0: Remove reuse_existing flag, make worktree reuse always-on and idempotent
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
 ## #step-3: Simplified committer-agent from 887 lines to 69 lines (92% reduction). Replaced all manual git/log/bead/session operations with CLI delegation to specks step-commit and specks step-publish. Preserved input contracts. Added CLI documentation to CLAUDE.md. Updated implementer SKILL.md references.
 
 - Agent simplified to thin CLI wrapper
