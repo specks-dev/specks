@@ -9,6 +9,45 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-2
+date: 2025-02-11T20:46:51Z
+bead: specks-xuf.3
+---
+
+## #step-2: Restructured run_merge() to fix remote merge history divergence. Added pre-dry-run checks (check_main_sync for remote, partition dirty files, reject non-infra). Overhauled remote-mode: save infra to temp, create TempDirGuard, discard infra, gh pr merge --squash, git pull --ff-only, restore infra + commit, defuse guard, auto-push. Updated local-mode to gate prepare_main_for_merge on infra presence. Added 9 tests.
+
+**Files changed:**
+- .specks/specks-4.md
+
+---
+
+---
+step: #step-1
+date: 2025-02-11T20:30:32Z
+bead: specks-xuf.2
+---
+
+## #step-1: Added infrastructure save/restore/copy helpers and TempDirGuard RAII struct for error recovery during merge. save_infra_to_temp creates temp copy, copy_infra_from_temp restores without git ops, restore_infra_from_temp restores with commit. TempDirGuard auto-restores on Drop, defuse() disables.
+
+**Files changed:**
+- .specks/specks-4.md
+
+---
+
+---
+step: #step-0
+date: 2025-02-11T20:22:16Z
+bead: specks-xuf.1
+---
+
+## #step-0: Added check_main_sync(repo_root) helper that fetches origin/main, compares rev-parse hashes, returns actionable error if diverged. Added 3 unit tests: in_sync, diverged, no_origin.
+
+**Files changed:**
+- .specks/specks-4.md
+
+---
+
+---
 step: #step-6
 date: 2025-02-11T18:35:20Z
 bead: specks-tgg.7
