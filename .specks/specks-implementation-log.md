@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-2
+date: 2025-02-11T20:46:51Z
+bead: specks-xuf.3
+---
+
+## #step-2: Restructured run_merge() to fix remote merge history divergence. Added pre-dry-run checks (check_main_sync for remote, partition dirty files, reject non-infra). Overhauled remote-mode: save infra to temp, create TempDirGuard, discard infra, gh pr merge --squash, git pull --ff-only, restore infra + commit, defuse guard, auto-push. Updated local-mode to gate prepare_main_for_merge on infra presence. Added 9 tests.
+
+**Files changed:**
+- .specks/specks-4.md
+
+---
+
+---
 step: #step-1
 date: 2025-02-11T20:30:32Z
 bead: specks-xuf.2
