@@ -423,7 +423,8 @@ fn is_main_worktree(repo_root: &std::path::Path) -> Result<(), String> {
 
 /// Check if all PR checks have passed
 ///
-/// Uses `gh pr checks <branch> --json name,state,conclusion` to query check status.
+/// Uses `gh pr checks <branch> --json name,bucket` to query check status.
+/// The `bucket` field categorizes checks as: pass, fail, pending, skipping, cancel.
 ///
 /// # Arguments
 /// * `branch` - Name of the branch to check
@@ -433,7 +434,7 @@ fn is_main_worktree(repo_root: &std::path::Path) -> Result<(), String> {
 /// * `Err(String)` - Some checks are failing or pending (includes list)
 fn check_pr_checks(branch: &str) -> Result<(), String> {
     let output = Command::new("gh")
-        .args(["pr", "checks", branch, "--json", "name,state,conclusion"])
+        .args(["pr", "checks", branch, "--json", "name,bucket"])
         .output()
         .map_err(|e| format!("Failed to execute gh pr checks: {}", e))?;
 
@@ -444,18 +445,15 @@ fn check_pr_checks(branch: &str) -> Result<(), String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Parse JSON array of check objects
     #[derive(Deserialize)]
     struct CheckStatus {
         name: String,
-        state: String,
-        conclusion: Option<String>,
+        bucket: String,
     }
 
     let checks: Vec<CheckStatus> = serde_json::from_str(&stdout)
         .map_err(|e| format!("Failed to parse gh pr checks output: {}", e))?;
 
-    // Empty array means no checks configured - that's success
     if checks.is_empty() {
         return Ok(());
     }
@@ -464,15 +462,10 @@ fn check_pr_checks(branch: &str) -> Result<(), String> {
     let mut pending = Vec::new();
 
     for check in checks {
-        // Check if still pending or in progress
-        if check.state == "pending" || check.state == "in_progress" {
-            pending.push(check.name);
-        }
-        // Check if failed (conclusion may be null for pending checks)
-        else if let Some(conclusion) = check.conclusion {
-            if conclusion == "failure" || conclusion == "timed_out" || conclusion == "cancelled" {
-                failing.push(check.name);
-            }
+        match check.bucket.as_str() {
+            "fail" | "cancel" => failing.push(check.name),
+            "pending" => pending.push(check.name),
+            _ => {} // pass, skipping
         }
     }
 
@@ -2011,86 +2004,74 @@ mod tests {
 
     #[test]
     fn test_check_pr_checks_json_all_pass() {
-        // Test parsing of successful checks JSON
         let json_output = r#"[
-            {"name":"Build","state":"completed","conclusion":"success"},
-            {"name":"Test","state":"completed","conclusion":"success"}
+            {"name":"Build","bucket":"pass"},
+            {"name":"Test","bucket":"pass"}
         ]"#;
 
         #[derive(Deserialize)]
-        #[allow(dead_code)] // Test struct fields used only for deserialization
         struct CheckStatus {
             name: String,
-            state: String,
-            conclusion: Option<String>,
+            bucket: String,
         }
 
         let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
         assert_eq!(checks.len(), 2);
         assert_eq!(checks[0].name, "Build");
-        assert_eq!(checks[0].state, "completed");
-        assert_eq!(checks[0].conclusion, Some("success".to_string()));
+        assert_eq!(checks[0].bucket, "pass");
     }
 
     #[test]
     fn test_check_pr_checks_json_failing() {
-        // Test parsing of failing checks JSON
         let json_output = r#"[
-            {"name":"Build","state":"completed","conclusion":"failure"},
-            {"name":"Test","state":"completed","conclusion":"success"}
+            {"name":"Build","bucket":"fail"},
+            {"name":"Test","bucket":"pass"}
         ]"#;
 
         #[derive(Deserialize)]
-        #[allow(dead_code)] // Test struct fields used only for deserialization
+        #[allow(dead_code)]
         struct CheckStatus {
             name: String,
-            state: String,
-            conclusion: Option<String>,
+            bucket: String,
         }
 
         let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
         assert_eq!(checks.len(), 2);
-        assert_eq!(checks[0].conclusion, Some("failure".to_string()));
+        assert_eq!(checks[0].bucket, "fail");
     }
 
     #[test]
     fn test_check_pr_checks_json_pending() {
-        // Test parsing of pending checks JSON
         let json_output = r#"[
-            {"name":"Build","state":"pending","conclusion":null},
-            {"name":"Test","state":"completed","conclusion":"success"}
+            {"name":"Build","bucket":"pending"},
+            {"name":"Test","bucket":"pass"}
         ]"#;
 
         #[derive(Deserialize)]
-        #[allow(dead_code)] // Test struct fields used only for deserialization
+        #[allow(dead_code)]
         struct CheckStatus {
             name: String,
-            state: String,
-            conclusion: Option<String>,
+            bucket: String,
         }
 
         let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
         assert_eq!(checks.len(), 2);
-        assert_eq!(checks[0].state, "pending");
-        assert!(checks[0].conclusion.is_none());
+        assert_eq!(checks[0].bucket, "pending");
     }
 
     #[test]
     fn test_check_pr_checks_json_empty_array() {
-        // Test that empty array (no checks) is handled as success
         let json_output = r#"[]"#;
 
         #[derive(Deserialize)]
-        #[allow(dead_code)] // Test struct fields used only for deserialization
+        #[allow(dead_code)]
         struct CheckStatus {
             name: String,
-            state: String,
-            conclusion: Option<String>,
+            bucket: String,
         }
 
         let checks: Vec<CheckStatus> = serde_json::from_str(json_output).unwrap();
         assert_eq!(checks.len(), 0);
-        // This should be treated as success (no checks configured)
     }
 
     // Integration tests
