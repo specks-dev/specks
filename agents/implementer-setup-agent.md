@@ -216,31 +216,27 @@ Parse the JSON output and look for an entry where `speck_path` matches the input
    This is idempotent — if `.specks/` already has all required files, it does nothing. If files are missing (e.g., the implementation log), it creates only the missing ones.
    If this fails, return `status: "error"` with `prerequisites.error` set.
 
-2. Also ensure specks is initialized in the **repo root** (for tools that operate from there):
-   ```bash
-   specks init
-   ```
-   Again idempotent — safe to run even if already initialized.
+   **Note:** Repo-root initialization is handled by a pre-hook before the implementer skill starts. You only need to init inside the worktree.
 
-3. Check beads availability:
+2. Check beads availability:
    ```bash
    specks beads status
    ```
    If this fails, return `status: "error"` with `prerequisites.error` set.
 
-4. Sync beads INSIDE the worktree:
+3. Sync beads INSIDE the worktree:
    ```bash
    cd {worktree_path} && specks beads sync <speck_path>
    ```
    **CRITICAL:** Beads sync must run inside the worktree so bead annotations are written to the worktree branch, not the base branch. This ensures bead IDs are part of the PR, not left in the user's working directory.
 
-5. Verify beads were written to the speck file in worktree:
+4. Verify beads were written to the speck file in worktree:
    ```bash
    grep "**Bead:**" {worktree_path}/<speck_path>
    ```
    If no beads found, return `status: "error"`.
 
-6. Commit bead annotations and init files as first commit on the branch:
+5. Commit bead annotations and init files as first commit on the branch:
    ```bash
    git -C {worktree_path} add {worktree_path}/.specks/
    git -C {worktree_path} commit -m "chore: sync beads for implementation"
