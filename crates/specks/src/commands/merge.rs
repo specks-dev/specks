@@ -528,6 +528,100 @@ fn has_remote_origin() -> bool {
         .unwrap_or(false)
 }
 
+/// Perform local squash merge of a branch
+///
+/// Implements Spec S03: Local squash merge workflow
+/// 1. Executes `git merge --squash <branch>`
+/// 2. On failure: runs `git reset --merge` to restore clean state
+/// 3. On success: runs `git commit -m <message>` to create squashed commit
+/// 4. Captures and returns commit hash via `git rev-parse HEAD`
+///
+/// # Arguments
+/// * `branch` - Name of the branch to squash merge
+/// * `message` - Commit message for the squashed commit
+///
+/// # Returns
+/// * `Ok(String)` - Commit hash of the squashed commit
+/// * `Err(String)` - Detailed error message (includes recovery status)
+// Will be used in step 2 for local merge implementation
+#[allow(dead_code)]
+fn squash_merge_branch(branch: &str, message: &str) -> Result<String, String> {
+    // Step 1: Execute git merge --squash
+    // Note: We use Command::new directly here (not run_command_with_context) because we need
+    // to handle merge conflicts specially by running git reset --merge for recovery
+    let merge_output = Command::new("git")
+        .args(["merge", "--squash", branch])
+        .output()
+        .map_err(|e| format!("Failed to execute git merge --squash: {}", e))?;
+
+    if !merge_output.status.success() {
+        // Merge failed - capture stderr for details
+        let stderr = String::from_utf8_lossy(&merge_output.stderr);
+
+        // Step 2: Run git reset --merge to restore clean state
+        // Note: Also using Command::new directly here because we need to handle the case where
+        // reset itself fails, and combine both error messages
+        let reset_output = Command::new("git")
+            .args(["reset", "--merge"])
+            .output()
+            .map_err(|e| format!("Merge failed and git reset --merge execution failed: {}", e))?;
+
+        if !reset_output.status.success() {
+            let reset_stderr = String::from_utf8_lossy(&reset_output.stderr);
+            return Err(format!(
+                "Merge failed: {}\nFailed to restore clean state with git reset --merge: {}",
+                stderr, reset_stderr
+            ));
+        }
+
+        // Reset succeeded - return merge error
+        return Err(format!("Merge failed (repository restored to clean state): {}", stderr));
+    }
+
+    // Step 3: Create squashed commit
+    // Note: We use Command::new directly here (not run_command_with_context) because we need
+    // to check both stdout and stderr for "nothing to commit" messages
+    let commit_output = Command::new("git")
+        .args(["commit", "-m", message])
+        .output()
+        .map_err(|e| format!("Failed to execute git commit: {}", e))?;
+
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        let stdout = String::from_utf8_lossy(&commit_output.stdout);
+
+        // Check if it's an empty merge (nothing to commit)
+        // Git may output to either stdout or stderr
+        if stderr.contains("nothing to commit") || stderr.contains("no changes added to commit")
+            || stdout.contains("nothing to commit") || stdout.contains("no changes added to commit")
+        {
+            return Err("Nothing to commit: merge produced no changes".to_string());
+        }
+
+        // Combine stdout and stderr for full error context
+        let error_output = if !stderr.is_empty() {
+            stderr.to_string()
+        } else if !stdout.is_empty() {
+            stdout.to_string()
+        } else {
+            "Unknown error".to_string()
+        };
+
+        return Err(format!("Failed to create squashed commit: {}", error_output));
+    }
+
+    // Step 4: Capture commit hash using run_command_with_context
+    let mut hash_cmd = Command::new("git");
+    hash_cmd.args(["rev-parse", "HEAD"]);
+    let hash_output = run_command_with_context(&mut hash_cmd, "git rev-parse HEAD")?;
+
+    let commit_hash = String::from_utf8_lossy(&hash_output.stdout)
+        .trim()
+        .to_string();
+
+    Ok(commit_hash)
+}
+
 /// Run the merge command
 ///
 /// Implements the full merge workflow with pre-merge validations,
@@ -2620,5 +2714,328 @@ mod tests {
         assert!(!json.contains("\"merge_mode\""));
         assert!(!json.contains("\"squash_commit\""));
         assert!(!json.contains("\"would_squash_merge\""));
+    }
+
+    // Tests for squash_merge_branch
+
+    #[test]
+    fn test_squash_merge_branch_success() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo with diverged branches
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("file1.txt"), "main content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file1.txt"])
+            .output()
+            .expect("Failed to add file1.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit on main"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create and checkout feature branch
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Add commits to feature branch
+        std::fs::write(temp_path.join("file2.txt"), "feature content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file2.txt"])
+            .output()
+            .expect("Failed to add file2.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Add feature file"])
+            .output()
+            .expect("Failed to commit");
+
+        std::fs::write(temp_path.join("file3.txt"), "more feature content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file3.txt"])
+            .output()
+            .expect("Failed to add file3.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Add another feature file"])
+            .output()
+            .expect("Failed to commit");
+
+        // Checkout main to perform squash merge
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .expect("Failed to checkout main");
+
+        // Change to temp directory for test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Perform squash merge
+        let result = squash_merge_branch("feature-branch", "Squashed feature commits");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify success
+        assert!(result.is_ok(), "Expected squash merge to succeed, got: {:?}", result);
+
+        let commit_hash = result.unwrap();
+        assert_eq!(commit_hash.len(), 40, "Commit hash should be 40 characters");
+
+        // Verify commit message
+        let log_output = Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["log", "-1", "--pretty=format:%s"])
+            .output()
+            .expect("Failed to get git log");
+
+        let commit_message = String::from_utf8_lossy(&log_output.stdout);
+        assert_eq!(commit_message, "Squashed feature commits");
+
+        // Verify files exist
+        assert!(temp_path.join("file2.txt").exists());
+        assert!(temp_path.join("file3.txt").exists());
+    }
+
+    #[test]
+    fn test_squash_merge_branch_with_conflict() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo with conflicting branches
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("conflict.txt"), "main version").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "conflict.txt"])
+            .output()
+            .expect("Failed to add conflict.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit on main"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create feature branch
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Modify file on feature branch
+        std::fs::write(temp_path.join("conflict.txt"), "feature version").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "conflict.txt"])
+            .output()
+            .expect("Failed to add conflict.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Modify conflict.txt on feature"])
+            .output()
+            .expect("Failed to commit");
+
+        // Checkout main and modify same file
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .expect("Failed to checkout main");
+
+        std::fs::write(temp_path.join("conflict.txt"), "main version updated").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "conflict.txt"])
+            .output()
+            .expect("Failed to add conflict.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Update conflict.txt on main"])
+            .output()
+            .expect("Failed to commit");
+
+        // Change to temp directory for test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Attempt squash merge (should fail due to conflict)
+        let result = squash_merge_branch("feature-branch", "Should fail");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify failure
+        assert!(result.is_err(), "Expected squash merge to fail due to conflict");
+
+        let error = result.unwrap_err();
+        assert!(error.contains("Merge failed"), "Error should indicate merge failure, got: {}", error);
+        assert!(error.contains("repository restored to clean state"), "Error should indicate repository was restored, got: {}", error);
+
+        // Verify repository is in clean state
+        let status_output = Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["status", "--porcelain"])
+            .output()
+            .expect("Failed to get git status");
+
+        let status = String::from_utf8_lossy(&status_output.stdout);
+        assert!(status.is_empty(), "Repository should be clean after failed merge, got: {}", status);
+    }
+
+    #[test]
+    fn test_squash_merge_branch_empty_merge() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo where merge produces no changes
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("file.txt"), "content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file.txt"])
+            .output()
+            .expect("Failed to add file.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create feature branch with no changes
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Checkout main (no changes on feature branch)
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .expect("Failed to checkout main");
+
+        // Change to temp directory for test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Attempt squash merge (should produce no changes)
+        let result = squash_merge_branch("feature-branch", "Should have no changes");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify failure with appropriate message
+        assert!(result.is_err(), "Expected squash merge to fail when no changes");
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("Nothing to commit") || error.contains("no changes"),
+            "Error should indicate no changes, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_squash_merge_branch_nonexistent_branch() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit
+        std::fs::write(temp_path.join("file.txt"), "content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file.txt"])
+            .output()
+            .expect("Failed to add file.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Change to temp directory for test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Attempt squash merge of nonexistent branch
+        let result = squash_merge_branch("nonexistent-branch", "Should fail");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify failure
+        assert!(result.is_err(), "Expected squash merge to fail for nonexistent branch");
+
+        let error = result.unwrap_err();
+        assert!(error.contains("Merge failed"), "Error should indicate merge failure, got: {}", error);
     }
 }

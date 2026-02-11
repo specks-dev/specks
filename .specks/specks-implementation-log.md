@@ -9,6 +9,27 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-1
+date: 2026-02-10T16:20:59Z
+bead: specks-w87.2
+---
+
+## #step-1: Added squash_merge_branch() helper function with conflict detection, git reset --merge recovery, and comprehensive integration tests
+
+- squash_merge_branch function
+- conflict recovery via git reset --merge
+- empty merge detection
+- commit hash capture via git rev-parse HEAD
+
+**Tests:** test_squash_merge_branch_success, test_squash_merge_branch_with_conflict, test_squash_merge_branch_empty_merge, test_squash_merge_branch_nonexistent_branch
+
+**Checkpoints:**
+- cargo nextest run passes (326 tests)
+- cargo build succeeds with no warnings
+
+---
+
+---
 step: #step-0
 date: 2026-02-10T16:20:59Z
 bead: specks-w87.1
