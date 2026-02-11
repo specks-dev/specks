@@ -3,6 +3,27 @@
 This log tracks completed implementation work.
 
 ---
+step: #step-3
+date: 2026-02-10T19:14:40Z
+bead: specks-jlu.4
+---
+
+## #step-3: Simplified committer-agent from 887 lines to 69 lines (92% reduction). Replaced all manual git/log/bead/session operations with CLI delegation to specks step-commit and specks step-publish. Preserved input contracts. Added CLI documentation to CLAUDE.md. Updated implementer SKILL.md references.
+
+- Agent simplified to thin CLI wrapper
+- Input contracts preserved
+- Output contracts transformed to pass-through
+- CLAUDE.md documented both commands
+- SKILL.md references updated
+
+**Tests:** All 312 tests pass, Agent under 100 lines (69)
+
+**Checkpoints:**
+- Build passes with no warnings
+- All 312 tests pass
+- Agent line count 69 < 100
+
+---
 step: #step-2
 date: 2026-02-10T19:14:20Z
 bead: specks-jlu.3

@@ -577,10 +577,13 @@ From coder output, evaluate `drift_assessment`:
 - `root_bead`: The root bead ID for the entire speck
 - `bead_mapping`: A map from step anchors to bead IDs
 
-**Close after commit** (handled by committer-agent):
-```bash
-specks beads close <bead_id> --reason "<reason>"
-```
+**Close after commit** (handled by committer-agent via `specks step-commit`):
+
+The committer-agent is a thin CLI wrapper that delegates to:
+- `specks step-commit` for commit mode (log rotate, prepend, git commit, bead close, session update)
+- `specks step-publish` for publish mode (push branch, create PR, session update)
+
+All git/log/bead/session operations are performed atomically by these CLI commands.
 
 ---
 
