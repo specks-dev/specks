@@ -37,6 +37,12 @@ pub struct MergeData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub would_cleanup_worktree: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub squash_commit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub would_squash_merge: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -505,6 +511,121 @@ fn validate_pr_state(pr_info: &PrInfo) -> Result<(), String> {
     Ok(())
 }
 
+/// Check if repository has a remote named 'origin'
+///
+/// Executes `git remote get-url origin` and checks if it succeeds.
+///
+/// # Returns
+/// * `true` - Remote origin exists
+/// * `false` - No remote origin configured
+fn has_remote_origin() -> bool {
+    Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// Perform local squash merge of a branch
+///
+/// Implements Spec S03: Local squash merge workflow
+/// 1. Executes `git merge --squash <branch>`
+/// 2. On failure: runs `git reset --merge` to restore clean state
+/// 3. On success: runs `git commit -m <message>` to create squashed commit
+/// 4. Captures and returns commit hash via `git rev-parse HEAD`
+///
+/// # Arguments
+/// * `branch` - Name of the branch to squash merge
+/// * `message` - Commit message for the squashed commit
+///
+/// # Returns
+/// * `Ok(String)` - Commit hash of the squashed commit
+/// * `Err(String)` - Detailed error message (includes recovery status)
+fn squash_merge_branch(branch: &str, message: &str) -> Result<String, String> {
+    // Step 1: Execute git merge --squash
+    // Note: We use Command::new directly here (not run_command_with_context) because we need
+    // to handle merge conflicts specially by running git reset --merge for recovery
+    let merge_output = Command::new("git")
+        .args(["merge", "--squash", branch])
+        .output()
+        .map_err(|e| format!("Failed to execute git merge --squash: {}", e))?;
+
+    if !merge_output.status.success() {
+        // Merge failed - capture stderr for details
+        let stderr = String::from_utf8_lossy(&merge_output.stderr);
+
+        // Step 2: Run git reset --merge to restore clean state
+        // Note: Also using Command::new directly here because we need to handle the case where
+        // reset itself fails, and combine both error messages
+        let reset_output = Command::new("git")
+            .args(["reset", "--merge"])
+            .output()
+            .map_err(|e| format!("Merge failed and git reset --merge execution failed: {}", e))?;
+
+        if !reset_output.status.success() {
+            let reset_stderr = String::from_utf8_lossy(&reset_output.stderr);
+            return Err(format!(
+                "Merge failed: {}\nFailed to restore clean state with git reset --merge: {}",
+                stderr, reset_stderr
+            ));
+        }
+
+        // Reset succeeded - return merge error
+        return Err(format!(
+            "Merge failed (repository restored to clean state): {}",
+            stderr
+        ));
+    }
+
+    // Step 3: Create squashed commit
+    // Note: We use Command::new directly here (not run_command_with_context) because we need
+    // to check both stdout and stderr for "nothing to commit" messages
+    let commit_output = Command::new("git")
+        .args(["commit", "-m", message])
+        .output()
+        .map_err(|e| format!("Failed to execute git commit: {}", e))?;
+
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        let stdout = String::from_utf8_lossy(&commit_output.stdout);
+
+        // Check if it's an empty merge (nothing to commit)
+        // Git may output to either stdout or stderr
+        if stderr.contains("nothing to commit")
+            || stderr.contains("no changes added to commit")
+            || stdout.contains("nothing to commit")
+            || stdout.contains("no changes added to commit")
+        {
+            return Err("Nothing to commit: merge produced no changes".to_string());
+        }
+
+        // Combine stdout and stderr for full error context
+        let error_output = if !stderr.is_empty() {
+            stderr.to_string()
+        } else if !stdout.is_empty() {
+            stdout.to_string()
+        } else {
+            "Unknown error".to_string()
+        };
+
+        return Err(format!(
+            "Failed to create squashed commit: {}",
+            error_output
+        ));
+    }
+
+    // Step 4: Capture commit hash using run_command_with_context
+    let mut hash_cmd = Command::new("git");
+    hash_cmd.args(["rev-parse", "HEAD"]);
+    let hash_output = run_command_with_context(&mut hash_cmd, "git rev-parse HEAD")?;
+
+    let commit_hash = String::from_utf8_lossy(&hash_output.stdout)
+        .trim()
+        .to_string();
+
+    Ok(commit_hash)
+}
+
 /// Run the merge command
 ///
 /// Implements the full merge workflow with pre-merge validations,
@@ -530,6 +651,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(e.clone()),
             message: None,
         };
@@ -556,6 +680,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(e.clone()),
                 message: None,
             };
@@ -569,12 +696,133 @@ pub fn run_merge(
 
     // Step 1a: Detect merge mode (local vs remote)
     let has_origin = has_remote_origin();
-    let merge_mode = if has_origin { "remote" } else { "local" };
 
-    // Step 1b: In local mode, check if branch has commits to merge
+    // Remote-only steps (Steps 2-5): Skip in local mode
+    let pr_info = if has_origin {
+        // Step 2: Check main sync status
+        if let Err(e) = check_main_sync() {
+            let data = MergeData {
+                status: "error".to_string(),
+                pr_url: None,
+                pr_number: None,
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: None,
+                infrastructure_files: None,
+                worktree_cleaned: None,
+                dry_run,
+                would_commit: None,
+                would_merge_pr: None,
+                would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
+                error: Some(e.clone()),
+                message: None,
+            };
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            return Err(e);
+        }
+
+        // Step 3: Get PR information for the branch
+        let pr_info = match get_pr_for_branch(&session.branch_name) {
+            Ok(info) => info,
+            Err(e) => {
+                let data = MergeData {
+                    status: "error".to_string(),
+                    pr_url: None,
+                    pr_number: None,
+                    branch_name: Some(session.branch_name.clone()),
+                    infrastructure_committed: None,
+                    infrastructure_files: None,
+                    worktree_cleaned: None,
+                    dry_run,
+                    would_commit: None,
+                    would_merge_pr: None,
+                    would_cleanup_worktree: None,
+                    merge_mode: None,
+                    squash_commit: None,
+                    would_squash_merge: None,
+                    error: Some(e.clone()),
+                    message: None,
+                };
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&data).unwrap());
+                }
+                return Err(e);
+            }
+        };
+
+        // Step 4: Validate PR state (open, not merged/closed)
+        if let Err(e) = validate_pr_state(&pr_info) {
+            let data = MergeData {
+                status: "error".to_string(),
+                pr_url: Some(pr_info.url.clone()),
+                pr_number: Some(pr_info.number),
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: None,
+                infrastructure_files: None,
+                worktree_cleaned: None,
+                dry_run,
+                would_commit: None,
+                would_merge_pr: None,
+                would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
+                error: Some(e.clone()),
+                message: None,
+            };
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            return Err(e);
+        }
+
+        // Step 5: Check PR checks status
+        if let Err(e) = check_pr_checks(&session.branch_name) {
+            let data = MergeData {
+                status: "error".to_string(),
+                pr_url: Some(pr_info.url.clone()),
+                pr_number: Some(pr_info.number),
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: None,
+                infrastructure_files: None,
+                worktree_cleaned: None,
+                dry_run,
+                would_commit: None,
+                would_merge_pr: None,
+                would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
+                error: Some(e.clone()),
+                message: None,
+            };
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            return Err(e);
+        }
+
+        Some(pr_info)
+    } else {
+        None
+    };
+
+    // Step 1c: In local mode, check if branch has commits to merge
     if !has_origin {
         let count_output = Command::new("git")
-            .args(["rev-list", "--count", &format!("main..{}", session.branch_name)])
+            .args([
+                "rev-list",
+                "--count",
+                &format!("main..{}", session.branch_name),
+            ])
             .output()
             .map_err(|e| format!("Failed to check branch commits: {}", e))?;
 
@@ -600,7 +848,7 @@ pub fn run_merge(
                     would_commit: None,
                     would_merge_pr: None,
                     would_cleanup_worktree: None,
-                    merge_mode: Some(merge_mode.to_string()),
+                    merge_mode: Some("local".to_string()),
                     squash_commit: None,
                     would_squash_merge: None,
                     error: Some(error_msg.clone()),
@@ -615,120 +863,14 @@ pub fn run_merge(
         }
     }
 
-    // Remote-only steps (Steps 2-5): Skip in local mode
-    let pr_info = if has_origin {
-            // Step 2: Check main sync status
-    if let Err(e) = check_main_sync() {
-        let data = MergeData {
-            status: "error".to_string(),
-            pr_url: None,
-            pr_number: None,
-            branch_name: Some(session.branch_name.clone()),
-            infrastructure_committed: None,
-            infrastructure_files: None,
-            worktree_cleaned: None,
-            dry_run,
-            would_commit: None,
-            would_merge_pr: None,
-            would_cleanup_worktree: None,
-            error: Some(e.clone()),
-            message: None,
-        };
-
-        if json {
-            println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        }
-        return Err(e);
-    }
-
-    // Step 3: Get PR information for the branch
-    let pr_info = match get_pr_for_branch(&session.branch_name) {
-        Ok(info) => info,
-        Err(e) => {
-            let data = MergeData {
-                status: "error".to_string(),
-                pr_url: None,
-                pr_number: None,
-                branch_name: Some(session.branch_name.clone()),
-                infrastructure_committed: None,
-                infrastructure_files: None,
-                worktree_cleaned: None,
-                dry_run,
-                would_commit: None,
-                would_merge_pr: None,
-                would_cleanup_worktree: None,
-                error: Some(e.clone()),
-                message: None,
-            };
-
-            if json {
-                println!("{}", serde_json::to_string_pretty(&data).unwrap());
-            }
-            return Err(e);
-        }
-    };
-
-    // Step 4: Validate PR state (open, not merged/closed)
-    if let Err(e) = validate_pr_state(&pr_info) {
-        let data = MergeData {
-            status: "error".to_string(),
-            pr_url: Some(pr_info.url.clone()),
-            pr_number: Some(pr_info.number),
-            branch_name: Some(session.branch_name.clone()),
-            infrastructure_committed: None,
-            infrastructure_files: None,
-            worktree_cleaned: None,
-            dry_run,
-            would_commit: None,
-            would_merge_pr: None,
-            would_cleanup_worktree: None,
-            error: Some(e.clone()),
-            message: None,
-        };
-
-        if json {
-            println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        }
-        return Err(e);
-    }
-
-    // Step 5: Check PR checks status
-    if let Err(e) = check_pr_checks(&session.branch_name) {
-        let data = MergeData {
-            status: "error".to_string(),
-            pr_url: Some(pr_info.url.clone()),
-            pr_number: Some(pr_info.number),
-            branch_name: Some(session.branch_name.clone()),
-            infrastructure_committed: None,
-            infrastructure_files: None,
-            worktree_cleaned: None,
-            dry_run,
-            would_commit: None,
-            would_merge_pr: None,
-            would_cleanup_worktree: None,
-            error: Some(e.clone()),
-            message: None,
-        };
-
-        if json {
-            println!("{}", serde_json::to_string_pretty(&data).unwrap());
-        }
-        return Err(e);
-    }
-
-        Some(pr_info)
-    } else {
-        None
-    };
-
-        // Step 6: Categorize uncommitted files
+    // Step 6: Categorize uncommitted files
     let (infrastructure, other) = match categorize_uncommitted(None) {
         Ok(result) => result,
         Err(e) => {
             let data = MergeData {
                 status: "error".to_string(),
-                pr_url: Some(pr_info.url.clone()),
-                pr_number: Some(pr_info.number),
+                pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+                pr_number: pr_info.as_ref().map(|p| p.number),
                 branch_name: Some(session.branch_name.clone()),
                 infrastructure_committed: None,
                 infrastructure_files: None,
@@ -737,6 +879,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(e.clone()),
                 message: None,
             };
@@ -757,8 +902,8 @@ pub fn run_merge(
 
         let data = MergeData {
             status: "error".to_string(),
-            pr_url: Some(pr_info.url.clone()),
-            pr_number: Some(pr_info.number),
+            pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+            pr_number: pr_info.as_ref().map(|p| p.number),
             branch_name: Some(session.branch_name.clone()),
             infrastructure_committed: None,
             infrastructure_files: None,
@@ -767,6 +912,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(error_msg.clone()),
             message: None,
         };
@@ -787,28 +935,67 @@ pub fn run_merge(
 
     // If dry-run mode, return now with would_* fields populated
     if dry_run {
-        let data = MergeData {
-            status: "ok".to_string(),
-            pr_url: Some(pr_info.url.clone()),
-            pr_number: Some(pr_info.number),
-            branch_name: Some(session.branch_name.clone()),
-            infrastructure_committed: None,
-            infrastructure_files: None,
-            worktree_cleaned: None,
-            dry_run: true,
-            would_commit: if !infrastructure.is_empty() {
-                Some(infrastructure.clone())
-            } else {
-                None
-            },
-            would_merge_pr: Some(pr_info.url.clone()),
-            would_cleanup_worktree: Some(worktree_path.display().to_string()),
-            error: None,
-            message: Some(format!(
-                "Would merge PR #{} for worktree at {}",
-                pr_info.number,
-                worktree_path.display()
-            )),
+        let data = if has_origin {
+            // Remote mode dry-run
+            MergeData {
+                status: "ok".to_string(),
+                pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+                pr_number: pr_info.as_ref().map(|p| p.number),
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: None,
+                infrastructure_files: None,
+                worktree_cleaned: None,
+                dry_run: true,
+                would_commit: if !infrastructure.is_empty() {
+                    Some(infrastructure.clone())
+                } else {
+                    None
+                },
+                would_merge_pr: pr_info.as_ref().map(|p| p.url.clone()),
+                would_cleanup_worktree: Some(worktree_path.display().to_string()),
+                merge_mode: Some("remote".to_string()),
+                squash_commit: None,
+                would_squash_merge: None,
+                error: None,
+                message: pr_info.as_ref().map(|p| {
+                    format!(
+                        "Would merge PR #{} for worktree at {}",
+                        p.number,
+                        worktree_path.display()
+                    )
+                }),
+            }
+        } else {
+            // Local mode dry-run
+            MergeData {
+                status: "ok".to_string(),
+                pr_url: None,
+                pr_number: None,
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: None,
+                infrastructure_files: None,
+                worktree_cleaned: None,
+                dry_run: true,
+                would_commit: if !infrastructure.is_empty() {
+                    Some(infrastructure.clone())
+                } else {
+                    None
+                },
+                would_merge_pr: None,
+                would_cleanup_worktree: Some(worktree_path.display().to_string()),
+                merge_mode: Some("local".to_string()),
+                squash_commit: None,
+                would_squash_merge: Some(format!(
+                    "Would squash merge branch '{}' into main",
+                    session.branch_name
+                )),
+                error: None,
+                message: Some(format!(
+                    "Would squash merge branch '{}' for worktree at {}",
+                    session.branch_name,
+                    worktree_path.display()
+                )),
+            }
         };
 
         if json {
@@ -817,14 +1004,23 @@ pub fn run_merge(
             println!("Dry-run mode: showing planned operations\n");
             println!("Found worktree: {}", worktree_path.display());
             println!("Branch: {}", session.branch_name);
-            println!("PR: #{} - {}", pr_info.number, pr_info.url);
+            println!("Mode: {}", if has_origin { "remote" } else { "local" });
+            if let Some(ref pr) = pr_info {
+                println!("PR: #{} - {}", pr.number, pr.url);
+            }
             if !infrastructure.is_empty() {
                 println!(
                     "\nWould commit infrastructure files:\n  {}",
                     infrastructure.join("\n  ")
                 );
             }
-            println!("\nWould merge PR: {}", pr_info.url);
+            if has_origin {
+                if let Some(ref pr) = pr_info {
+                    println!("\nWould merge PR: {}", pr.url);
+                }
+            } else {
+                println!("\nWould squash merge branch: {}", session.branch_name);
+            }
             println!("Would cleanup worktree: {}", worktree_path.display());
         }
 
@@ -850,8 +1046,8 @@ pub fn run_merge(
 
                 let data = MergeData {
                     status: "error".to_string(),
-                    pr_url: Some(pr_info.url.clone()),
-                    pr_number: Some(pr_info.number),
+                    pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+                    pr_number: pr_info.as_ref().map(|p| p.number),
                     branch_name: Some(session.branch_name.clone()),
                     infrastructure_committed: Some(false),
                     infrastructure_files: Some(infrastructure.clone()),
@@ -860,6 +1056,9 @@ pub fn run_merge(
                     would_commit: None,
                     would_merge_pr: None,
                     would_cleanup_worktree: None,
+                    merge_mode: Some(if has_origin { "remote" } else { "local" }.to_string()),
+                    squash_commit: None,
+                    would_squash_merge: None,
                     error: Some(error_msg.clone()),
                     message: None,
                 };
@@ -890,8 +1089,8 @@ pub fn run_merge(
 
                 let data = MergeData {
                     status: "error".to_string(),
-                    pr_url: Some(pr_info.url.clone()),
-                    pr_number: Some(pr_info.number),
+                    pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+                    pr_number: pr_info.as_ref().map(|p| p.number),
                     branch_name: Some(session.branch_name.clone()),
                     infrastructure_committed: Some(false),
                     infrastructure_files: Some(infrastructure.clone()),
@@ -900,6 +1099,9 @@ pub fn run_merge(
                     would_commit: None,
                     would_merge_pr: None,
                     would_cleanup_worktree: None,
+                    merge_mode: Some(if has_origin { "remote" } else { "local" }.to_string()),
+                    squash_commit: None,
+                    would_squash_merge: None,
                     error: Some(error_msg.clone()),
                     message: None,
                 };
@@ -922,16 +1124,16 @@ pub fn run_merge(
         false
     };
 
-    // Step 9: Push main to origin
-    if infrastructure_committed {
+    // Step 9: Push main to origin (remote mode only)
+    if has_origin && infrastructure_committed {
         // Re-check main sync immediately before push to minimize race window
         // Note: A tiny race window still exists between this check and the actual push
         // (unavoidable without distributed locking), but this reduces the window significantly
         if let Err(e) = check_main_sync() {
             let data = MergeData {
                 status: "error".to_string(),
-                pr_url: Some(pr_info.url.clone()),
-                pr_number: Some(pr_info.number),
+                pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+                pr_number: pr_info.as_ref().map(|p| p.number),
                 branch_name: Some(session.branch_name.clone()),
                 infrastructure_committed: Some(infrastructure_committed),
                 infrastructure_files: Some(infrastructure.clone()),
@@ -940,6 +1142,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: Some(if has_origin { "remote" } else { "local" }.to_string()),
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(format!("Pre-push sync check failed: {}", e)),
                 message: None,
             };
@@ -959,8 +1164,8 @@ pub fn run_merge(
 
             let data = MergeData {
                 status: "error".to_string(),
-                pr_url: Some(pr_info.url.clone()),
-                pr_number: Some(pr_info.number),
+                pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+                pr_number: pr_info.as_ref().map(|p| p.number),
                 branch_name: Some(session.branch_name.clone()),
                 infrastructure_committed: Some(infrastructure_committed),
                 infrastructure_files: Some(infrastructure.clone()),
@@ -969,6 +1174,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: Some(if has_origin { "remote" } else { "local" }.to_string()),
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(error_msg.clone()),
                 message: None,
             };
@@ -984,88 +1192,150 @@ pub fn run_merge(
         }
     }
 
-    // Step 10: Merge PR via gh pr merge --squash
-    if !quiet {
-        println!("Merging PR #{} via squash...", pr_info.number);
-    }
-
-    let mut cmd = Command::new("gh");
-    cmd.args(["pr", "merge", "--squash", &session.branch_name]);
-    let merge_output = run_command_with_context(
-        &mut cmd,
-        &format!("gh pr merge --squash {}", session.branch_name),
-    );
-
-    if let Err(e) = merge_output {
-        let error_msg = format!("Failed to merge PR: {}", e);
-
-        let data = MergeData {
-            status: "error".to_string(),
-            pr_url: Some(pr_info.url.clone()),
-            pr_number: Some(pr_info.number),
-            branch_name: Some(session.branch_name.clone()),
-            infrastructure_committed: Some(infrastructure_committed),
-            infrastructure_files: if infrastructure_committed {
-                Some(infrastructure.clone())
-            } else {
-                None
-            },
-            worktree_cleaned: None,
-            dry_run: false,
-            would_commit: None,
-            would_merge_pr: None,
-            would_cleanup_worktree: None,
-            error: Some(error_msg.clone()),
-            message: None,
-        };
-
-        if json {
-            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+    // Step 10: Merge (branch on mode)
+    let squash_commit_hash = if has_origin {
+        // Remote mode: Merge PR via gh pr merge --squash
+        if !quiet {
+            if let Some(ref pr) = pr_info {
+                println!("Merging PR #{} via squash...", pr.number);
+            }
         }
-        return Err(error_msg);
-    }
 
-    if !quiet {
-        println!("PR merged successfully");
-    }
+        let mut cmd = Command::new("gh");
+        cmd.args(["pr", "merge", "--squash", &session.branch_name]);
+        let merge_output = run_command_with_context(
+            &mut cmd,
+            &format!("gh pr merge --squash {}", session.branch_name),
+        );
 
-    // Step 11: Pull main to fetch the squashed commit
-    let mut cmd = Command::new("git");
-    cmd.args(["pull", "origin", "main"]);
-    let pull_output = run_command_with_context(&mut cmd, "git pull origin main");
+        if let Err(e) = merge_output {
+            let error_msg = format!("Failed to merge PR: {}", e);
 
-    if let Err(e) = pull_output {
-        let error_msg = format!("Failed to pull main after merge: {}", e);
+            let data = MergeData {
+                status: "error".to_string(),
+                pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+                pr_number: pr_info.as_ref().map(|p| p.number),
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: Some(infrastructure_committed),
+                infrastructure_files: if infrastructure_committed {
+                    Some(infrastructure.clone())
+                } else {
+                    None
+                },
+                worktree_cleaned: None,
+                dry_run: false,
+                would_commit: None,
+                would_merge_pr: None,
+                would_cleanup_worktree: None,
+                merge_mode: Some("remote".to_string()),
+                squash_commit: None,
+                would_squash_merge: None,
+                error: Some(error_msg.clone()),
+                message: None,
+            };
 
-        let data = MergeData {
-            status: "error".to_string(),
-            pr_url: Some(pr_info.url.clone()),
-            pr_number: Some(pr_info.number),
-            branch_name: Some(session.branch_name.clone()),
-            infrastructure_committed: Some(infrastructure_committed),
-            infrastructure_files: if infrastructure_committed {
-                Some(infrastructure.clone())
-            } else {
-                None
-            },
-            worktree_cleaned: None,
-            dry_run: false,
-            would_commit: None,
-            would_merge_pr: None,
-            would_cleanup_worktree: None,
-            error: Some(error_msg.clone()),
-            message: None,
-        };
-
-        if json {
-            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            return Err(error_msg);
         }
-        return Err(error_msg);
-    }
 
-    if !quiet {
-        println!("Pulled squashed commit from origin");
-    }
+        if !quiet {
+            println!("PR merged successfully");
+        }
+
+        // Step 11: Pull main to fetch the squashed commit (remote mode only)
+        let mut cmd = Command::new("git");
+        cmd.args(["pull", "origin", "main"]);
+        let pull_output = run_command_with_context(&mut cmd, "git pull origin main");
+
+        if let Err(e) = pull_output {
+            let error_msg = format!("Failed to pull main after merge: {}", e);
+
+            let data = MergeData {
+                status: "error".to_string(),
+                pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+                pr_number: pr_info.as_ref().map(|p| p.number),
+                branch_name: Some(session.branch_name.clone()),
+                infrastructure_committed: Some(infrastructure_committed),
+                infrastructure_files: if infrastructure_committed {
+                    Some(infrastructure.clone())
+                } else {
+                    None
+                },
+                worktree_cleaned: None,
+                dry_run: false,
+                would_commit: None,
+                would_merge_pr: None,
+                would_cleanup_worktree: None,
+                merge_mode: Some("remote".to_string()),
+                squash_commit: None,
+                would_squash_merge: None,
+                error: Some(error_msg.clone()),
+                message: None,
+            };
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            return Err(error_msg);
+        }
+
+        if !quiet {
+            println!("Pulled squashed commit from origin");
+        }
+
+        None
+    } else {
+        // Local mode: Squash merge branch directly
+        if !quiet {
+            println!(
+                "Squash merging branch '{}' into main...",
+                session.branch_name
+            );
+        }
+
+        let commit_message = format!("Merge branch '{}'", session.branch_name);
+        match squash_merge_branch(&session.branch_name, &commit_message) {
+            Ok(hash) => {
+                if !quiet {
+                    println!("Squash merge successful: {}", hash);
+                }
+                Some(hash)
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to squash merge: {}", e);
+
+                let data = MergeData {
+                    status: "error".to_string(),
+                    pr_url: None,
+                    pr_number: None,
+                    branch_name: Some(session.branch_name.clone()),
+                    infrastructure_committed: Some(infrastructure_committed),
+                    infrastructure_files: if infrastructure_committed {
+                        Some(infrastructure.clone())
+                    } else {
+                        None
+                    },
+                    worktree_cleaned: None,
+                    dry_run: false,
+                    would_commit: None,
+                    would_merge_pr: None,
+                    would_cleanup_worktree: None,
+                    merge_mode: Some("local".to_string()),
+                    squash_commit: None,
+                    would_squash_merge: None,
+                    error: Some(error_msg.clone()),
+                    message: None,
+                };
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&data).unwrap());
+                }
+                return Err(error_msg);
+            }
+        }
+    };
 
     // Step 12: Cleanup worktree by removing it and deleting the branch
     if !quiet {
@@ -1142,8 +1412,8 @@ pub fn run_merge(
     // Step 13: Return success response
     let data = MergeData {
         status: "ok".to_string(),
-        pr_url: Some(pr_info.url.clone()),
-        pr_number: Some(pr_info.number),
+        pr_url: pr_info.as_ref().map(|p| p.url.clone()),
+        pr_number: pr_info.as_ref().map(|p| p.number),
         branch_name: Some(session.branch_name.clone()),
         infrastructure_committed: Some(infrastructure_committed),
         infrastructure_files: if infrastructure_committed {
@@ -1156,18 +1426,32 @@ pub fn run_merge(
         would_commit: None,
         would_merge_pr: None,
         would_cleanup_worktree: None,
+        merge_mode: Some(if has_origin { "remote" } else { "local" }.to_string()),
+        squash_commit: squash_commit_hash.clone(),
+        would_squash_merge: None,
         error: None,
-        message: Some(format!(
-            "Successfully merged PR #{} and cleaned up worktree",
-            pr_info.number
-        )),
+        message: Some(if has_origin {
+            format!(
+                "Successfully merged PR #{} and cleaned up worktree",
+                pr_info.as_ref().map(|p| p.number).unwrap_or(0)
+            )
+        } else {
+            format!(
+                "Successfully squash merged branch '{}' and cleaned up worktree",
+                session.branch_name
+            )
+        }),
     };
 
     if json {
         println!("{}", serde_json::to_string_pretty(&data).unwrap());
     } else if !quiet {
         println!("\nMerge complete!");
-        println!("PR: {}", pr_info.url);
+        if let Some(ref pr) = pr_info {
+            println!("PR: {}", pr.url);
+        } else if let Some(ref hash) = squash_commit_hash {
+            println!("Squash commit: {}", hash);
+        }
         if infrastructure_committed {
             println!("Infrastructure committed: {}", infrastructure.join(", "));
         }
@@ -1191,7 +1475,7 @@ mod tests {
         Command::new("git")
             .arg("-C")
             .arg(path)
-            .args(["init"])
+            .args(["init", "-b", "main"])
             .output()
             .expect("Failed to init git repo");
         Command::new("git")
@@ -1961,6 +2245,9 @@ mod tests {
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: None,
             message: Some("Successfully merged PR #123 and cleaned up worktree".to_string()),
         };
@@ -1991,6 +2278,9 @@ mod tests {
             would_commit: Some(vec!["CLAUDE.md".to_string(), "agents/coder-agent.md".to_string()]),
             would_merge_pr: Some("https://github.com/owner/repo/pull/123".to_string()),
             would_cleanup_worktree: Some(".specks-worktrees/specks__feature-20260209-120000".to_string()),
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: None,
             message: Some("Would merge PR #123 for worktree at .specks-worktrees/specks__feature-20260209-120000".to_string()),
         };
@@ -2023,6 +2313,9 @@ mod tests {
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some("Main branch has 2 unpushed commits. Run 'git push' first.".to_string()),
             message: None,
         };
@@ -2408,5 +2701,871 @@ mod tests {
             "Error should include command name, got: {}",
             error
         );
+    }
+
+    // Tests for has_remote_origin
+
+    #[test]
+    fn test_has_remote_origin_with_remote() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo with a remote
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Add a remote origin
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/test/repo.git",
+            ])
+            .output()
+            .expect("Failed to add remote");
+
+        // Change to the temp directory and test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = has_remote_origin();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert!(
+            result,
+            "Expected has_remote_origin to return true when remote exists"
+        );
+    }
+
+    #[test]
+    fn test_has_remote_origin_without_remote() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo without a remote
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // No remote added - test immediately
+        // Change to the temp directory and test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = has_remote_origin();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert!(
+            !result,
+            "Expected has_remote_origin to return false when no remote exists"
+        );
+    }
+
+    // Tests for MergeData serialization with new fields
+
+    #[test]
+    fn test_merge_data_serialization_with_new_fields() {
+        // Test that new fields are included when set
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: Some("https://github.com/owner/repo/pull/123".to_string()),
+            pr_number: Some(123),
+            branch_name: Some("specks/feature-20260209-120000".to_string()),
+            infrastructure_committed: Some(true),
+            infrastructure_files: Some(vec!["CLAUDE.md".to_string()]),
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            merge_mode: Some("local".to_string()),
+            squash_commit: Some("abc123".to_string()),
+            would_squash_merge: Some("Would squash 3 commits".to_string()),
+            error: None,
+            message: Some("Success".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"merge_mode\": \"local\""));
+        assert!(json.contains("\"squash_commit\": \"abc123\""));
+        assert!(json.contains("\"would_squash_merge\": \"Would squash 3 commits\""));
+    }
+
+    #[test]
+    fn test_merge_data_serialization_omits_none_new_fields() {
+        // Test that new fields are omitted when None
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: Some("https://github.com/owner/repo/pull/123".to_string()),
+            pr_number: Some(123),
+            branch_name: Some("specks/feature-20260209-120000".to_string()),
+            infrastructure_committed: Some(true),
+            infrastructure_files: Some(vec!["CLAUDE.md".to_string()]),
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
+            error: None,
+            message: Some("Success".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(!json.contains("\"merge_mode\""));
+        assert!(!json.contains("\"squash_commit\""));
+        assert!(!json.contains("\"would_squash_merge\""));
+    }
+
+    // Tests for squash_merge_branch
+
+    #[test]
+    fn test_squash_merge_branch_success() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo with diverged branches
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("file1.txt"), "main content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file1.txt"])
+            .output()
+            .expect("Failed to add file1.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit on main"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create and checkout feature branch
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Add commits to feature branch
+        std::fs::write(temp_path.join("file2.txt"), "feature content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file2.txt"])
+            .output()
+            .expect("Failed to add file2.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Add feature file"])
+            .output()
+            .expect("Failed to commit");
+
+        std::fs::write(temp_path.join("file3.txt"), "more feature content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file3.txt"])
+            .output()
+            .expect("Failed to add file3.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Add another feature file"])
+            .output()
+            .expect("Failed to commit");
+
+        // Checkout main to perform squash merge
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .expect("Failed to checkout main");
+
+        // Change to temp directory for test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Perform squash merge
+        let result = squash_merge_branch("feature-branch", "Squashed feature commits");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify success
+        assert!(
+            result.is_ok(),
+            "Expected squash merge to succeed, got: {:?}",
+            result
+        );
+
+        let commit_hash = result.unwrap();
+        assert_eq!(commit_hash.len(), 40, "Commit hash should be 40 characters");
+
+        // Verify commit message
+        let log_output = Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["log", "-1", "--pretty=format:%s"])
+            .output()
+            .expect("Failed to get git log");
+
+        let commit_message = String::from_utf8_lossy(&log_output.stdout);
+        assert_eq!(commit_message, "Squashed feature commits");
+
+        // Verify files exist
+        assert!(temp_path.join("file2.txt").exists());
+        assert!(temp_path.join("file3.txt").exists());
+    }
+
+    #[test]
+    fn test_squash_merge_branch_with_conflict() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo with conflicting branches
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("conflict.txt"), "main version").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "conflict.txt"])
+            .output()
+            .expect("Failed to add conflict.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit on main"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create feature branch
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Modify file on feature branch
+        std::fs::write(temp_path.join("conflict.txt"), "feature version").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "conflict.txt"])
+            .output()
+            .expect("Failed to add conflict.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Modify conflict.txt on feature"])
+            .output()
+            .expect("Failed to commit");
+
+        // Checkout main and modify same file
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .expect("Failed to checkout main");
+
+        std::fs::write(temp_path.join("conflict.txt"), "main version updated").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "conflict.txt"])
+            .output()
+            .expect("Failed to add conflict.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Update conflict.txt on main"])
+            .output()
+            .expect("Failed to commit");
+
+        // Change to temp directory for test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Attempt squash merge (should fail due to conflict)
+        let result = squash_merge_branch("feature-branch", "Should fail");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify failure
+        assert!(
+            result.is_err(),
+            "Expected squash merge to fail due to conflict"
+        );
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("Merge failed"),
+            "Error should indicate merge failure, got: {}",
+            error
+        );
+        assert!(
+            error.contains("repository restored to clean state"),
+            "Error should indicate repository was restored, got: {}",
+            error
+        );
+
+        // Verify repository is in clean state
+        let status_output = Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["status", "--porcelain"])
+            .output()
+            .expect("Failed to get git status");
+
+        let status = String::from_utf8_lossy(&status_output.stdout);
+        assert!(
+            status.is_empty(),
+            "Repository should be clean after failed merge, got: {}",
+            status
+        );
+    }
+
+    #[test]
+    fn test_squash_merge_branch_empty_merge() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo where merge produces no changes
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("file.txt"), "content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file.txt"])
+            .output()
+            .expect("Failed to add file.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create feature branch with no changes
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Checkout main (no changes on feature branch)
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .expect("Failed to checkout main");
+
+        // Change to temp directory for test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Attempt squash merge (should produce no changes)
+        let result = squash_merge_branch("feature-branch", "Should have no changes");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify failure with appropriate message
+        assert!(
+            result.is_err(),
+            "Expected squash merge to fail when no changes"
+        );
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("Nothing to commit") || error.contains("no changes"),
+            "Error should indicate no changes, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn test_squash_merge_branch_nonexistent_branch() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit
+        std::fs::write(temp_path.join("file.txt"), "content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file.txt"])
+            .output()
+            .expect("Failed to add file.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Change to temp directory for test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Attempt squash merge of nonexistent branch
+        let result = squash_merge_branch("nonexistent-branch", "Should fail");
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify failure
+        assert!(
+            result.is_err(),
+            "Expected squash merge to fail for nonexistent branch"
+        );
+
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("Merge failed"),
+            "Error should indicate merge failure, got: {}",
+            error
+        );
+    }
+
+    // Tests for local merge mode (step 2)
+
+    #[test]
+    fn test_local_merge_empty_branch_error() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo with a branch that has no commits ahead of main
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("file.txt"), "content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file.txt"])
+            .output()
+            .expect("Failed to add file.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create feature branch with no additional commits
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Checkout main
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .expect("Failed to checkout main");
+
+        // Test: Verify that git rev-list shows 0 commits
+        let count_output = Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["rev-list", "--count", "main..feature-branch"])
+            .output()
+            .expect("Failed to run git rev-list");
+
+        let count_str = String::from_utf8_lossy(&count_output.stdout);
+        assert_eq!(
+            count_str.trim(),
+            "0",
+            "Branch should have 0 commits ahead of main"
+        );
+
+        // The empty branch check in run_merge would detect this and return an error
+        // This validates the git command works correctly for the empty branch detection
+    }
+
+    #[test]
+    fn test_local_merge_dry_run_json() {
+        // Test that MergeData in local dry-run mode serializes correctly
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: None,
+            pr_number: None,
+            branch_name: Some("feature-branch".to_string()),
+            infrastructure_committed: None,
+            infrastructure_files: None,
+            worktree_cleaned: None,
+            dry_run: true,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: Some(".specks-worktrees/specks__feature-123".to_string()),
+            merge_mode: Some("local".to_string()),
+            squash_commit: None,
+            would_squash_merge: Some(
+                "Would squash merge branch 'feature-branch' into main".to_string(),
+            ),
+            error: None,
+            message: Some("Would squash merge branch 'feature-branch'".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+
+        // Verify local mode fields are present
+        assert!(
+            json.contains("\"merge_mode\": \"local\""),
+            "Should have merge_mode: local"
+        );
+        assert!(
+            json.contains("\"would_squash_merge\""),
+            "Should have would_squash_merge field"
+        );
+        assert!(
+            json.contains("feature-branch"),
+            "Should mention the branch name"
+        );
+
+        // Verify remote mode fields are absent
+        assert!(
+            !json.contains("\"would_merge_pr\""),
+            "Should NOT have would_merge_pr in local mode"
+        );
+        assert!(
+            !json.contains("\"pr_url\""),
+            "Should NOT have pr_url in local mode"
+        );
+        assert!(
+            !json.contains("\"pr_number\""),
+            "Should NOT have pr_number in local mode"
+        );
+
+        // Verify it can be deserialized
+        let _parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    }
+
+    #[test]
+    fn test_merge_data_remote_mode_serialization() {
+        // Test that MergeData in remote mode serializes correctly
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: Some("https://github.com/owner/repo/pull/123".to_string()),
+            pr_number: Some(123),
+            branch_name: Some("specks/feature-20260209-120000".to_string()),
+            infrastructure_committed: Some(true),
+            infrastructure_files: Some(vec!["CLAUDE.md".to_string()]),
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            merge_mode: Some("remote".to_string()),
+            squash_commit: None,
+            would_squash_merge: None,
+            error: None,
+            message: Some("Successfully merged PR #123".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+
+        // Verify remote mode fields are present
+        assert!(
+            json.contains("\"merge_mode\": \"remote\""),
+            "Should have merge_mode: remote"
+        );
+        assert!(json.contains("\"pr_url\""), "Should have pr_url field");
+        assert!(
+            json.contains("\"pr_number\": 123"),
+            "Should have pr_number field"
+        );
+
+        // Verify local mode fields are absent
+        assert!(
+            !json.contains("\"squash_commit\""),
+            "Should NOT have squash_commit in remote mode"
+        );
+        assert!(
+            !json.contains("\"would_squash_merge\""),
+            "Should NOT have would_squash_merge in remote mode"
+        );
+
+        // Verify it can be deserialized
+        let _parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    }
+
+    #[test]
+    fn test_local_merge_full_workflow() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo simulating a full local merge workflow
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        init_git_repo(temp_path);
+
+        // Create initial commit on main
+        std::fs::write(temp_path.join("file1.txt"), "main content").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file1.txt"])
+            .output()
+            .expect("Failed to add file1.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit on main"])
+            .output()
+            .expect("Failed to commit");
+
+        // Create feature branch
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "feature-branch"])
+            .output()
+            .expect("Failed to create feature branch");
+
+        // Add commits to feature branch
+        std::fs::write(temp_path.join("file2.txt"), "feature content 1").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file2.txt"])
+            .output()
+            .expect("Failed to add file2.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Add feature file 1"])
+            .output()
+            .expect("Failed to commit");
+
+        std::fs::write(temp_path.join("file3.txt"), "feature content 2").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file3.txt"])
+            .output()
+            .expect("Failed to add file3.txt");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Add feature file 2"])
+            .output()
+            .expect("Failed to commit");
+
+        // Checkout main to perform squash merge
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .expect("Failed to checkout main");
+
+        // Verify feature branch has commits ahead of main
+        let count_output = Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["rev-list", "--count", "main..feature-branch"])
+            .output()
+            .expect("Failed to run git rev-list");
+
+        let count_str = String::from_utf8_lossy(&count_output.stdout);
+        assert_eq!(
+            count_str.trim(),
+            "2",
+            "Feature branch should have 2 commits ahead"
+        );
+
+        // Change to temp directory for squash merge
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        // Perform squash merge using our function
+        let commit_message = "Merge feature-branch";
+        let result = squash_merge_branch("feature-branch", commit_message);
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // Verify squash merge succeeded
+        assert!(
+            result.is_ok(),
+            "Squash merge should succeed, got: {:?}",
+            result
+        );
+
+        let commit_hash = result.unwrap();
+        assert_eq!(commit_hash.len(), 40, "Commit hash should be 40 characters");
+
+        // Verify commit message
+        let log_output = Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["log", "-1", "--pretty=format:%s"])
+            .output()
+            .expect("Failed to get git log");
+
+        let log_message = String::from_utf8_lossy(&log_output.stdout);
+        assert_eq!(log_message, commit_message, "Commit message should match");
+
+        // Verify files from feature branch exist on main
+        assert!(
+            temp_path.join("file1.txt").exists(),
+            "file1.txt should exist"
+        );
+        assert!(
+            temp_path.join("file2.txt").exists(),
+            "file2.txt should exist"
+        );
+        assert!(
+            temp_path.join("file3.txt").exists(),
+            "file3.txt should exist"
+        );
+
+        // Verify content
+        let content2 = std::fs::read_to_string(temp_path.join("file2.txt")).unwrap();
+        assert_eq!(content2, "feature content 1");
+
+        let content3 = std::fs::read_to_string(temp_path.join("file3.txt")).unwrap();
+        assert_eq!(content3, "feature content 2");
     }
 }
