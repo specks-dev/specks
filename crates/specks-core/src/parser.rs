@@ -179,15 +179,14 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                 || header_lower == "checkpoints"
             {
                 current_section = CurrentSection::Checkpoints;
-            } else if header_lower.contains("references")
-                || header_lower.contains("artifacts")
-                || header_lower.contains("rollback")
-            {
+            } else if header_lower.contains("artifacts:") || header_lower == "artifacts" {
+                current_section = CurrentSection::Artifacts;
+            } else if header_lower.contains("references") || header_lower.contains("rollback") {
                 current_section = CurrentSection::Other;
             }
         }
 
-        // Check for **Tasks:**, **Tests:**, **Checkpoint:** bold markers
+        // Check for **Tasks:**, **Tests:**, **Checkpoint:**, **Artifacts:** bold markers
         if line.starts_with("**Tasks:**") {
             current_section = CurrentSection::Tasks;
             continue;
@@ -198,6 +197,10 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
         }
         if line.starts_with("**Checkpoint:**") || line.starts_with("**Checkpoints:**") {
             current_section = CurrentSection::Checkpoints;
+            continue;
+        }
+        if line.starts_with("**Artifacts:**") {
+            current_section = CurrentSection::Artifacts;
             continue;
         }
 
@@ -354,6 +357,20 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                 let checked = caps.get(1).unwrap().as_str() != " ";
                 let text = caps.get(2).unwrap().as_str().to_string();
 
+                // Special handling for Artifacts section: capture text as plain artifact item
+                if current_section == CurrentSection::Artifacts {
+                    if let Some(substep_idx) = in_substep {
+                        if let Some(step_idx) = in_step {
+                            speck.steps[step_idx].substeps[substep_idx]
+                                .artifacts
+                                .push(text);
+                        }
+                    } else if let Some(step_idx) = in_step {
+                        speck.steps[step_idx].artifacts.push(text);
+                    }
+                    continue;
+                }
+
                 let kind = match current_section {
                     CurrentSection::Tasks => CheckpointKind::Task,
                     CurrentSection::Tests => CheckpointKind::Test,
@@ -400,6 +417,21 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                             speck.steps[step_idx].checkpoints.push(checkpoint);
                         }
                     }
+                }
+                continue;
+            }
+
+            // Parse plain bullet items in Artifacts section
+            if current_section == CurrentSection::Artifacts && line.trim_start().starts_with("- ") {
+                let text = line.trim_start().strip_prefix("- ").unwrap().to_string();
+                if let Some(substep_idx) = in_substep {
+                    if let Some(step_idx) = in_step {
+                        speck.steps[step_idx].substeps[substep_idx]
+                            .artifacts
+                            .push(text);
+                    }
+                } else if let Some(step_idx) = in_step {
+                    speck.steps[step_idx].artifacts.push(text);
                 }
             }
         }
@@ -493,6 +525,7 @@ enum CurrentSection {
     Tasks,
     Tests,
     Checkpoints,
+    Artifacts,
     Other,
 }
 
@@ -840,5 +873,104 @@ mod tests {
         let speck = result.unwrap();
         assert!(speck.steps.is_empty());
         assert!(speck.metadata.owner.is_none());
+    }
+
+    #[test]
+    fn test_parse_artifacts_bold_marker() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Tasks:**
+- [ ] Task one
+
+**Artifacts:**
+- [ ] New file: src/main.rs
+- [ ] Modified: Cargo.toml
+
+**Tests:**
+- [ ] Test one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.steps.len(), 1);
+        let step = &speck.steps[0];
+        assert_eq!(step.artifacts.len(), 2);
+        assert_eq!(step.artifacts[0], "New file: src/main.rs");
+        assert_eq!(step.artifacts[1], "Modified: Cargo.toml");
+    }
+
+    #[test]
+    fn test_parse_artifacts_heading_style() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+##### Tasks
+
+- [ ] Task one
+
+##### Artifacts
+
+- New file: src/main.rs
+- Modified: Cargo.toml
+
+##### Tests
+
+- [ ] Test one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.steps.len(), 1);
+        let step = &speck.steps[0];
+        assert_eq!(step.artifacts.len(), 2);
+        assert_eq!(step.artifacts[0], "New file: src/main.rs");
+        assert_eq!(step.artifacts[1], "Modified: Cargo.toml");
+    }
+
+    #[test]
+    fn test_parse_artifacts_with_checkboxes() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Artifacts:**
+- [ ] New file: src/main.rs
+- Modified: Cargo.toml
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.steps.len(), 1);
+        let step = &speck.steps[0];
+        assert_eq!(step.artifacts.len(), 2);
+        assert_eq!(step.artifacts[0], "New file: src/main.rs");
+        assert_eq!(step.artifacts[1], "Modified: Cargo.toml");
     }
 }

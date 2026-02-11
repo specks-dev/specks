@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-0
+date: 2025-02-11T23:59:40Z
+bead: specks-0kf.1
+---
+
+## #step-0: Extended parser to capture Artifacts sections and added content-rendering methods (render_description, render_acceptance_criteria, extract_section_by_anchor, render_root_description, render_root_design, render_root_acceptance) to types
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-11T20:46:51Z
 bead: specks-xuf.3
