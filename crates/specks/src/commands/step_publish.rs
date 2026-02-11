@@ -300,7 +300,7 @@ mod tests {
         let ssh_url = "git@github.com:owner/repo.git";
         let repo = ssh_url
             .strip_prefix("git@github.com:")
-            .and_then(|s| Some(s.strip_suffix(".git").unwrap_or(s)))
+            .map(|s| s.strip_suffix(".git").unwrap_or(s))
             .unwrap();
         assert_eq!(repo, "owner/repo");
     }
@@ -311,7 +311,7 @@ mod tests {
         let https_url = "https://github.com/owner/repo.git";
         let repo = https_url
             .strip_prefix("https://github.com/")
-            .and_then(|s| Some(s.strip_suffix(".git").unwrap_or(s)))
+            .map(|s| s.strip_suffix(".git").unwrap_or(s))
             .unwrap();
         assert_eq!(repo, "owner/repo");
     }
@@ -322,7 +322,7 @@ mod tests {
         let https_url = "https://github.com/owner/repo";
         let repo = https_url
             .strip_prefix("https://github.com/")
-            .and_then(|s| Some(s.strip_suffix(".git").unwrap_or(s)))
+            .map(|s| s.strip_suffix(".git").unwrap_or(s))
             .unwrap();
         assert_eq!(repo, "owner/repo");
     }

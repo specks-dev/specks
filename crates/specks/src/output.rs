@@ -414,15 +414,15 @@ mod tests {
         let json = serde_json::to_string(&data).unwrap();
         let deserialized: StepCommitData = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.committed, true);
+        assert!(deserialized.committed);
         assert_eq!(deserialized.commit_hash, Some("abc1234".to_string()));
-        assert_eq!(deserialized.bead_closed, true);
+        assert!(deserialized.bead_closed);
         assert_eq!(deserialized.bead_id, Some("bd-123".to_string()));
-        assert_eq!(deserialized.log_updated, true);
-        assert_eq!(deserialized.log_rotated, false);
+        assert!(deserialized.log_updated);
+        assert!(!deserialized.log_rotated);
         assert_eq!(deserialized.archived_path, None);
         assert_eq!(deserialized.files_staged, vec!["a.rs", "b.rs"]);
-        assert_eq!(deserialized.needs_reconcile, false);
+        assert!(!deserialized.needs_reconcile);
         assert_eq!(deserialized.warnings.len(), 0);
     }
 
@@ -444,7 +444,7 @@ mod tests {
         let json = serde_json::to_string(&data).unwrap();
         let deserialized: StepCommitData = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.needs_reconcile, true);
+        assert!(deserialized.needs_reconcile);
         assert_eq!(deserialized.warnings, vec!["Bead close failed"]);
         assert_eq!(
             deserialized.archived_path,
@@ -466,9 +466,9 @@ mod tests {
         let json = serde_json::to_string(&data).unwrap();
         let deserialized: StepPublishData = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.success, true);
-        assert_eq!(deserialized.pushed, true);
-        assert_eq!(deserialized.pr_created, true);
+        assert!(deserialized.success);
+        assert!(deserialized.pushed);
+        assert!(deserialized.pr_created);
         assert_eq!(deserialized.repo, Some("owner/repo".to_string()));
         assert_eq!(
             deserialized.pr_url,
@@ -491,9 +491,9 @@ mod tests {
         let json = serde_json::to_string(&data).unwrap();
         let deserialized: StepPublishData = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.success, false);
-        assert_eq!(deserialized.pushed, true);
-        assert_eq!(deserialized.pr_created, false);
+        assert!(!deserialized.success);
+        assert!(deserialized.pushed);
+        assert!(!deserialized.pr_created);
         assert_eq!(deserialized.pr_url, None);
         assert_eq!(deserialized.pr_number, None);
     }
