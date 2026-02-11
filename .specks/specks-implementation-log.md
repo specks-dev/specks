@@ -3,6 +3,32 @@
 This log tracks completed implementation work.
 
 ---
+step: #step-2
+date: 2026-02-10T19:14:20Z
+bead: specks-jlu.3
+---
+
+## #step-2: Implemented full step-publish pipeline: gh auth check, repo derivation from git remote (SSH/HTTPS), PR body markdown generation, git push, gh pr create with --body-file, PR URL parsing, session status update to Completed. 7 new tests added.
+
+- gh auth status check
+- Repo derivation from git remote
+- PR body markdown generation
+- Git push with -C pattern
+- PR creation via gh pr create --body-file
+- PR URL and number parsing
+- Session update to Completed
+- Partial success handling
+
+**Tests:** All 312 tests pass, 7 new unit tests for URL parsing, PR body, PR info parsing
+
+**Checkpoints:**
+- Build passes with no warnings
+- All 312 tests pass
+- D03 no step validation
+- D06 git -C pattern
+- D07 PR body from step summaries
+
+---
 step: #step-1
 date: 2026-02-10T19:14:00Z
 bead: specks-jlu.2
