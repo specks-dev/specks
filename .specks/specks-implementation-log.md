@@ -3,6 +3,28 @@
 This log tracks completed implementation work.
 
 ---
+step: #step-3
+date: 2026-02-10T16:20:59Z
+bead: specks-w87.4
+---
+
+## #step-3: Updated CLI help text and merge skill documentation for dual-mode merge — remote (PR-based) and local (squash merge) workflows documented
+
+- CLI long_about updated with dual-mode workflow
+- skill dry-run preview section updated
+- skill confirmation prompt mode-aware
+- skill results reporting branched on merge_mode
+- merge conflict error case documented
+
+**Tests:** verify_cli
+
+**Checkpoints:**
+- cargo build succeeds with no warnings
+- cargo nextest run passes (330 tests)
+- CLI help text renders correctly
+- SKILL.md covers both modes
+
+---
 step: #step-2
 date: 2026-02-10T16:20:59Z
 bead: specks-w87.3

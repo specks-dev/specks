@@ -137,11 +137,11 @@ pub enum Commands {
     )]
     Session(SessionCommands),
 
-    /// Merge a speck's PR and clean up worktree
+    /// Merge a speck's implementation and clean up worktree
     ///
-    /// Automates the post-implementation merge workflow.
+    /// Automates the post-implementation merge workflow with auto mode detection.
     #[command(
-        long_about = "Merge a speck's PR and clean up worktree.\n\nAutomates:\n  1. Find worktree for speck\n  2. Check main is synced with origin\n  3. Find PR for worktree branch\n  4. Verify PR checks have passed\n  5. Check for uncommitted changes in main\n  6. Auto-commit infrastructure files (agents/, .claude/skills/, etc.)\n  7. Push main to origin\n  8. Merge PR via squash\n  9. Pull main to get squashed commit\n  10. Clean up worktree and branch\n\nInfrastructure files:\n  - agents/*.md\n  - .claude/skills/**\n  - .specks/specks-skeleton.md\n  - .specks/config.toml\n  - .specks/specks-implementation-log.md\n  - .beads/*\n  - CLAUDE.md\n\nUse --dry-run to preview operations without side effects.\nUse --force to proceed with non-infrastructure uncommitted files (not recommended)."
+        long_about = "Merge a speck's implementation and clean up worktree.\n\nMode auto-detection:\n  Remote mode: Repository has 'origin' remote\n  Local mode:  No remote configured\n\nRemote mode workflow:\n  1. Find worktree for speck\n  2. Check main is synced with origin\n  3. Find PR for worktree branch\n  4. Verify PR checks have passed\n  5. Auto-commit infrastructure files\n  6. Push main to origin\n  7. Merge PR via squash\n  8. Pull main to get squashed commit\n  9. Clean up worktree and branch\n\nLocal mode workflow:\n  1. Find worktree for speck\n  2. Check branch has commits to merge\n  3. Auto-commit infrastructure files\n  4. Squash merge branch into main\n  5. Clean up worktree and branch\n\nInfrastructure files (auto-committed):\n  - agents/*.md, skills/**, .claude/skills/**\n  - .specks/specks-skeleton.md, .specks/config.toml\n  - .specks/specks-implementation-log.md\n  - .beads/*, CLAUDE.md\n\nUse --dry-run to preview operations.\nUse --force to proceed with non-infrastructure uncommitted files (not recommended)."
     )]
     Merge {
         /// Speck file path (e.g., .specks/specks-12.md)
