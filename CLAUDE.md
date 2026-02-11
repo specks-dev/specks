@@ -265,29 +265,19 @@ specks merge .specks/specks-12.md --dry-run
 specks merge .specks/specks-12.md
 ```
 
-The merge command:
-1. Finds the worktree for the speck
-2. Checks that main is synced with origin (no unpushed commits)
-3. Finds the PR for the worktree's branch
-4. Verifies all PR checks have passed
-5. Detects uncommitted changes in main
-6. Auto-commits infrastructure files (agents/, .claude/skills/, CLAUDE.md, etc.)
-7. Pushes main to origin
-8. Merges the PR via squash
-9. Pulls main to get the squashed commit
-10. Cleans up the worktree and branch
+The merge command auto-detects the mode based on whether the repository has an `origin` remote and an open PR:
 
-**Infrastructure files** are auto-committed automatically:
-- `agents/*.md` - Agent definition files
-- `skills/**/` - Plugin skill directories and contents
-- `.claude/skills/**/` - Project skill directories and contents
-- `.specks/specks-skeleton.md` - Speck template
-- `.specks/config.toml` - Configuration
-- `.specks/specks-implementation-log.md` - Implementation log
-- `.beads/*` - Beads tracking files
-- `CLAUDE.md` - Project instructions
+- **Remote mode** (has origin + open PR): Squash-merges the PR via `gh pr merge`, then cleans up
+- **Local mode** (no origin, or no open PR): Runs `git merge --squash` directly, then cleans up
 
-The command aborts if non-infrastructure files have uncommitted changes (use `--force` to override, though not recommended).
+Steps:
+1. Finds the worktree for the speck using git-native worktree discovery
+2. Detects merge mode (remote or local)
+3. Reports any uncommitted changes in main as `dirty_files`
+4. Squash-merges (via PR or local branch)
+5. Cleans up the worktree and branch
+
+The `/specks:merge` skill wraps this command with a dry-run preview, user confirmation, and auto-commits any dirty files before merging.
 
 ### Manual Cleanup (Alternative)
 

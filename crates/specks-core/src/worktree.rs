@@ -719,6 +719,88 @@ pub fn list_worktrees(repo_root: &Path) -> Result<Vec<Session>, SpecksError> {
     Ok(sessions)
 }
 
+/// A worktree discovered via `git worktree list`, independent of session files.
+#[derive(Debug, Clone)]
+pub struct DiscoveredWorktree {
+    /// Absolute path to the worktree directory
+    pub path: PathBuf,
+    /// Branch name (e.g., "specks/1-20260208-143022")
+    pub branch: String,
+}
+
+/// Find worktrees for a speck using git-native discovery.
+///
+/// Parses `git worktree list --porcelain` and matches worktrees whose branch
+/// starts with `specks/<slug>-`. This works even when session files are missing
+/// or corrupt, since it relies only on git's own worktree tracking.
+///
+/// If multiple worktrees match (shouldn't happen normally), returns the most
+/// recent one by branch name (which contains a timestamp suffix).
+///
+/// Returns `None` if no matching worktree is found.
+pub fn find_worktree_by_speck(
+    repo_root: &Path,
+    speck_path: &Path,
+) -> Result<Option<DiscoveredWorktree>, SpecksError> {
+    let slug = derive_speck_slug(speck_path);
+    let branch_prefix = format!("specks/{}-", slug);
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .map_err(|e| SpecksError::WorktreeCleanupFailed {
+            reason: format!("failed to run git worktree list: {}", e),
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(SpecksError::WorktreeCleanupFailed {
+            reason: format!("git worktree list failed: {}", stderr),
+        });
+    }
+
+    // Canonicalize repo_root so we can skip the main worktree
+    let canonical_root = repo_root.canonicalize().ok();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut current_path: Option<PathBuf> = None;
+    let mut matches: Vec<DiscoveredWorktree> = Vec::new();
+
+    for line in stdout.lines() {
+        if let Some(path_str) = line.strip_prefix("worktree ") {
+            current_path = Some(PathBuf::from(path_str));
+        } else if let Some(branch_ref) = line.strip_prefix("branch refs/heads/") {
+            if branch_ref.starts_with(&branch_prefix) {
+                if let Some(wt_path) = current_path.take() {
+                    // Skip the main worktree
+                    let is_main = canonical_root
+                        .as_ref()
+                        .and_then(|root| wt_path.canonicalize().ok().map(|p| p == *root))
+                        .unwrap_or(false);
+                    if !is_main {
+                        matches.push(DiscoveredWorktree {
+                            path: wt_path,
+                            branch: branch_ref.to_string(),
+                        });
+                    }
+                }
+            }
+        } else if line.is_empty() {
+            current_path = None;
+        }
+    }
+
+    if matches.is_empty() {
+        return Ok(None);
+    }
+
+    // If multiple, pick the most recent by branch name (contains timestamp)
+    matches.sort_by(|a, b| a.branch.cmp(&b.branch));
+    Ok(matches.into_iter().last())
+}
+
 /// Validate that a worktree path follows the expected pattern
 ///
 /// Valid worktree paths must:
