@@ -451,8 +451,7 @@ fn save_infra_to_temp(repo_root: &Path, infra_files: &[&str]) -> Result<PathBuf,
     let nanos = now.subsec_nanos();
     let temp_dir = std::env::temp_dir().join(format!("specks-merge-{}-{}", timestamp, nanos));
 
-    fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+    fs::create_dir_all(&temp_dir).map_err(|e| format!("Failed to create temp directory: {}", e))?;
 
     // Copy each infrastructure file, preserving directory structure
     for file in infra_files {
@@ -568,8 +567,7 @@ fn restore_infra_from_temp(
     }
 
     // Step 4: Clean up temp directory
-    fs::remove_dir_all(temp_dir)
-        .map_err(|e| format!("Failed to remove temp directory: {}", e))?;
+    fs::remove_dir_all(temp_dir).map_err(|e| format!("Failed to remove temp directory: {}", e))?;
 
     Ok(())
 }
@@ -639,7 +637,9 @@ fn check_main_sync(repo_root: &Path) -> Result<(), String> {
         return Err(format!("Failed to get local main hash: {}", stderr));
     }
 
-    let local_hash = String::from_utf8_lossy(&local_output.stdout).trim().to_string();
+    let local_hash = String::from_utf8_lossy(&local_output.stdout)
+        .trim()
+        .to_string();
 
     // Step 3: Get origin/main hash
     let remote_output = Command::new("git")
@@ -654,7 +654,9 @@ fn check_main_sync(repo_root: &Path) -> Result<(), String> {
         return Err(format!("Failed to get origin/main hash: {}", stderr));
     }
 
-    let remote_hash = String::from_utf8_lossy(&remote_output.stdout).trim().to_string();
+    let remote_hash = String::from_utf8_lossy(&remote_output.stdout)
+        .trim()
+        .to_string();
 
     // Step 4: Compare hashes
     if local_hash != remote_hash {
@@ -843,7 +845,10 @@ pub fn run_merge(
         // Save and discard infrastructure files if present
         let _guard = if !infra_files.is_empty() {
             if !quiet {
-                eprintln!("Saving {} infrastructure file(s) to temp...", infra_files.len());
+                eprintln!(
+                    "Saving {} infrastructure file(s) to temp...",
+                    infra_files.len()
+                );
             }
             let temp_backup = save_infra_to_temp(&repo_root, &infra_files)?;
             let guard = TempDirGuard::new(
@@ -880,7 +885,10 @@ pub fn run_merge(
         let mut cmd = Command::new("gh");
         cmd.args(["pr", "merge", "--squash", branch]);
         if let Err(e) = run_cmd(&mut cmd, &format!("gh pr merge --squash {}", branch)) {
-            let err_msg = format!("Failed to merge PR: {}. Working tree has been restored to pre-merge state.", e);
+            let err_msg = format!(
+                "Failed to merge PR: {}. Working tree has been restored to pre-merge state.",
+                e
+            );
             let data = MergeData {
                 status: "error".to_string(),
                 merge_mode: Some("remote".to_string()),
@@ -909,7 +917,10 @@ pub fn run_merge(
             .arg(&repo_root)
             .args(["pull", "--ff-only", "origin", "main"]);
         if let Err(e) = run_cmd(&mut pull_cmd, "git pull --ff-only origin main") {
-            let err_msg = format!("Failed to pull after merge: {}. Working tree has been restored to pre-merge state.", e);
+            let err_msg = format!(
+                "Failed to pull after merge: {}. Working tree has been restored to pre-merge state.",
+                e
+            );
             let data = MergeData {
                 status: "error".to_string(),
                 merge_mode: Some("remote".to_string()),
@@ -1799,7 +1810,11 @@ mod tests {
         let clone_dir = TempDir::new().unwrap();
         let clone_path = clone_dir.path();
         Command::new("git")
-            .args(["clone", origin_path.to_str().unwrap(), clone_path.to_str().unwrap()])
+            .args([
+                "clone",
+                origin_path.to_str().unwrap(),
+                clone_path.to_str().unwrap(),
+            ])
             .output()
             .expect("git clone");
 
@@ -1861,7 +1876,11 @@ mod tests {
         let clone_dir = TempDir::new().unwrap();
         let clone_path = clone_dir.path();
         Command::new("git")
-            .args(["clone", origin_path.to_str().unwrap(), clone_path.to_str().unwrap()])
+            .args([
+                "clone",
+                origin_path.to_str().unwrap(),
+                clone_path.to_str().unwrap(),
+            ])
             .output()
             .expect("git clone");
 
@@ -1919,8 +1938,16 @@ mod tests {
         let result = check_main_sync(clone_path);
         assert!(result.is_err(), "Expected sync check to fail");
         let err = result.unwrap_err();
-        assert!(err.contains("out of sync"), "Error should mention sync: {}", err);
-        assert!(err.contains("git push origin main"), "Error should suggest push: {}", err);
+        assert!(
+            err.contains("out of sync"),
+            "Error should mention sync: {}",
+            err
+        );
+        assert!(
+            err.contains("git push origin main"),
+            "Error should suggest push: {}",
+            err
+        );
     }
 
     #[test]
@@ -1935,9 +1962,16 @@ mod tests {
 
         // Check sync — should fail because no origin remote
         let result = check_main_sync(temp_path);
-        assert!(result.is_err(), "Expected sync check to fail without origin");
+        assert!(
+            result.is_err(),
+            "Expected sync check to fail without origin"
+        );
         let err = result.unwrap_err();
-        assert!(err.contains("Failed to"), "Error should indicate fetch failure: {}", err);
+        assert!(
+            err.contains("Failed to"),
+            "Error should indicate fetch failure: {}",
+            err
+        );
     }
 
     // -- Infrastructure save/restore tests --
@@ -1970,9 +2004,11 @@ mod tests {
         // Verify temp directory exists
         assert!(temp_backup.exists());
         assert!(temp_backup.join(".specks/config.toml").exists());
-        assert!(temp_backup
-            .join(".specks/specks-implementation-log.md")
-            .exists());
+        assert!(
+            temp_backup
+                .join(".specks/specks-implementation-log.md")
+                .exists()
+        );
 
         // Verify content
         let config_content = fs::read_to_string(temp_backup.join(".specks/config.toml")).unwrap();
@@ -2014,8 +2050,7 @@ mod tests {
         copy_infra_from_temp(&temp_backup, repo_path, &infra_files).unwrap();
 
         // Verify content was restored
-        let restored =
-            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        let restored = fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
         assert_eq!(restored, "original");
 
         // Verify nothing is staged (copy doesn't touch git)
@@ -2070,8 +2105,7 @@ mod tests {
         restore_infra_from_temp(&temp_backup, repo_path, &infra_files).unwrap();
 
         // Verify content was restored
-        let restored =
-            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        let restored = fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
         assert_eq!(restored, "original");
 
         // Verify changes are committed
@@ -2111,7 +2145,11 @@ mod tests {
         let temp_backup = save_infra_to_temp(repo_path, &infra_files).unwrap();
 
         // Modify original significantly
-        fs::write(repo_path.join(".specks/config.toml"), "completely different").unwrap();
+        fs::write(
+            repo_path.join(".specks/config.toml"),
+            "completely different",
+        )
+        .unwrap();
         Command::new("git")
             .arg("-C")
             .arg(repo_path)
@@ -2129,8 +2167,7 @@ mod tests {
         restore_infra_from_temp(&temp_backup, repo_path, &infra_files).unwrap();
 
         // Verify exact content match
-        let final_content =
-            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        let final_content = fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
         assert_eq!(
             final_content, original_content,
             "Content should be identical to original"
@@ -2148,11 +2185,7 @@ mod tests {
 
         // Create nested infrastructure structure after initial commit
         fs::create_dir_all(repo_path.join(".specks/archive")).unwrap();
-        fs::write(
-            repo_path.join(".specks/archive/old.md"),
-            "archived content",
-        )
-        .unwrap();
+        fs::write(repo_path.join(".specks/archive/old.md"), "archived content").unwrap();
         fs::create_dir_all(repo_path.join(".beads")).unwrap();
         fs::write(repo_path.join(".beads/beads.jsonl"), "{}").unwrap();
 
@@ -2166,8 +2199,7 @@ mod tests {
         assert!(temp_backup.join(".beads/beads.jsonl").exists());
 
         // Verify content
-        let archived =
-            fs::read_to_string(temp_backup.join(".specks/archive/old.md")).unwrap();
+        let archived = fs::read_to_string(temp_backup.join(".specks/archive/old.md")).unwrap();
         assert_eq!(archived, "archived content");
 
         // Cleanup
@@ -2206,8 +2238,7 @@ mod tests {
         }
 
         // Verify content was restored by drop
-        let restored =
-            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        let restored = fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
         assert_eq!(restored, "original", "Drop should have restored the file");
     }
 
@@ -2245,8 +2276,7 @@ mod tests {
         }
 
         // Verify content was NOT restored (defused)
-        let final_content =
-            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        let final_content = fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
         assert_eq!(
             final_content, "modified",
             "Defused guard should not restore files"
@@ -2848,7 +2878,11 @@ mod tests {
             );
 
             // Modify file (simulating changes during merge)
-            fs::write(repo_path.join(".specks/config.toml"), "modified during merge").unwrap();
+            fs::write(
+                repo_path.join(".specks/config.toml"),
+                "modified during merge",
+            )
+            .unwrap();
 
             // Guard drops here (simulates pull failure)
         }
