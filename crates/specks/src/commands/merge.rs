@@ -567,7 +567,57 @@ pub fn run_merge(
         }
     };
 
-    // Step 2: Check main sync status
+    // Step 1a: Detect merge mode (local vs remote)
+    let has_origin = has_remote_origin();
+    let merge_mode = if has_origin { "remote" } else { "local" };
+
+    // Step 1b: In local mode, check if branch has commits to merge
+    if !has_origin {
+        let count_output = Command::new("git")
+            .args(["rev-list", "--count", &format!("main..{}", session.branch_name)])
+            .output()
+            .map_err(|e| format!("Failed to check branch commits: {}", e))?;
+
+        if count_output.status.success() {
+            let count_str = String::from_utf8_lossy(&count_output.stdout);
+            let count: u32 = count_str.trim().parse().unwrap_or(0);
+
+            if count == 0 {
+                let error_msg = format!(
+                    "Branch '{}' has no commits to merge into main",
+                    session.branch_name
+                );
+
+                let data = MergeData {
+                    status: "error".to_string(),
+                    pr_url: None,
+                    pr_number: None,
+                    branch_name: Some(session.branch_name.clone()),
+                    infrastructure_committed: None,
+                    infrastructure_files: None,
+                    worktree_cleaned: None,
+                    dry_run,
+                    would_commit: None,
+                    would_merge_pr: None,
+                    would_cleanup_worktree: None,
+                    merge_mode: Some(merge_mode.to_string()),
+                    squash_commit: None,
+                    would_squash_merge: None,
+                    error: Some(error_msg.clone()),
+                    message: None,
+                };
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&data).unwrap());
+                }
+                return Err(error_msg);
+            }
+        }
+    }
+
+    // Remote-only steps (Steps 2-5): Skip in local mode
+    let pr_info = if has_origin {
+            // Step 2: Check main sync status
     if let Err(e) = check_main_sync() {
         let data = MergeData {
             status: "error".to_string(),
@@ -666,7 +716,12 @@ pub fn run_merge(
         return Err(e);
     }
 
-    // Step 6: Categorize uncommitted files
+        Some(pr_info)
+    } else {
+        None
+    };
+
+        // Step 6: Categorize uncommitted files
     let (infrastructure, other) = match categorize_uncommitted(None) {
         Ok(result) => result,
         Err(e) => {
