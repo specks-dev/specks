@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-6
+date: 2025-02-11T18:35:20Z
+bead: specks-tgg.7
+---
+
+## #step-6: Simplify implementer-setup-agent: 636→233 lines, 8→3 phases, delegate infrastructure to enriched CLI
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
 step: #step-5
 date: 2025-02-11T18:29:20Z
 bead: specks-tgg.6
