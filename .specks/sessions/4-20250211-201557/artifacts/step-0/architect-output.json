@@ -1,0 +1,25 @@
+{
+  "step_anchor": "#step-0",
+  "approach": "Add a fail-fast synchronization check for remote mode that fetches origin/main and compares it with local HEAD. If they differ, return an error with actionable guidance to push first. This helper will be called early in the remote-mode merge flow, before any merge operations begin. The check runs during both dry-run and actual merge to surface problems early. Unit tests will cover sync success, divergence detection, and missing remote scenarios.",
+  "expected_touch_set": [
+    "crates/specks/src/commands/merge.rs"
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "description": "Add check_main_sync helper function at the end of merge.rs (after existing helper functions, before run_merge). Implements Spec S01: fetch origin/main, compare rev-parse HEAD vs rev-parse origin/main, return Ok if equal or Err with actionable message if diverged.",
+      "files": ["crates/specks/src/commands/merge.rs"]
+    },
+    {
+      "order": 2,
+      "description": "Add unit tests for check_main_sync: test_check_main_sync_in_sync (bare origin setup with matching HEADs), test_check_main_sync_diverged (local commit not on origin), test_check_main_sync_no_origin (repo without remote).",
+      "files": ["crates/specks/src/commands/merge.rs"]
+    }
+  ],
+  "test_plan": "Run cargo nextest run -p specks --filter-expr 'test(check_main_sync)' to verify all three test cases pass. Run cargo build to ensure zero warnings. The tests will use tempfile::TempDir with bare git repos (same pattern as worktree_integration_tests.rs) to simulate origin relationships without network access.",
+  "risks": [
+    "The function depends on git commands that could fail in edge cases (detached HEAD, corrupted refs)",
+    "Network or fetch failures should produce clear error messages, not panic",
+    "Test setup needs to correctly simulate bare origin repos with diverged state"
+  ]
+}
