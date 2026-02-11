@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-1
+date: 2025-02-11T17:41:55Z
+bead: specks-tgg.2
+---
+
+## #step-1: Remove --sync-beads flag, make beads sync always-on during worktree creation
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
 step: #step-0
 date: 2025-02-11T17:33:54Z
 bead: specks-tgg.1

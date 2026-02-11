@@ -63,11 +63,9 @@ fn main() -> ExitCode {
             WorktreeCommands::Create {
                 speck,
                 base,
-                sync_beads,
             } => commands::run_worktree_create(
                 speck,
                 base,
-                sync_beads,
                 cli.json,
                 cli.quiet,
             ),

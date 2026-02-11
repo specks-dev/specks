@@ -21,7 +21,7 @@ pub enum WorktreeCommands {
     ///
     /// Creates a git worktree and branch for implementing a speck in isolation.
     #[command(
-        long_about = "Create worktree for speck implementation.\n\nCreates:\n  - Branch: specks/<slug>-<timestamp>\n  - Worktree: .specks-worktrees/<sanitized-branch-name>/\n  - Session: session.json tracking state\n\nWith --sync-beads:\n  - Atomically syncs beads and commits annotations in worktree\n  - Full rollback if sync or commit fails\n\nWorktree creation is idempotent:\n  - Returns existing worktree if one exists for this speck\n  - Creates new worktree if none exists\n\nValidates that the speck has at least one execution step."
+        long_about = "Create worktree for speck implementation.\n\nCreates:\n  - Branch: specks/<slug>-<timestamp>\n  - Worktree: .specks-worktrees/<sanitized-branch-name>/\n  - Session: session.json tracking state\n\nBeads sync is always-on:\n  - Atomically syncs beads and commits annotations in worktree\n  - Full rollback if sync or commit fails\n\nWorktree creation is idempotent:\n  - Returns existing worktree if one exists for this speck\n  - Creates new worktree if none exists\n\nValidates that the speck has at least one execution step."
     )]
     Create {
         /// Speck file to implement
@@ -30,10 +30,6 @@ pub enum WorktreeCommands {
         /// Base branch to create worktree from (default: main)
         #[arg(long, default_value = "main")]
         base: String,
-
-        /// Sync beads and commit annotations after worktree creation
-        #[arg(long)]
-        sync_beads: bool,
     },
 
     /// List active worktrees with status
@@ -291,14 +287,12 @@ fn rollback_worktree_creation(
 pub fn run_worktree_create(
     speck: String,
     base: String,
-    sync_beads: bool,
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
     run_worktree_create_with_root(
         speck,
         base,
-        sync_beads,
         json_output,
         quiet,
         None,
@@ -309,7 +303,6 @@ pub fn run_worktree_create(
 pub fn run_worktree_create_with_root(
     speck: String,
     base: String,
-    sync_beads: bool,
     json_output: bool,
     quiet: bool,
     override_root: Option<&Path>,
@@ -341,92 +334,84 @@ pub fn run_worktree_create_with_root(
 
     match create_worktree(&config) {
         Ok(session) => {
-            let mut bead_mapping = None;
-            let mut root_bead_id = None;
+            // Sync beads and commit (always-on)
+            let worktree_path = PathBuf::from(&session.worktree_path);
+            let speck_name = speck_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
 
-            // If --sync-beads flag is set, sync beads and commit
-            if sync_beads {
-                let worktree_path = PathBuf::from(&session.worktree_path);
-                let speck_name = speck_path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown");
-
-                // Try to sync beads
-                match sync_beads_in_worktree(&worktree_path, &speck) {
-                    Ok((mapping, root_id)) => {
-                        // Try to commit the changes
-                        match commit_bead_annotations(&worktree_path, &speck, speck_name) {
-                            Ok(()) => {
-                                bead_mapping = Some(mapping);
-                                root_bead_id = root_id;
-                            }
-                            Err(e) => {
-                                // Commit failed - rollback
-                                let _ = rollback_worktree_creation(
-                                    &worktree_path,
-                                    &session.branch_name,
-                                    &repo_root,
-                                );
-
-                                if json_output {
-                                    let data = CreateData {
-                                        worktree_path: String::new(),
-                                        branch_name: String::new(),
-                                        base_branch: session.base_branch.clone(),
-                                        speck_path: session.speck_path.clone(),
-                                        total_steps: 0,
-                                        bead_mapping: None,
-                                        root_bead_id: None,
-                                        rollback_performed: true,
-                                        reused: false,
-                                    };
-                                    eprintln!(
-                                        "{}",
-                                        serde_json::to_string_pretty(&data)
-                                            .map_err(|e| e.to_string())?
-                                    );
-                                } else if !quiet {
-                                    eprintln!("error: {}", e);
-                                    eprintln!("Rolled back worktree creation");
-                                }
-                                return Ok(e.exit_code());
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        // Sync failed - rollback
-                        let worktree_path = PathBuf::from(&session.worktree_path);
-                        let _ = rollback_worktree_creation(
-                            &worktree_path,
-                            &session.branch_name,
-                            &repo_root,
-                        );
-
-                        if json_output {
-                            let data = CreateData {
-                                worktree_path: String::new(),
-                                branch_name: String::new(),
-                                base_branch: session.base_branch.clone(),
-                                speck_path: session.speck_path.clone(),
-                                total_steps: 0,
-                                bead_mapping: None,
-                                root_bead_id: None,
-                                rollback_performed: true,
-                                reused: false,
-                            };
-                            eprintln!(
-                                "{}",
-                                serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
+            // Try to sync beads
+            let (bead_mapping, root_bead_id) = match sync_beads_in_worktree(&worktree_path, &speck) {
+                Ok((mapping, root_id)) => {
+                    // Try to commit the changes
+                    match commit_bead_annotations(&worktree_path, &speck, speck_name) {
+                        Ok(()) => (Some(mapping), root_id),
+                        Err(e) => {
+                            // Commit failed - rollback
+                            let _ = rollback_worktree_creation(
+                                &worktree_path,
+                                &session.branch_name,
+                                &repo_root,
                             );
-                        } else if !quiet {
-                            eprintln!("error: {}", e);
-                            eprintln!("Rolled back worktree creation");
+
+                            if json_output {
+                                let data = CreateData {
+                                    worktree_path: String::new(),
+                                    branch_name: String::new(),
+                                    base_branch: session.base_branch.clone(),
+                                    speck_path: session.speck_path.clone(),
+                                    total_steps: 0,
+                                    bead_mapping: None,
+                                    root_bead_id: None,
+                                    rollback_performed: true,
+                                    reused: false,
+                                };
+                                eprintln!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&data)
+                                        .map_err(|e| e.to_string())?
+                                );
+                            } else if !quiet {
+                                eprintln!("error: {}", e);
+                                eprintln!("Rolled back worktree creation");
+                            }
+                            return Ok(e.exit_code());
                         }
-                        return Ok(e.exit_code());
                     }
                 }
-            }
+                Err(e) => {
+                    // Sync failed - rollback
+                    let worktree_path = PathBuf::from(&session.worktree_path);
+                    let _ = rollback_worktree_creation(
+                        &worktree_path,
+                        &session.branch_name,
+                        &repo_root,
+                    );
+
+                    if json_output {
+                        let data = CreateData {
+                            worktree_path: String::new(),
+                            branch_name: String::new(),
+                            base_branch: session.base_branch.clone(),
+                            speck_path: session.speck_path.clone(),
+                            total_steps: 0,
+                            bead_mapping: None,
+                            root_bead_id: None,
+                            rollback_performed: true,
+                            reused: false,
+                        };
+                        eprintln!(
+                            "{}",
+                            serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
+                        );
+                    } else if !quiet {
+                        eprintln!("error: {}", e);
+                        eprintln!("Rolled back worktree creation");
+                    }
+                    return Ok(e.exit_code());
+                }
+            };
 
             if json_output {
                 let data = CreateData {
@@ -981,7 +966,7 @@ mod tests {
     }
 
     #[test]
-    fn test_worktree_create_help_includes_sync_beads() {
+    fn test_worktree_create_help_documents_always_on_beads() {
         use crate::cli::Cli;
         use clap::CommandFactory;
 
@@ -1001,10 +986,10 @@ mod tests {
             .get_long_about()
             .expect("create should have long_about");
 
-        // Verify --sync-beads flag is documented
+        // Verify beads sync is documented as always-on
         assert!(
-            long_about.to_string().contains("--sync-beads"),
-            "create help should document --sync-beads flag"
+            long_about.to_string().contains("always-on"),
+            "create help should document always-on beads sync"
         );
         assert!(
             long_about.to_string().contains("atomically")
