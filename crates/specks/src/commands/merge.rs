@@ -37,6 +37,12 @@ pub struct MergeData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub would_cleanup_worktree: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub merge_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub squash_commit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub would_squash_merge: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -505,6 +511,23 @@ fn validate_pr_state(pr_info: &PrInfo) -> Result<(), String> {
     Ok(())
 }
 
+/// Check if repository has a remote named 'origin'
+///
+/// Executes `git remote get-url origin` and checks if it succeeds.
+///
+/// # Returns
+/// * `true` - Remote origin exists
+/// * `false` - No remote origin configured
+// Will be used in step 1 for local merge mode detection
+#[allow(dead_code)]
+fn has_remote_origin() -> bool {
+    Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 /// Run the merge command
 ///
 /// Implements the full merge workflow with pre-merge validations,
@@ -530,6 +553,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(e.clone()),
             message: None,
         };
@@ -556,6 +582,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(e.clone()),
                 message: None,
             };
@@ -581,6 +610,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(e.clone()),
             message: None,
         };
@@ -607,6 +639,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(e.clone()),
                 message: None,
             };
@@ -632,6 +667,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(e.clone()),
             message: None,
         };
@@ -656,6 +694,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(e.clone()),
             message: None,
         };
@@ -682,6 +723,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(e.clone()),
                 message: None,
             };
@@ -712,6 +756,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(error_msg.clone()),
             message: None,
         };
@@ -748,6 +795,9 @@ pub fn run_merge(
             },
             would_merge_pr: Some(pr_info.url.clone()),
             would_cleanup_worktree: Some(worktree_path.display().to_string()),
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: None,
             message: Some(format!(
                 "Would merge PR #{} for worktree at {}",
@@ -805,6 +855,9 @@ pub fn run_merge(
                     would_commit: None,
                     would_merge_pr: None,
                     would_cleanup_worktree: None,
+                    merge_mode: None,
+                    squash_commit: None,
+                    would_squash_merge: None,
                     error: Some(error_msg.clone()),
                     message: None,
                 };
@@ -845,6 +898,9 @@ pub fn run_merge(
                     would_commit: None,
                     would_merge_pr: None,
                     would_cleanup_worktree: None,
+                    merge_mode: None,
+                    squash_commit: None,
+                    would_squash_merge: None,
                     error: Some(error_msg.clone()),
                     message: None,
                 };
@@ -885,6 +941,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(format!("Pre-push sync check failed: {}", e)),
                 message: None,
             };
@@ -914,6 +973,9 @@ pub fn run_merge(
                 would_commit: None,
                 would_merge_pr: None,
                 would_cleanup_worktree: None,
+                merge_mode: None,
+                squash_commit: None,
+                would_squash_merge: None,
                 error: Some(error_msg.clone()),
                 message: None,
             };
@@ -960,6 +1022,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(error_msg.clone()),
             message: None,
         };
@@ -998,6 +1063,9 @@ pub fn run_merge(
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some(error_msg.clone()),
             message: None,
         };
@@ -1101,6 +1169,9 @@ pub fn run_merge(
         would_commit: None,
         would_merge_pr: None,
         would_cleanup_worktree: None,
+        merge_mode: None,
+        squash_commit: None,
+        would_squash_merge: None,
         error: None,
         message: Some(format!(
             "Successfully merged PR #{} and cleaned up worktree",
@@ -1906,6 +1977,9 @@ mod tests {
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: None,
             message: Some("Successfully merged PR #123 and cleaned up worktree".to_string()),
         };
@@ -1936,6 +2010,9 @@ mod tests {
             would_commit: Some(vec!["CLAUDE.md".to_string(), "agents/coder-agent.md".to_string()]),
             would_merge_pr: Some("https://github.com/owner/repo/pull/123".to_string()),
             would_cleanup_worktree: Some(".specks-worktrees/specks__feature-20260209-120000".to_string()),
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: None,
             message: Some("Would merge PR #123 for worktree at .specks-worktrees/specks__feature-20260209-120000".to_string()),
         };
@@ -1968,6 +2045,9 @@ mod tests {
             would_commit: None,
             would_merge_pr: None,
             would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
             error: Some("Main branch has 2 unpushed commits. Run 'git push' first.".to_string()),
             message: None,
         };
@@ -2353,5 +2433,192 @@ mod tests {
             "Error should include command name, got: {}",
             error
         );
+    }
+
+    // Tests for has_remote_origin
+
+    #[test]
+    fn test_has_remote_origin_with_remote() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo with a remote
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // Add a remote origin
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["remote", "add", "origin", "https://github.com/test/repo.git"])
+            .output()
+            .expect("Failed to add remote");
+
+        // Change to the temp directory and test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = has_remote_origin();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert!(result, "Expected has_remote_origin to return true when remote exists");
+    }
+
+    #[test]
+    fn test_has_remote_origin_without_remote() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        // Create a temporary git repo without a remote
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Initialize git repo
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["init"])
+            .output()
+            .expect("Failed to init git repo");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("Failed to configure git");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("Failed to configure git");
+
+        // Create initial commit
+        std::fs::write(temp_path.join("README.md"), "Test repo").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("Failed to add README");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("Failed to commit");
+
+        // No remote added - test immediately
+        // Change to the temp directory and test
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = has_remote_origin();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert!(!result, "Expected has_remote_origin to return false when no remote exists");
+    }
+
+    // Tests for MergeData serialization with new fields
+
+    #[test]
+    fn test_merge_data_serialization_with_new_fields() {
+        // Test that new fields are included when set
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: Some("https://github.com/owner/repo/pull/123".to_string()),
+            pr_number: Some(123),
+            branch_name: Some("specks/feature-20260209-120000".to_string()),
+            infrastructure_committed: Some(true),
+            infrastructure_files: Some(vec!["CLAUDE.md".to_string()]),
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            merge_mode: Some("local".to_string()),
+            squash_commit: Some("abc123".to_string()),
+            would_squash_merge: Some("Would squash 3 commits".to_string()),
+            error: None,
+            message: Some("Success".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"merge_mode\": \"local\""));
+        assert!(json.contains("\"squash_commit\": \"abc123\""));
+        assert!(json.contains("\"would_squash_merge\": \"Would squash 3 commits\""));
+    }
+
+    #[test]
+    fn test_merge_data_serialization_omits_none_new_fields() {
+        // Test that new fields are omitted when None
+        let data = MergeData {
+            status: "ok".to_string(),
+            pr_url: Some("https://github.com/owner/repo/pull/123".to_string()),
+            pr_number: Some(123),
+            branch_name: Some("specks/feature-20260209-120000".to_string()),
+            infrastructure_committed: Some(true),
+            infrastructure_files: Some(vec!["CLAUDE.md".to_string()]),
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            would_commit: None,
+            would_merge_pr: None,
+            would_cleanup_worktree: None,
+            merge_mode: None,
+            squash_commit: None,
+            would_squash_merge: None,
+            error: None,
+            message: Some("Success".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(!json.contains("\"merge_mode\""));
+        assert!(!json.contains("\"squash_commit\""));
+        assert!(!json.contains("\"would_squash_merge\""));
     }
 }

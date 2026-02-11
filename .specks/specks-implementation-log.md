@@ -9,6 +9,28 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-0
+date: 2026-02-10T16:20:59Z
+bead: specks-w87.1
+---
+
+## #step-0: Added has_remote_origin() helper and extended MergeData with merge_mode, squash_commit, would_squash_merge fields
+
+- has_remote_origin() function
+- merge_mode field
+- squash_commit field
+- would_squash_merge field
+- all construction sites updated
+
+**Tests:** test_has_remote_origin_with_remote, test_has_remote_origin_without_remote, test_merge_data_serialization_with_new_fields, test_merge_data_serialization_omits_none_new_fields
+
+**Checkpoints:**
+- cargo nextest run passes (322 tests)
+- cargo build succeeds with no warnings
+
+---
+
+---
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
