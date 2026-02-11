@@ -36,10 +36,9 @@ pub enum Commands {
     /// Initialize a specks project in current directory
     ///
     /// Creates .specks/ directory with skeleton template and config.
-    /// Creates .specks/ directory with skeleton template and config.
-    /// Run this once in your project root to start using specks.
+    /// Idempotent: safe to run multiple times (creates only missing files).
     #[command(
-        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Implementation progress tracking\n\nWith --check, performs a lightweight verification of initialization status without side effects."
+        long_about = "Initialize a specks project in current directory.\n\nCreates:\n  .specks/specks-skeleton.md  Template for new specks\n  .specks/config.toml         Project configuration\n  .specks/specks-implementation-log.md  Implementation progress tracking\n\nIdempotent: if .specks/ already exists, creates only missing files without overwriting.\nWith --force, removes and recreates everything.\nWith --check, performs a lightweight verification of initialization status without side effects."
     )]
     Init {
         /// Overwrite existing .specks directory

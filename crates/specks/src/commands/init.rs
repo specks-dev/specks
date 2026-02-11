@@ -4,7 +4,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
-use crate::output::{InitCheckData, InitData, JsonIssue, JsonResponse};
+use crate::output::{InitCheckData, InitData, JsonResponse};
 
 /// Embedded skeleton content
 const SKELETON_CONTENT: &str = include_str!("../../../../.specks/specks-skeleton.md");
@@ -100,34 +100,60 @@ pub fn run_init(force: bool, check: bool, json_output: bool, quiet: bool) -> Res
     }
     let specks_dir = Path::new(".specks");
 
-    // Check if already exists
+    // When .specks/ exists and --force is not set, create only missing files (idempotent).
+    // When --force is set, remove and recreate everything.
     if specks_dir.exists() && !force {
-        let message = ".specks directory already exists (use --force to overwrite)".to_string();
+        // Idempotent mode: create only missing files
+        let mut files_created = vec![];
+
+        let skeleton_path = specks_dir.join("specks-skeleton.md");
+        if !skeleton_path.exists() {
+            fs::write(&skeleton_path, SKELETON_CONTENT)
+                .map_err(|e| format!("failed to write specks-skeleton.md: {}", e))?;
+            files_created.push("specks-skeleton.md".to_string());
+        }
+
+        let config_path = specks_dir.join("config.toml");
+        if !config_path.exists() {
+            fs::write(&config_path, DEFAULT_CONFIG)
+                .map_err(|e| format!("failed to write config.toml: {}", e))?;
+            files_created.push("config.toml".to_string());
+        }
+
+        let log_path = specks_dir.join("specks-implementation-log.md");
+        if !log_path.exists() {
+            fs::write(&log_path, IMPLEMENTATION_LOG_CONTENT)
+                .map_err(|e| format!("failed to write specks-implementation-log.md: {}", e))?;
+            files_created.push("specks-implementation-log.md".to_string());
+        }
+
+        // Handle .gitignore even in idempotent mode
+        ensure_gitignore(quiet)?;
+
         if json_output {
-            let issues = vec![JsonIssue {
-                code: "E009".to_string(),
-                severity: "error".to_string(),
-                message: message.clone(),
-                file: Some(".specks/".to_string()),
-                line: None,
-                anchor: None,
-            }];
-            let response: JsonResponse<InitData> = JsonResponse::error(
+            let response = JsonResponse::ok(
                 "init",
                 InitData {
                     path: ".specks/".to_string(),
-                    files_created: vec![],
+                    files_created: files_created.clone(),
                 },
-                issues,
             );
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
-        } else {
-            eprintln!("error: {}", message);
+        } else if !quiet {
+            if files_created.is_empty() {
+                println!("Specks project already initialized in .specks/ (nothing to do)");
+            } else {
+                println!("Specks project in .specks/ updated with missing files:");
+                for f in &files_created {
+                    println!("  Created: {}", f);
+                }
+            }
         }
-        return Ok(1);
+
+        return Ok(0);
     }
 
-    // Create directory (remove first if force)
+    // Force mode: remove and recreate everything
     if force && specks_dir.exists() {
         fs::remove_dir_all(specks_dir)
             .map_err(|e| format!("failed to remove existing .specks directory: {}", e))?;
@@ -151,41 +177,7 @@ pub fn run_init(force: bool, check: bool, json_output: bool, quiet: bool) -> Res
     fs::write(&log_path, IMPLEMENTATION_LOG_CONTENT)
         .map_err(|e| format!("failed to write specks-implementation-log.md: {}", e))?;
 
-    // Ensure .specks-worktrees/ is in .gitignore
-    let gitignore_path = Path::new(".gitignore");
-    let gitignore_entry = ".specks-worktrees/";
-
-    let should_add_entry = if gitignore_path.exists() {
-        let content = fs::read_to_string(gitignore_path)
-            .map_err(|e| format!("failed to read .gitignore: {}", e))?;
-        !content.lines().any(|line| line.trim() == gitignore_entry)
-    } else {
-        true
-    };
-
-    if should_add_entry {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(gitignore_path)
-            .map_err(|e| format!("failed to open .gitignore: {}", e))?;
-
-        // Add newline before entry if file exists and doesn't end with newline
-        if gitignore_path.exists() {
-            let content = fs::read_to_string(gitignore_path).unwrap_or_default();
-            if !content.is_empty() && !content.ends_with('\n') {
-                writeln!(file).map_err(|e| format!("failed to write to .gitignore: {}", e))?;
-            }
-        }
-
-        writeln!(
-            file,
-            "\n# Specks worktrees (isolated implementation environments)"
-        )
-        .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
-        writeln!(file, "{}", gitignore_entry)
-            .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
-    }
+    ensure_gitignore(quiet)?;
 
     let files_created = vec![
         "specks-skeleton.md".to_string(),
@@ -207,19 +199,48 @@ pub fn run_init(force: bool, check: bool, json_output: bool, quiet: bool) -> Res
         println!("  Created: specks-skeleton.md");
         println!("  Created: config.toml");
         println!("  Created: specks-implementation-log.md");
-        if should_add_entry {
-            println!("  Updated: .gitignore (added .specks-worktrees/)");
-            println!("  Updated: .gitignore (added .specks-worktrees/)");
-        }
-
-        // Note about plugin-based workflow
-        println!();
-        println!("To use specks with Claude Code:");
-        println!("  claude --plugin-dir /path/to/specks");
-        println!("  Then use /specks:planner and /specks:implementer");
     }
 
     Ok(0)
+}
+
+/// Ensure .specks-worktrees/ is listed in .gitignore
+fn ensure_gitignore(_quiet: bool) -> Result<(), String> {
+    let gitignore_path = Path::new(".gitignore");
+    let gitignore_entry = ".specks-worktrees/";
+
+    let should_add_entry = if gitignore_path.exists() {
+        let content = fs::read_to_string(gitignore_path)
+            .map_err(|e| format!("failed to read .gitignore: {}", e))?;
+        !content.lines().any(|line| line.trim() == gitignore_entry)
+    } else {
+        true
+    };
+
+    if should_add_entry {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(gitignore_path)
+            .map_err(|e| format!("failed to open .gitignore: {}", e))?;
+
+        if gitignore_path.exists() {
+            let content = fs::read_to_string(gitignore_path).unwrap_or_default();
+            if !content.is_empty() && !content.ends_with('\n') {
+                writeln!(file).map_err(|e| format!("failed to write to .gitignore: {}", e))?;
+            }
+        }
+
+        writeln!(
+            file,
+            "\n# Specks worktrees (isolated implementation environments)"
+        )
+        .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
+        writeln!(file, "{}", gitignore_entry)
+            .map_err(|e| format!("failed to write to .gitignore: {}", e))?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

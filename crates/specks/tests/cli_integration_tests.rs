@@ -144,9 +144,10 @@ fn test_init_creates_expected_files() {
 }
 
 #[test]
-fn test_init_fails_without_force() {
+fn test_init_idempotent_on_existing_project() {
     let temp = setup_test_project();
 
+    // Running init again should succeed (idempotent — creates missing files only)
     let output = Command::new(specks_binary())
         .arg("init")
         .current_dir(temp.path())
@@ -154,9 +155,47 @@ fn test_init_fails_without_force() {
         .expect("failed to run specks init");
 
     assert!(
-        !output.status.success(),
-        "init without force should fail on existing project"
+        output.status.success(),
+        "init should succeed idempotently on existing project"
     );
+
+    // All files should still exist
+    let specks_dir = temp.path().join(".specks");
+    assert!(specks_dir.join("specks-skeleton.md").is_file());
+    assert!(specks_dir.join("config.toml").is_file());
+    assert!(specks_dir.join("specks-implementation-log.md").is_file());
+}
+
+#[test]
+fn test_init_creates_missing_files() {
+    let temp = tempfile::tempdir().expect("failed to create temp dir");
+
+    // Create .specks/ with only a speck file (simulates worktree scenario)
+    let specks_dir = temp.path().join(".specks");
+    std::fs::create_dir_all(&specks_dir).expect("failed to create .specks");
+    std::fs::write(specks_dir.join("specks-1.md"), "# My Speck\n").expect("failed to write speck");
+
+    // Running init should create the missing infrastructure files
+    let output = Command::new(specks_binary())
+        .arg("init")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks init");
+
+    assert!(
+        output.status.success(),
+        "init should succeed and create missing files"
+    );
+
+    // Infrastructure files should now exist
+    assert!(specks_dir.join("specks-skeleton.md").is_file());
+    assert!(specks_dir.join("config.toml").is_file());
+    assert!(specks_dir.join("specks-implementation-log.md").is_file());
+
+    // Original speck file should be untouched
+    let content =
+        std::fs::read_to_string(specks_dir.join("specks-1.md")).expect("failed to read speck");
+    assert_eq!(content, "# My Speck\n");
 }
 
 #[test]

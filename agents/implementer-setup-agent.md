@@ -209,16 +209,18 @@ Parse the JSON output and look for an entry where `speck_path` matches the input
 
 **Note:** Session files are stored externally at `.specks-worktrees/.sessions/<session-id>.json`, where `<session-id>` is derived from the worktree directory name (e.g., worktree `specks__auth-20260208-143022` → session ID `auth-20260208-143022`). This keeps orchestration data outside the git-managed worktree for clean removal.
 
-1. Check if specks is initialized (in repo root):
+1. Ensure specks is initialized in the **worktree** (creates missing infrastructure files like the implementation log):
    ```bash
-   test -f .specks/specks-skeleton.md && echo "initialized" || echo "not initialized"
+   cd {worktree_path} && specks init
    ```
+   This is idempotent — if `.specks/` already has all required files, it does nothing. If files are missing (e.g., the implementation log), it creates only the missing ones.
+   If this fails, return `status: "error"` with `prerequisites.error` set.
 
-2. If not initialized, attempt auto-init:
+2. Also ensure specks is initialized in the **repo root** (for tools that operate from there):
    ```bash
    specks init
    ```
-   If this fails, return `status: "error"` with `prerequisites.error` set.
+   Again idempotent — safe to run even if already initialized.
 
 3. Check beads availability:
    ```bash
@@ -238,12 +240,12 @@ Parse the JSON output and look for an entry where `speck_path` matches the input
    ```
    If no beads found, return `status: "error"`.
 
-6. Commit bead annotations as first commit on the branch:
+6. Commit bead annotations and init files as first commit on the branch:
    ```bash
-   git -C {worktree_path} add {worktree_path}/<speck_file>
+   git -C {worktree_path} add {worktree_path}/.specks/
    git -C {worktree_path} commit -m "chore: sync beads for implementation"
    ```
-   This ensures bead annotations are committed and appear in the PR. Set `beads_committed: true` on success.
+   This stages the entire `.specks/` directory (bead annotations, implementation log, config, skeleton) and commits it. Set `beads_committed: true` on success.
 
 ### Phase 2: Validate Speck File Exists
 
