@@ -24,9 +24,130 @@ hooks:
 - Spawning planning agents (clarifier, author, critic)
 - Using any tool other than Task and AskUserQuestion
 
-**YOUR ENTIRE JOB:** Spawn agents in sequence, parse their JSON output, pass data between them, and ask the user questions when needed.
+**YOUR ENTIRE JOB:** Spawn agents in sequence, parse their JSON output, pass data between them, ask the user questions when needed, and **report progress at every step**.
 
-**GOAL:** Execute speck steps by orchestrating: setup → architect → coder → reviewer → committer.
+**GOAL:** Execute speck steps by orchestrating: setup, architect, coder, reviewer, committer.
+
+---
+
+## Progress Reporting
+
+You MUST output a post-call message after every agent call. These are your primary user-facing output. Do NOT output pre-call announcements — Claude Code already shows the Task call to the user.
+
+Follow these formats exactly.
+
+### Session messages
+
+**Start (output before any tool calls):**
+```
+**Implementer** — Starting implementation of {speck_path}
+```
+
+**End (output after publish):**
+```
+Implementation complete
+  Speck: {speck_path}
+  PR: {pr_url}
+```
+
+### implementer-setup-agent post-call
+
+```
+**specks:implementer-setup-agent**(Complete)
+  Worktree: {worktree_path}
+  Branch: {branch_name} (from {base_branch})
+  Steps to implement: {remaining_count} of {total_count} ({completed_count} already complete)
+  Beads: synced | Root: {root_bead}
+  Session: {session_id}
+```
+
+### Step header
+
+Output once per step, before the architect call:
+```
+--- {step_anchor} ---
+```
+
+### architect-agent post-call
+
+```
+**specks:architect-agent**(Complete)
+  Approach: {approach — first ~120 chars, truncate with ... if longer}
+  Files to touch: {expected_touch_set.length} | Implementation steps: {implementation_steps.length} | Risks: {risks.length}
+```
+
+### coder-agent post-call
+
+```
+**specks:coder-agent**(Complete)
+  Created files ({files_created.length}):
+    - {file1}
+    - {file2}
+  Modified files ({files_modified.length}):
+    - {file3}
+  Build: {build.exit_code == 0 ? "pass" : "FAIL"} | Tests: {pass_count}/{total_count} {tests_passed ? "pass" : "FAIL"} | Lint: {lint ? (lint.exit_code == 0 ? "pass" : "FAIL") : "n/a"}
+  Drift: {drift_severity} | {drift_budget.yellow_used}/{drift_budget.yellow_max} yellow | {drift_budget.red_used}/{drift_budget.red_max} red
+```
+
+Omit `Created files` or `Modified files` sections if their lists are empty. If drift is moderate or major, add:
+```
+  Unexpected changes:
+    - {file} ({category} — {reason})
+```
+
+On coder retry (from reviewer feedback), show only the files that changed in this pass.
+
+### reviewer-agent post-call
+
+```
+**specks:reviewer-agent**(Complete)
+  Recommendation: {recommendation}
+  Plan conformance: {passed_tasks}/{total_tasks} tasks | {passed_checkpoints}/{total_checkpoints} checkpoints | {passed_decisions}/{total_decisions} decisions
+  Quality: structure {review_categories.structure} | error handling {review_categories.error_handling} | security {review_categories.security}
+  Issues: {issues.length} ({count by severity: N critical, N major, N minor — omit zeros})
+```
+
+If REVISE, append:
+```
+  Issues requiring fixes:
+    {issue.description} ({issue.severity})
+  Retry: {reviewer_attempts}/{max_attempts}
+```
+
+### committer-agent post-call
+
+```
+**specks:committer-agent**(Complete)
+  Commit: {commit_hash} {commit_message}
+  Bead: {bead_id} closed
+  Files: {files_staged.length} staged and committed
+  Log: updated{log_rotated ? ", rotated to " + archived_path : ""}
+```
+
+### committer-agent publish post-call
+
+```
+**specks:committer-agent**(Publish complete)
+  PR: {pr_url}
+  Branch: {branch_name} -> {base_branch}
+```
+
+### Failure messages
+
+All failures use:
+```
+**specks:{agent-name}**(FAILED)
+  {error description}
+  Halting: {reason}
+```
+
+For `needs_reconcile`:
+```
+**specks:committer-agent**(WARNING: needs reconcile)
+  Commit: {commit_hash} succeeded
+  Bead: {bead_id} close FAILED
+  Halting: manual bead close required
+```
 
 ---
 
@@ -104,6 +225,8 @@ hooks:
 
 ### 1. Spawn Setup Agent
 
+Output the session start message.
+
 ```
 Task(
   subagent_type: "specks:implementer-setup-agent",
@@ -116,7 +239,7 @@ Parse the setup agent's JSON response. Extract all fields from the output contra
 
 ### 2. Handle Setup Result
 
-**If `status == "error"`:** Report the error to the user and HALT.
+**If `status == "error"`:** Output the Setup failure message and HALT.
 
 **If `status == "needs_clarification"`:** Use `AskUserQuestion` with the template from the agent's `clarification_needed` field, then re-run the setup agent with the user's answer:
 
@@ -130,7 +253,7 @@ Task(
 
 **If `status == "ready"`:**
 - If `resolved_steps` is empty: report "All steps already complete." and HALT
-- Otherwise proceed to the step loop
+- Otherwise: output the Setup post-call message and proceed to the step loop
 
 Store in memory: `worktree_path`, `branch_name`, `base_branch`, `resolved_steps`, `bead_mapping`, `root_bead`, `session.session_id`, `session.session_file`, `session.artifacts_base`
 
@@ -145,9 +268,11 @@ Initialize once (persists across all steps):
 
 Initialize per step: `reviewer_attempts = 0`
 
-#### 3a. Architect: Plan Strategy
-
 Construct `artifact_dir` as `<artifacts_base>/step-N` (e.g., `step-0`, `step-1`).
+
+Output the step header.
+
+#### 3a. Architect: Plan Strategy
 
 **First step (architect_id is null) — FRESH spawn:**
 
@@ -177,7 +302,9 @@ Task(
 )
 ```
 
-Parse the architect's JSON output. Extract `approach`, `expected_touch_set`, `implementation_steps`, `test_plan`, `risks`. If `risks` contains an error message (empty `approach`), report and HALT.
+Parse the architect's JSON output. Extract `approach`, `expected_touch_set`, `implementation_steps`, `test_plan`, `risks`. If `risks` contains an error message (empty `approach`), output failure message and HALT.
+
+Output the Architect post-call message.
 
 #### 3b. Coder: Implement Strategy
 
@@ -210,7 +337,9 @@ Task(
 )
 ```
 
-Parse the coder's JSON output. If `success == false` and `halted_for_drift == false`, report error and HALT.
+Parse the coder's JSON output. If `success == false` and `halted_for_drift == false`, output failure message and HALT.
+
+Output the Coder post-call message.
 
 #### 3c. Drift Check
 
@@ -235,6 +364,8 @@ Task(
   description: "Revise implementation for step N"
 )
 ```
+
+Output the Coder post-call message.
 
 #### 3d. Reviewer: Verify Implementation
 
@@ -267,6 +398,8 @@ Task(
 )
 ```
 
+Output the Reviewer post-call message.
+
 #### 3e. Handle Reviewer Recommendation
 
 | Recommendation | Action |
@@ -289,6 +422,8 @@ Task(
 )
 ```
 
+Output the Coder post-call message.
+
 2. **Resume reviewer** with updated coder output:
 
 ```
@@ -298,6 +433,10 @@ Task(
   description: "Re-review step N"
 )
 ```
+
+Output the Reviewer post-call message.
+
+Go back to 3e to check the new recommendation.
 
 Using persistent agents means both retain their full accumulated context — the coder remembers all files it read across ALL steps, and the reviewer remembers requirements and prior verifications.
 
@@ -345,12 +484,14 @@ Task(
 
 Parse the committer's JSON output. Record `commit_hash` for step summary.
 
-If `needs_reconcile == true`: report to user and HALT.
-If `aborted == true`: report reason to user and HALT.
+If `needs_reconcile == true`: output the needs_reconcile warning message and HALT.
+If `aborted == true`: output failure message with reason and HALT.
+
+Output the Committer post-call message.
 
 Extract commit summary and add to `step_summaries`.
 
-#### 3g. Step Completion
+#### 3g. Next Step
 
 1. If more steps: **GO TO 3a** for next step (all agent IDs are preserved)
 2. If all done: proceed to Session Completion
@@ -376,10 +517,9 @@ Task(
 )
 ```
 
-Parse the committer's publish output. Report summary:
-- Speck path
-- Steps completed
-- PR URL
+Parse the committer's publish output. Output the Publish post-call message.
+
+Output the session end message.
 
 ---
 
@@ -498,7 +638,7 @@ When you receive an agent response:
 
 If an agent returns invalid JSON or missing required fields:
 
-1. Report the agent name, step, and validation error to the user
+1. Output the failure message for that agent with the validation error
 2. HALT — do NOT retry automatically or continue with partial data
 
 ---
@@ -507,20 +647,7 @@ If an agent returns invalid JSON or missing required fields:
 
 If any agent fails:
 
-1. Report: `[Agent] failed at step #step-N: [reason]`
+1. Output the failure message: `**specks:{agent-name}**(FAILED) at {step_anchor}: {reason}`
 2. HALT — user must intervene
 
-Do NOT retry automatically.
-
----
-
-## Output
-
-**On success:**
-- Speck path
-- Steps completed
-- PR URL
-
-**On failure:**
-- Step where failure occurred
-- Error details
+Do NOT retry automatically. All errors use the standard failure message format defined in Progress Reporting.

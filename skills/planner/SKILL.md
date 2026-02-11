@@ -23,9 +23,83 @@ hooks:
 - Running any shell commands
 - Doing ANY work that an agent should do
 
-**YOUR ENTIRE JOB:** Parse input → spawn agents in sequence → relay results → ask user questions when needed.
+**YOUR ENTIRE JOB:** Parse input, spawn agents in sequence, relay results, ask user questions when needed, and **report progress at every step**.
 
 **GOAL:** Produce a speck file at `.specks/specks-N.md` by orchestrating agents.
+
+---
+
+## Progress Reporting
+
+You MUST output a post-call message after every agent call. These are your primary user-facing output. Do NOT output pre-call announcements — Claude Code already shows the Task call to the user.
+
+Follow these formats exactly.
+
+### Post-call messages
+
+Output these as text immediately after parsing the agent's JSON result:
+
+**planner-setup-agent:**
+```
+**specks:planner-setup-agent**(Complete)
+  Mode: {mode} | Path: {speck_path}
+```
+
+**clarifier-agent:**
+```
+**specks:clarifier-agent**(Complete)
+  Intent: {analysis.understood_intent}
+  Questions: {questions.length} | Assumptions: {assumptions.length}
+```
+
+**author-agent:**
+```
+**specks:author-agent**(Complete)
+  Path: {speck_path} ({created ? "created" : "revised"})
+  Sections: {sections_written.length} | Steps: {step_count} | Decisions: {decision_count}
+  Skeleton: anchors {pass|fail} | references {pass|fail} | required sections {pass|fail}
+  Validation: {validation_status}
+```
+
+**critic-agent:**
+```
+**specks:critic-agent**(Complete)
+  Recommendation: {recommendation}
+  Skeleton: {skeleton_compliant ? "compliant" : "non-compliant"}
+  Quality: completeness {areas.completeness} | implementability {areas.implementability} | sequencing {areas.sequencing}
+  Issues: {issues.length} ({count by priority: N P0, N HIGH, N MEDIUM, N LOW — omit zeros})
+```
+
+On revision loops, use `(Complete, revision {N})` in all post-call messages.
+
+### Failure messages
+
+```
+**specks:{agent-name}**(FAILED)
+  {error description}
+  Halting: {reason}
+```
+
+### Session messages
+
+**Start (output before any tool calls):**
+```
+**Planner** — Starting new speck from idea
+```
+or:
+```
+**Planner** — Revising existing speck at {path}
+```
+
+**End (output after final phase):**
+```
+---
+**Planner**(Complete)
+  Speck: {speck_path}
+  Steps: {step_count} | Decisions: {decision_count}
+  Revisions: {revision_count}
+  Next: /specks:implementer {speck_path}
+```
 
 ---
 
@@ -35,35 +109,33 @@ hooks:
   Task: planner-setup-agent (FRESH spawn, one time)
        │  → setup_id
        ▼
+  SPAWN clarifier-agent → clarifier_id (ONE TIME ONLY)
+       │
+       ▼
+  AskUserQuestion (if questions exist)
+       │
+       ▼
   ┌─────────────────────────────────────────────┐
   │                                             │
-  │  Step 0: SPAWN clarifier-agent → clarifier_id
-  │  Loop N: RESUME clarifier_id               │◄────┐
-  │  (idea + critic_feedback if any)            │     │
+  │  Step 0: SPAWN author-agent → author_id     │
+  │  Loop N: RESUME author_id                  │◄────┐
   │                                             │     │
-  └─────────────────────────────────────────────┘     │
-       │                                              │
-       ▼                                              │
-  AskUserQuestion (if questions exist)                │
-       │                                              │
-       ▼                                              │
-  Step 0: SPAWN author-agent → author_id              │
-  Loop N: RESUME author_id                            │
-       │                                              │
-       ▼                                              │
-  Step 0: SPAWN critic-agent → critic_id              │
-  Loop N: RESUME critic_id                            │
-       │                                              │
-       ├── APPROVE ──► DONE (return speck)            │
-       │                                              │
-       └── REVISE/REJECT ────────────────────────────┘
+  │  Step 0: SPAWN critic-agent → critic_id     │     │
+  │  Loop N: RESUME critic_id                   │     │
+  │       │                                     │     │
+  │       ├── APPROVE ──► DONE (return speck)   │     │
+  │       │                                     │     │
+  │       └── REVISE/REJECT ───────────────────┘─────┘
+  │                                             │
+  └─────────────────────────────────────────────┘
 ```
 
-**The loop goes back to clarifier, NOT author.** The clarifier re-analyzes with critic feedback.
+**The clarifier runs ONCE during the first pass.** Revision loops go directly to the author — the clarifier's job (understanding the idea, asking questions) is already done.
 
 **Architecture principles:**
 - Orchestrator is a pure dispatcher: `Task` + `AskUserQuestion` only
-- **Persistent agents**: clarifier, author, critic are each spawned ONCE (during first pass) and RESUMED for all revision loops
+- **Clarifier** runs once on the first pass; it is NOT resumed for revisions
+- **Author and critic** are spawned once and RESUMED for all revision loops
 - Auto-compaction handles context overflow — agents compact at ~95% capacity
 - Agents accumulate knowledge: codebase patterns, skeleton format, prior findings
 - Task-Resumed means the author remembers what it wrote, and the critic remembers what it checked
@@ -73,6 +145,8 @@ hooks:
 ## Execute This Sequence
 
 ### 1. Spawn Setup Agent
+
+Output the session start message.
 
 ```
 Task(
@@ -86,20 +160,23 @@ Task(
 
 Parse the setup agent's JSON response. Extract `mode`, `initialized`, `speck_path`, and `idea`.
 
-If `success == false`, HALT with the error message from the agent.
+If `success == false`: output the Setup failure message and HALT.
 
-### 2. Initialize Agent IDs
+Output the Setup post-call message.
+
+### 2. Initialize State
 
 ```
 clarifier_id = null
 author_id = null
 critic_id = null
 critic_feedback = null
+revision_count = 0
 ```
 
-### 3. Clarifier: Analyze and Question
+### 3. Clarifier: Analyze and Question (First Pass Only)
 
-**First pass (clarifier_id is null) — FRESH spawn:**
+The clarifier runs ONCE to understand the idea and gather user input. It is NOT resumed for revision loops.
 
 ```
 Task(
@@ -111,17 +188,7 @@ Task(
 
 **Save the `agentId` as `clarifier_id`.**
 
-**Revision loop — RESUME:**
-
-```
-Task(
-  resume: "<clarifier_id>",
-  prompt: 'Critic found issues. Re-analyze with this feedback: <critic_feedback JSON>. Focus questions on resolving these issues.',
-  description: "Re-analyze with critic feedback"
-)
-```
-
-Store response in memory.
+Output the Clarifier post-call message. Store response in memory.
 
 If `questions` array is non-empty, present to user:
 
@@ -175,7 +242,9 @@ Task(
 
 Store response in memory.
 
-If `validation_status == "errors"`: halt with error.
+If `validation_status == "errors"`: output the Author failure message and HALT.
+
+Output the Author post-call message.
 
 ### 5. Critic: Review Speck
 
@@ -196,17 +265,21 @@ Task(
 ```
 Task(
   resume: "<critic_id>",
-  prompt: 'Author has revised the speck at <path>. Re-review focusing on whether prior issues were addressed.',
+  prompt: 'Author has revised the speck at <path>. Author response: <summary of author JSON output — include speck_path, created/revised, sections_written, validation_status, and any notes about what changed or did not change>. Re-review focusing on whether prior issues were addressed.',
   description: "Re-review revised speck"
 )
 ```
 
+**IMPORTANT:** Always include the author's response summary so the critic knows what was changed (or if the author found that no changes were needed).
+
 Store response in memory.
+
+Output the Critic post-call message.
 
 ### 6. Handle Critic Recommendation
 
 **APPROVE:**
-- Return success with speck path
+- Output the session end message and HALT with success.
 
 **REVISE:**
 ```
@@ -215,7 +288,7 @@ AskUserQuestion(
     question: "The critic found issues. How should we proceed?",
     header: "Review",
     options: [
-      { label: "Revise (Recommended)", description: "Re-run clarifier with feedback" },
+      { label: "Revise (Recommended)", description: "Send feedback to author for fixes" },
       { label: "Accept as-is", description: "Proceed despite issues" },
       { label: "Abort", description: "Cancel planning" }
     ],
@@ -223,9 +296,9 @@ AskUserQuestion(
   }]
 )
 ```
-- If "Revise": set `critic_feedback = critic response`, **GO TO STEP 3**
-- If "Accept": return success
-- If "Abort": return abort
+- If "Revise": set `critic_feedback = critic response`, increment `revision_count`, **GO TO STEP 4** (author, not clarifier)
+- If "Accept": output the session end message, HALT with success
+- If "Abort": output `**Planner** — Aborted by user` and HALT
 
 **REJECT:**
 ```
@@ -234,39 +307,39 @@ AskUserQuestion(
     question: "The speck was rejected due to critical issues. What next?",
     header: "Rejected",
     options: [
-      { label: "Start over", description: "Re-run clarifier with feedback" },
+      { label: "Start over", description: "Send feedback to author for fixes" },
       { label: "Abort", description: "Cancel planning" }
     ],
     multiSelect: false
   }]
 )
 ```
-- If "Start over": set `critic_feedback = critic response`, **GO TO STEP 3**
-- If "Abort": return abort
+- If "Start over": set `critic_feedback = critic response`, increment `revision_count`, **GO TO STEP 4** (author, not clarifier)
+- If "Abort": output `**Planner** — Aborted by user` and HALT
 
 ---
 
 ## Reference: Persistent Agent Pattern
 
-All three planning agents are **spawned once** during the first pass and **resumed** for every revision loop:
+The author and critic are **spawned once** and **resumed** for revision loops. The clarifier runs once on the first pass only.
 
 | Agent | Spawned | Resumed For | Accumulated Knowledge |
 |-------|---------|-------------|----------------------|
-| **clarifier** | First pass | Revision loops | Codebase patterns, prior questions, user answers |
+| **clarifier** | First pass | Not resumed | Codebase patterns, user answers |
 | **author** | First pass | Revision loops | Skeleton format, speck structure, what it wrote |
 | **critic** | First pass | Revision loops | Skeleton rules, prior findings, quality standards |
 
 **Why this matters:**
-- **Faster**: No cold-start codebase exploration on revision loops
-- **Smarter**: Author remembers what it wrote and makes targeted fixes
-- **Consistent**: Critic remembers what it already checked, focuses on changes
+- **Faster**: Author remembers what it wrote and makes targeted fixes
+- **Smarter**: Critic remembers what it already checked, focuses on changes
+- **Focused**: Revision loops skip the clarifier — the idea is already understood
 - **Auto-compaction**: Agents compress old context at ~95% capacity, keeping recent work
 
 **Agent ID management:**
 - Store `clarifier_id`, `author_id`, `critic_id` after first spawn
-- Pass these IDs to `Task(resume: "<id>")` for all revision loops
+- Pass `author_id` and `critic_id` to `Task(resume: "<id>")` for revision loops
+- The clarifier is not resumed after the first pass
 - IDs persist for the entire planner session
-- Never reset IDs between revision loops
 
 ---
 
@@ -285,17 +358,7 @@ Parse the user's input to determine mode:
 
 If Task tool fails or returns unparseable JSON:
 
-1. Report the error with agent name and reason
+1. Output the failure message for that phase with the error details
 2. Halt with clear error message
 
----
-
-## Output
-
-**On success:**
-- Speck path created/revised
-- Critic recommendation
-
-**On failure:**
-- Phase where failure occurred
-- Error details
+All errors use the standard failure message format defined in Progress Reporting.
