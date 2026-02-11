@@ -3,6 +3,36 @@
 This log tracks completed implementation work.
 
 ---
+step: #step-1
+date: 2026-02-10T19:14:00Z
+bead: specks-jlu.2
+---
+
+## #step-1: Refactored log.rs to extract log_rotate_inner and log_prepend_inner helpers returning structured results. Implemented full step-commit pipeline: validate inputs, load session, rotate/prepend log, stage files, git commit, close bead, handle partial failure (needs_reconcile), update session atomically.
+
+- log_rotate_inner helper
+- log_prepend_inner helper
+- CLI wrapper refactoring
+- Input validation
+- Log rotation with archive staging
+- File staging via git -C
+- Git commit and hash retrieval
+- Bead close with current_dir
+- Partial failure handling
+- Session update with atomic save
+
+**Tests:** All 305 existing tests pass, Log tests pass after refactoring
+
+**Checkpoints:**
+- Build passes with no warnings
+- All 305 tests pass
+- D01 worktree-relative paths
+- D02 exit 0 with needs_reconcile
+- D04 internal helpers
+- D05 direct session manipulation
+- D06 git -C pattern
+
+---
 step: #step-0
 date: 2026-02-10T19:13:40Z
 bead: specks-jlu.1

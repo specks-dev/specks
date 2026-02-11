@@ -126,45 +126,43 @@ fn year_to_days(year: i32) -> i64 {
     y * 365 + y / 4 - y / 100 + y / 400
 }
 
-/// Run the log rotate command
-///
-/// # Arguments
-/// * `root` - Optional root directory (uses current directory if None)
-/// * `force` - Rotate even if below thresholds
-/// * `json_output` - Output in JSON format
-/// * `quiet` - Suppress non-error output
-pub fn run_log_rotate(
-    root: Option<&std::path::Path>,
-    force: bool,
-    json_output: bool,
-    quiet: bool,
-) -> Result<i32, String> {
-    use crate::output::{JsonResponse, RotateData};
-    use std::fs;
-    use std::path::PathBuf;
+/// Result of a log rotation operation
+#[derive(Debug, Clone)]
+pub struct RotateResult {
+    pub rotated: bool,
+    pub archived_path: Option<String>,
+    pub original_lines: Option<usize>,
+    pub original_bytes: Option<usize>,
+    pub reason: String,
+}
 
-    let base = root
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    let log_path = base.join(".specks/specks-implementation-log.md");
+/// Result of a log prepend operation
+#[derive(Debug, Clone)]
+pub struct PrependResult {
+    pub entry_added: bool,
+    pub step: String,
+    pub speck: String,
+    pub timestamp: String,
+}
+
+/// Internal helper to perform log rotation
+///
+/// Returns structured result instead of printing to stdout.
+/// Used by both run_log_rotate (CLI) and step-commit (programmatic).
+pub fn log_rotate_inner(root: &std::path::Path, force: bool) -> Result<RotateResult, String> {
+    use std::fs;
+
+    let log_path = root.join(".specks/specks-implementation-log.md");
 
     // Check if log file exists
     if !log_path.exists() {
-        let data = RotateData {
+        return Ok(RotateResult {
             rotated: false,
             archived_path: None,
             original_lines: None,
             original_bytes: None,
             reason: "not_needed".to_string(),
-        };
-
-        if json_output {
-            let response = JsonResponse::ok("log rotate", data);
-            println!("{}", serde_json::to_string_pretty(&response).unwrap());
-        } else if !quiet {
-            println!("Implementation log does not exist - nothing to rotate");
-        }
-        return Ok(0);
+        });
     }
 
     // Read the log file to check thresholds
@@ -178,24 +176,13 @@ pub fn run_log_rotate(
     let should_rotate = force || line_count > LOG_LINE_THRESHOLD || byte_count > LOG_BYTE_THRESHOLD;
 
     if !should_rotate {
-        let data = RotateData {
+        return Ok(RotateResult {
             rotated: false,
             archived_path: None,
             original_lines: Some(line_count),
             original_bytes: Some(byte_count),
             reason: "not_needed".to_string(),
-        };
-
-        if json_output {
-            let response = JsonResponse::ok("log rotate", data);
-            println!("{}", serde_json::to_string_pretty(&response).unwrap());
-        } else if !quiet {
-            println!(
-                "Log below thresholds ({} lines, {} bytes) - no rotation needed",
-                line_count, byte_count
-            );
-        }
-        return Ok(0);
+        });
     }
 
     // Determine rotation reason
@@ -208,7 +195,7 @@ pub fn run_log_rotate(
     };
 
     // Create archive directory if it doesn't exist
-    let archive_dir = base.join(".specks/archive");
+    let archive_dir = root.join(".specks/archive");
     if !archive_dir.exists() {
         fs::create_dir_all(&archive_dir)
             .map_err(|e| format!("Failed to create archive directory: {}", e))?;
@@ -239,24 +226,70 @@ Entries are sorted newest-first.
     fs::write(&log_path, IMPLEMENTATION_LOG_HEADER)
         .map_err(|e| format!("Failed to create fresh log file: {}", e))?;
 
-    // Build response data
+    // Build result
     let archived_path_str = format!(".specks/archive/{}", archive_filename);
-    let data = RotateData {
+    Ok(RotateResult {
         rotated: true,
-        archived_path: Some(archived_path_str.clone()),
+        archived_path: Some(archived_path_str),
         original_lines: Some(line_count),
         original_bytes: Some(byte_count),
         reason: reason.to_string(),
+    })
+}
+
+/// Run the log rotate command
+///
+/// # Arguments
+/// * `root` - Optional root directory (uses current directory if None)
+/// * `force` - Rotate even if below thresholds
+/// * `json_output` - Output in JSON format
+/// * `quiet` - Suppress non-error output
+pub fn run_log_rotate(
+    root: Option<&std::path::Path>,
+    force: bool,
+    json_output: bool,
+    quiet: bool,
+) -> Result<i32, String> {
+    use crate::output::{JsonResponse, RotateData};
+    use std::path::PathBuf;
+
+    let base = root
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    // Call internal helper
+    let result = log_rotate_inner(&base, force)?;
+
+    // Convert to RotateData for output
+    let data = RotateData {
+        rotated: result.rotated,
+        archived_path: result.archived_path.clone(),
+        original_lines: result.original_lines,
+        original_bytes: result.original_bytes,
+        reason: result.reason.clone(),
     };
 
     if json_output {
         let response = JsonResponse::ok("log rotate", data);
         println!("{}", serde_json::to_string_pretty(&response).unwrap());
     } else if !quiet {
-        println!("Log rotated successfully");
-        println!("  Original: {} lines, {} bytes", line_count, byte_count);
-        println!("  Archived to: {}", archived_path_str);
-        println!("  Reason: {}", reason);
+        if result.rotated {
+            println!("Log rotated successfully");
+            if let (Some(lines), Some(bytes)) = (result.original_lines, result.original_bytes) {
+                println!("  Original: {} lines, {} bytes", lines, bytes);
+            }
+            if let Some(path) = &result.archived_path {
+                println!("  Archived to: {}", path);
+            }
+            println!("  Reason: {}", result.reason);
+        } else if let (Some(lines), Some(bytes)) = (result.original_lines, result.original_bytes) {
+            println!(
+                "Log below thresholds ({} lines, {} bytes) - no rotation needed",
+                lines, bytes
+            );
+        } else {
+            println!("Implementation log does not exist - nothing to rotate");
+        }
     }
 
     Ok(0)
@@ -370,6 +403,59 @@ fn find_insertion_point(content: &str) -> usize {
     content.len()
 }
 
+/// Internal helper to prepend an entry to the log
+///
+/// Returns structured result instead of printing to stdout.
+/// Used by both run_log_prepend (CLI) and step-commit (programmatic).
+pub fn log_prepend_inner(
+    root: &std::path::Path,
+    step: &str,
+    speck: &str,
+    summary: &str,
+    bead: Option<&str>,
+) -> Result<PrependResult, String> {
+    use std::fs;
+
+    let log_path = root.join(".specks/specks-implementation-log.md");
+
+    // Check if log file exists
+    if !log_path.exists() {
+        return Err("Implementation log does not exist. Run 'specks init' first.".to_string());
+    }
+
+    // Read the current log
+    let content = fs::read_to_string(&log_path)
+        .map_err(|e| format!("Failed to read implementation log: {}", e))?;
+
+    // Generate timestamp
+    let timestamp = generate_iso8601_timestamp()?;
+
+    // Generate YAML entry
+    let entry = generate_yaml_entry(step, speck, summary, bead, &timestamp);
+
+    // Find insertion point
+    let insertion_point = find_insertion_point(&content);
+
+    // Build new content
+    let mut new_content = String::new();
+    new_content.push_str(&content[..insertion_point]);
+    new_content.push_str(&entry);
+    new_content.push_str(&content[insertion_point..]);
+
+    // Write atomically by writing to a temp file then renaming
+    let temp_path = log_path.with_extension("md.tmp");
+    fs::write(&temp_path, &new_content)
+        .map_err(|e| format!("Failed to write temp log file: {}", e))?;
+    fs::rename(&temp_path, &log_path).map_err(|e| format!("Failed to update log file: {}", e))?;
+
+    Ok(PrependResult {
+        entry_added: true,
+        step: step.to_string(),
+        speck: speck.to_string(),
+        timestamp,
+    })
+}
+
 /// Run the log prepend command
 ///
 /// # Arguments
@@ -390,50 +476,21 @@ pub fn run_log_prepend(
     quiet: bool,
 ) -> Result<i32, String> {
     use crate::output::{JsonResponse, PrependData};
-    use std::fs;
     use std::path::PathBuf;
 
     let base = root
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
-    let log_path = base.join(".specks/specks-implementation-log.md");
 
-    // Check if log file exists
-    if !log_path.exists() {
-        return Err("Implementation log does not exist. Run 'specks init' first.".to_string());
-    }
+    // Call internal helper
+    let result = log_prepend_inner(&base, &step, &speck, &summary, bead.as_deref())?;
 
-    // Read the current log
-    let content = fs::read_to_string(&log_path)
-        .map_err(|e| format!("Failed to read implementation log: {}", e))?;
-
-    // Generate timestamp
-    let timestamp = generate_iso8601_timestamp()?;
-
-    // Generate YAML entry
-    let entry = generate_yaml_entry(&step, &speck, &summary, bead.as_deref(), &timestamp);
-
-    // Find insertion point
-    let insertion_point = find_insertion_point(&content);
-
-    // Build new content
-    let mut new_content = String::new();
-    new_content.push_str(&content[..insertion_point]);
-    new_content.push_str(&entry);
-    new_content.push_str(&content[insertion_point..]);
-
-    // Write atomically by writing to a temp file then renaming
-    let temp_path = log_path.with_extension("md.tmp");
-    fs::write(&temp_path, &new_content)
-        .map_err(|e| format!("Failed to write temp log file: {}", e))?;
-    fs::rename(&temp_path, &log_path).map_err(|e| format!("Failed to update log file: {}", e))?;
-
-    // Build response data
+    // Convert to PrependData for output
     let data = PrependData {
-        entry_added: true,
-        step: Some(step.clone()),
-        speck: Some(speck.clone()),
-        timestamp: Some(timestamp.clone()),
+        entry_added: result.entry_added,
+        step: Some(result.step.clone()),
+        speck: Some(result.speck.clone()),
+        timestamp: Some(result.timestamp.clone()),
     };
 
     if json_output {
@@ -441,9 +498,9 @@ pub fn run_log_prepend(
         println!("{}", serde_json::to_string_pretty(&response).unwrap());
     } else if !quiet {
         println!("Entry prepended to implementation log");
-        println!("  Step: {}", step);
-        println!("  Speck: {}", speck);
-        println!("  Timestamp: {}", timestamp);
+        println!("  Step: {}", result.step);
+        println!("  Speck: {}", result.speck);
+        println!("  Timestamp: {}", result.timestamp);
         if let Some(bead_id) = bead {
             println!("  Bead: {}", bead_id);
         }
