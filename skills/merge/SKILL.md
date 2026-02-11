@@ -53,19 +53,9 @@ Parse the JSON output. Key fields:
 
 If the command fails (exit code non-zero), report the error and halt. The error message tells the user what went wrong.
 
-### 2. Handle Dirty Files
+### 2. Ask for Confirmation
 
-If the dry-run output includes `dirty_files`, the user has uncommitted changes in main. These need to be committed before merging to avoid conflicts.
-
-Commit them automatically:
-
-```bash
-git add -A && git commit -m "chore: pre-merge sync"
-```
-
-If git add/commit fails (nothing to commit), that's fine — continue.
-
-### 3. Ask for Confirmation
+Note: The CLI handles dirty files automatically during the actual merge (commits infrastructure files, discards leaked implementation files). The skill does NOT need to commit or clean up dirty files — just report them if present in the dry-run output.
 
 Present the dry-run results and ask the user to confirm:
 
@@ -101,7 +91,7 @@ AskUserQuestion(
 
 If user selects "Cancel", halt with: "Merge cancelled."
 
-### 4. Execute Merge
+### 3. Execute Merge
 
 Run the actual merge:
 
@@ -122,7 +112,7 @@ Parse the JSON output. Key fields for the result:
 
 If the command fails, report the error and suggest recovery.
 
-### 5. Post-Merge Health Check
+### 4. Post-Merge Health Check
 
 Run health checks:
 
@@ -136,7 +126,7 @@ specks worktree list
 
 If doctor reports issues, present them as warnings (the merge itself succeeded).
 
-### 6. Report Results
+### 5. Report Results
 
 **Remote mode success:**
 - PR merged (URL + number)

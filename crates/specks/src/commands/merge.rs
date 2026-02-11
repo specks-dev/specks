@@ -156,7 +156,7 @@ fn get_pr_for_branch(branch: &str) -> Result<PrInfo, String> {
     serde_json::from_str(&stdout).map_err(|e| format!("Failed to parse gh pr view output: {}", e))
 }
 
-/// Get list of uncommitted files in the working tree
+/// Get list of uncommitted files in the working tree, with porcelain status prefix
 fn get_dirty_files(repo_root: &Path) -> Result<Vec<String>, String> {
     let output = Command::new("git")
         .arg("-C")
@@ -176,6 +176,98 @@ fn get_dirty_files(repo_root: &Path) -> Result<Vec<String>, String> {
         .filter(|line| line.len() >= 4)
         .map(|line| line[3..].to_string())
         .collect())
+}
+
+fn is_infrastructure_path(path: &str) -> bool {
+    path.starts_with(".specks/") || path.starts_with(".beads/")
+}
+
+/// Prepare main for merge by committing infrastructure files and discarding everything else.
+/// Returns the list of dirty files that were found (for reporting).
+fn prepare_main_for_merge(repo_root: &Path, quiet: bool) -> Result<Vec<String>, String> {
+    let dirty_files = get_dirty_files(repo_root)?;
+    if dirty_files.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let infra: Vec<&str> = dirty_files
+        .iter()
+        .filter(|f| is_infrastructure_path(f))
+        .map(|f| f.as_str())
+        .collect();
+    let non_infra: Vec<&str> = dirty_files
+        .iter()
+        .filter(|f| !is_infrastructure_path(f))
+        .map(|f| f.as_str())
+        .collect();
+
+    // Discard non-infrastructure files first (they'll come from the branch)
+    if !non_infra.is_empty() {
+        if !quiet {
+            eprintln!(
+                "Discarding {} leaked file(s) from main (will come from branch):",
+                non_infra.len()
+            );
+            for f in &non_infra {
+                eprintln!("  {}", f);
+            }
+        }
+
+        // Reset tracked files
+        let mut checkout_args = vec!["checkout", "--"];
+        checkout_args.extend(non_infra.iter());
+        let checkout = Command::new("git")
+            .current_dir(repo_root)
+            .args(&checkout_args)
+            .output();
+        // Ignore errors — file might be untracked
+
+        if let Ok(ref _o) = checkout {
+            // good
+        }
+
+        // Clean untracked files
+        let mut clean_args = vec!["clean", "-f", "--"];
+        clean_args.extend(non_infra.iter());
+        let _ = Command::new("git")
+            .current_dir(repo_root)
+            .args(&clean_args)
+            .output();
+    }
+
+    // Commit infrastructure files
+    if !infra.is_empty() {
+        if !quiet {
+            eprintln!("Committing {} infrastructure file(s) on main:", infra.len());
+            for f in &infra {
+                eprintln!("  {}", f);
+            }
+        }
+
+        let mut add_args = vec!["add", "--"];
+        add_args.extend(infra.iter());
+        let _ = Command::new("git")
+            .current_dir(repo_root)
+            .args(&add_args)
+            .output();
+
+        let commit = Command::new("git")
+            .current_dir(repo_root)
+            .args(["commit", "-m", "chore: pre-merge sync"])
+            .output();
+
+        // If commit fails (nothing to commit), that's fine
+        if let Ok(ref o) = commit {
+            if !o.status.success() && !quiet {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                if !stderr.contains("nothing to commit") {
+                    eprintln!("Warning: pre-merge commit failed: {}", stderr);
+                }
+            }
+        }
+    }
+
+    Ok(dirty_files)
 }
 
 /// Squash merge a branch into the current branch
@@ -413,7 +505,7 @@ pub fn run_merge(
         "local"
     };
 
-    // Step 2: Check for dirty files
+    // Step 2: Check for dirty files (dry-run) or prepare main (actual merge)
     let dirty_files = get_dirty_files(&repo_root).unwrap_or_default();
 
     // Dry-run: report and exit
@@ -469,12 +561,9 @@ pub fn run_merge(
         return Ok(0);
     }
 
-    // Step 3: Warn about dirty files (non-fatal)
-    if !dirty_files.is_empty() && !quiet {
-        eprintln!(
-            "Warning: {} uncommitted file(s) in main. Consider committing before merge.",
-            dirty_files.len()
-        );
+    // Step 3: Prepare main — commit infrastructure, discard leaked files
+    if !dirty_files.is_empty() {
+        prepare_main_for_merge(&repo_root, quiet)?;
     }
 
     // Step 4: Merge
@@ -555,40 +644,44 @@ pub fn run_merge(
         }
     };
 
-    // Step 5: Cleanup worktree
+    // Step 5: Cleanup worktree and branch
     if !quiet {
         println!("Cleaning up worktree...");
     }
 
-    let worktree_cleaned = match remove_worktree(wt_path, &repo_root) {
-        Ok(_) => {
-            // Also delete the branch
-            let mut del_cmd = Command::new("git");
-            del_cmd
-                .current_dir(&repo_root)
-                .args(["branch", "-D", branch]);
-            let _ = run_cmd(&mut del_cmd, &format!("git branch -D {}", branch));
-
-            // Prune stale metadata
-            let mut prune_cmd = Command::new("git");
-            prune_cmd
-                .current_dir(&repo_root)
-                .args(["worktree", "prune"]);
-            let _ = run_cmd(&mut prune_cmd, "git worktree prune");
-
-            if !quiet {
-                println!("Worktree cleaned up");
+    // Try normal removal first (handles session cleanup), then force if needed
+    let worktree_cleaned = if remove_worktree(wt_path, &repo_root).is_ok() {
+        true
+    } else {
+        // Force removal — after a successful merge we don't need the worktree
+        let force = Command::new("git")
+            .current_dir(&repo_root)
+            .args(["worktree", "remove", "--force"])
+            .arg(wt_path.as_os_str())
+            .output();
+        match force {
+            Ok(o) if o.status.success() => true,
+            _ => {
+                // Last resort: remove directory and prune
+                let _ = std::fs::remove_dir_all(wt_path);
+                true
             }
-            true
-        }
-        Err(e) => {
-            if !quiet {
-                eprintln!("Warning: Failed to remove worktree: {}", e);
-                eprintln!("Run: git worktree remove {} --force", wt_path.display());
-            }
-            false
         }
     };
+
+    // Always delete the branch and prune
+    let _ = Command::new("git")
+        .current_dir(&repo_root)
+        .args(["branch", "-D", branch])
+        .output();
+    let _ = Command::new("git")
+        .current_dir(&repo_root)
+        .args(["worktree", "prune"])
+        .output();
+
+    if !quiet && worktree_cleaned {
+        println!("Worktree cleaned up");
+    }
 
     // Step 6: Success response
     let data = MergeData {
