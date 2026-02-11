@@ -13,6 +13,7 @@
 | Target branch | main |
 | Tracking issue/PR | TBD |
 | Last updated | 2026-02-11 |
+| Beads Root | `specks-tgg` |
 
 ---
 
@@ -492,6 +493,8 @@ The key change: step tracking updates are removed from `update_session`. Only `s
 
 #### Step 0: Remove reuse_existing flag, make reuse always-on {#step-0}
 
+**Bead:** `specks-tgg.1`
+
 **Commit:** `refactor(worktree): make worktree reuse always-on, remove --reuse-existing flag`
 
 **References:** [D01] Worktree reuse is always-on, (#d01-always-reuse, #cli-changes, #symbols-modify)
@@ -531,6 +534,8 @@ The key change: step tracking updates are removed from `update_session`. Only `s
 
 **Depends on:** #step-0
 
+**Bead:** `specks-tgg.2`
+
 **Commit:** `refactor(worktree): make beads sync always-on, remove --sync-beads flag`
 
 **References:** [D02] CLI performs atomic init + beads sync + commit, (#d02-atomic-setup, #cli-changes, #symbols-modify)
@@ -566,6 +571,8 @@ The key change: step tracking updates are removed from `update_session`. Only `s
 
 **Depends on:** #step-1
 
+**Bead:** `specks-tgg.3`
+
 **Commit:** `feat(worktree): run specks init automatically inside worktree during creation`
 
 **References:** [D02] CLI performs atomic init + beads sync + commit, (#d02-atomic-setup, #cli-changes)
@@ -599,6 +606,8 @@ The key change: step tracking updates are removed from `update_session`. Only `s
 #### Step 3: Slim the Session struct — remove step-tracking fields {#step-3}
 
 **Depends on:** #step-2
+
+**Bead:** `specks-tgg.4`
 
 **Commit:** `refactor(session): remove step-tracking fields, beads is single source of truth`
 
@@ -675,6 +684,8 @@ The key change: step tracking updates are removed from `update_session`. Only `s
 
 **Depends on:** #step-3
 
+**Bead:** `specks-tgg.5`
+
 **Commit:** `feat(worktree): extend CreateData with ready_steps, session, artifacts from bd ready`
 
 **References:** [D05] CLI queries bd ready, [D06] CLI creates artifact directories, [D07] Extended CreateData JSON, Spec S01, Table T01, (#d05-ready-steps, #d06-artifact-dirs, #d07-extended-json, #s01-create-response, #t01-create-fields, #enriched-json)
@@ -719,6 +730,8 @@ The key change: step tracking updates are removed from `update_session`. Only `s
 
 **Depends on:** #step-3
 
+**Bead:** `specks-tgg.6`
+
 **Commit:** `docs(agents): update agent and skill instructions to reflect beads as source of truth`
 
 **References:** [D03] Beads is single source of truth, [D09] Remove NeedsReconcile, (#d03-beads-source-of-truth, #d09-remove-reconcile, #committer-update-flow, #t02-session-removed)
@@ -755,6 +768,8 @@ The key change: step tracking updates are removed from `update_session`. Only `s
 #### Step 6: Simplify implementer-setup-agent instructions {#step-6}
 
 **Depends on:** #step-4, #step-5
+
+**Bead:** `specks-tgg.7`
 
 **Commit:** `refactor(agent): simplify implementer-setup-agent to reasoning-only, 3 phases`
 
