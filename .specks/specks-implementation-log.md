@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-5
+date: 2025-02-11T18:29:20Z
+bead: specks-tgg.6
+---
+
+## #step-5: Update implementer SKILL.md: replace needs_reconcile with bead_close_failed, change HALT to warn-and-continue, add session infrastructure-only note
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
 step: #step-4
 date: 2025-02-11T18:24:33Z
 bead: specks-tgg.5
