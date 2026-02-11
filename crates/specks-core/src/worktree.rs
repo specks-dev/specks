@@ -5,7 +5,7 @@
 
 use crate::error::SpecksError;
 use crate::parser::parse_speck;
-use crate::session::{Session, load_session, now_iso8601, save_session};
+use crate::session::{Session, load_session, now_iso8601};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -571,15 +571,16 @@ impl<'a> GitCli<'a> {}
 /// Create a worktree for speck implementation
 ///
 /// Validates speck has at least one execution step, generates branch name,
-/// creates branch from base, creates worktree, and initializes session.json.
+/// creates branch from base, creates worktree. Returns infrastructure tuple
+/// (worktree_path, branch_name, speck_slug). Session creation is now handled
+/// by CLI layer.
 ///
 /// Always searches for existing worktrees with matching speck_path and returns
 /// the most recent one instead of creating new. This makes the command idempotent.
 ///
 /// Implements partial failure recovery:
 /// - If branch creation succeeds but worktree creation fails: delete the branch
-/// - If worktree creation succeeds but session.json write fails: remove worktree and delete branch
-pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> {
+pub fn create_worktree(config: &WorktreeConfig) -> Result<(PathBuf, String, String), SpecksError> {
     let git = GitCli::new(&config.repo_root);
 
     // Check git version
@@ -610,7 +611,12 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
 
     // Check for existing worktrees for this speck and reuse if found
     if let Some(existing_session) = find_existing_worktree(config)? {
-        return Ok(existing_session);
+        // Reuse path: return infrastructure tuple from existing session
+        return Ok((
+            PathBuf::from(&existing_session.worktree_path),
+            existing_session.branch_name,
+            existing_session.speck_slug,
+        ));
     }
     // No existing worktree found, proceed to create new one
 
@@ -633,39 +639,8 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         return Err(e);
     }
 
-    // Create session (v2: beads is source of truth, no step tracking)
-    // Derive session_id from branch name: "specks/auth-20260208-143022" -> "auth-20260208-143022"
-    let session_id = branch_name
-        .strip_prefix("specks/")
-        .unwrap_or(&branch_name)
-        .to_string();
-
-    let session = Session {
-        schema_version: "2".to_string(),
-        session_id,
-        speck_path: config.speck_path.display().to_string(),
-        speck_slug: slug.clone(),
-        branch_name: branch_name.clone(),
-        base_branch: config.base_branch.clone(),
-        worktree_path: worktree_path.display().to_string(),
-        created_at: now_iso8601(),
-        last_updated_at: None,
-        total_steps: speck.steps.len(),
-        root_bead_id: None,
-        reused: false,
-        step_summaries: None,
-        ..Default::default()
-    };
-
-    // Save session (with partial failure recovery)
-    if let Err(e) = save_session(&session, &config.repo_root) {
-        // Clean up: remove worktree and delete branch
-        let _ = git.worktree_remove(&worktree_path);
-        let _ = git.delete_branch(&branch_name);
-        return Err(e);
-    }
-
-    Ok(session)
+    // Return infrastructure tuple (CLI layer creates Session)
+    Ok((worktree_path, branch_name, slug))
 }
 
 /// List all active worktrees
@@ -1244,6 +1219,7 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session::save_session;
 
     #[test]
     fn test_derive_speck_slug() {
@@ -1924,8 +1900,26 @@ mod tests {
             repo_root: temp_dir.clone(),
         };
 
-        let session1 = create_worktree(&config1).unwrap();
-        assert!(!session1.reused);
+        let (worktree_path1, branch_name1, _slug1) = create_worktree(&config1).unwrap();
+
+        // Create Session for first worktree so it can be found by reuse logic
+        let session1 = Session {
+            schema_version: "2".to_string(),
+            session_id: branch_name1.strip_prefix("specks/").unwrap_or(&branch_name1).to_string(),
+            speck_path: ".specks/specks-test.md".to_string(),
+            speck_slug: "test".to_string(),
+            branch_name: branch_name1.clone(),
+            base_branch: "main".to_string(),
+            worktree_path: worktree_path1.display().to_string(),
+            created_at: crate::session::now_iso8601(),
+            last_updated_at: None,
+            total_steps: 1,
+            root_bead_id: None,
+            reused: false,
+            step_summaries: None,
+            ..Default::default()
+        };
+        crate::session::save_session(&session1, &temp_dir).unwrap();
 
         // Try to create again - should reuse existing worktree (idempotent)
         let config2 = WorktreeConfig {
@@ -1934,10 +1928,9 @@ mod tests {
             repo_root: temp_dir.clone(),
         };
 
-        let session2 = create_worktree(&config2).unwrap();
-        assert!(session2.reused);
-        assert_eq!(session2.worktree_path, session1.worktree_path);
-        assert_eq!(session2.branch_name, session1.branch_name);
+        let (worktree_path2, branch_name2, _slug2) = create_worktree(&config2).unwrap();
+        assert_eq!(worktree_path1, worktree_path2);
+        assert_eq!(branch_name1, branch_name2);
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
@@ -2046,9 +2039,8 @@ mod tests {
             repo_root: temp_dir.clone(),
         };
 
-        let session = create_worktree(&config).unwrap();
-        assert!(!session.reused);
-        assert!(session.worktree_path.contains(".specks-worktrees"));
+        let (worktree_path, _branch_name, _slug) = create_worktree(&config).unwrap();
+        assert!(worktree_path.to_string_lossy().contains(".specks-worktrees"));
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 

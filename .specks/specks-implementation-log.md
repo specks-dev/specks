@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-4
+date: 2025-02-11T18:24:33Z
+bead: specks-tgg.5
+---
+
+## #step-4: Add bd ready query and extend CreateData with complete infrastructure fields for setup agent
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
 step: #step-3
 date: 2025-02-11T18:13:32Z
 bead: specks-tgg.4
