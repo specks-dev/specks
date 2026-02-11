@@ -192,11 +192,7 @@ Parse the JSON output and look for an entry where `speck_path` matches the input
    ```bash
    specks worktree create <speck_path>
    ```
-   **Optional:** Use `--reuse-existing` flag for idempotent worktree creation:
-   ```bash
-   specks worktree create --reuse-existing <speck_path>
-   ```
-   This flag makes the command idempotent: if a worktree already exists for the speck, it returns the existing worktree instead of failing. The command creates the branch and worktree directory automatically. It will fail if a worktree already exists for this speck (exit code 3, unless `--reuse-existing` is used) or if the speck has no execution steps (exit code 8).
+   The command is idempotent: if a worktree already exists for the speck, it returns the existing worktree instead of failing. The command creates the branch and worktree directory automatically. It will fail if the speck has no execution steps (exit code 8).
 
 2. Parse the CLI output to extract:
    - Worktree path (absolute)

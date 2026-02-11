@@ -49,8 +49,6 @@ pub struct WorktreeConfig {
     pub base_branch: String,
     /// Repository root directory
     pub repo_root: PathBuf,
-    /// If true, reuse existing worktree for this speck instead of creating new one
-    pub reuse_existing: bool,
 }
 
 /// Derive speck slug from speck path per Spec S05
@@ -577,8 +575,8 @@ impl<'a> GitCli<'a> {}
 /// Validates speck has at least one execution step, generates branch name,
 /// creates branch from base, creates worktree, and initializes session.json.
 ///
-/// If `config.reuse_existing` is true, searches for existing worktrees with
-/// matching speck_path and returns the most recent one instead of creating new.
+/// Always searches for existing worktrees with matching speck_path and returns
+/// the most recent one instead of creating new. This makes the command idempotent.
 ///
 /// Implements partial failure recovery:
 /// - If branch creation succeeds but worktree creation fails: delete the branch
@@ -612,15 +610,9 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         return Err(SpecksError::SpeckHasNoSteps);
     }
 
-    // Check for existing worktrees for this speck
+    // Check for existing worktrees for this speck and reuse if found
     if let Some(existing_session) = find_existing_worktree(config)? {
-        if config.reuse_existing {
-            // Reuse the existing worktree
-            return Ok(existing_session);
-        } else {
-            // Fail because a worktree already exists and we're not allowed to reuse
-            return Err(SpecksError::WorktreeAlreadyExists);
-        }
+        return Ok(existing_session);
     }
     // No existing worktree found, proceed to create new one
 
@@ -632,16 +624,6 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<Session, SpecksError> 
         .repo_root
         .join(".specks-worktrees")
         .join(&worktree_dir_name);
-
-    // Check if worktree already exists
-    if worktree_path.exists() {
-        return Err(SpecksError::WorktreeAlreadyExists);
-    }
-
-    // Check if branch already exists
-    if git.branch_exists(&branch_name) {
-        return Err(SpecksError::WorktreeAlreadyExists);
-    }
 
     // Create branch from base
     git.create_branch(&config.base_branch, &branch_name)?;
@@ -1854,19 +1836,6 @@ mod tests {
     }
 
     #[test]
-    fn test_worktree_config_default_reuse_existing() {
-        // Ensure default behavior is backward compatible (reuse_existing: false)
-        let config = WorktreeConfig {
-            speck_path: PathBuf::from(".specks/specks-1.md"),
-            base_branch: "main".to_string(),
-            repo_root: PathBuf::from("/tmp/test"),
-            reuse_existing: false,
-        };
-
-        assert!(!config.reuse_existing);
-    }
-
-    #[test]
     fn test_create_worktree_reuse_existing_finds_worktree() {
         use std::process::Command;
         use tempfile::TempDir;
@@ -1969,21 +1938,20 @@ mod tests {
             speck_path: PathBuf::from(".specks/specks-test.md"),
             base_branch: "main".to_string(),
             repo_root: temp_dir.clone(),
-            reuse_existing: false,
         };
 
         let session1 = create_worktree(&config1).unwrap();
         assert!(!session1.reused);
 
-        // Try to create with reuse_existing: true
+        // Try to create again - should reuse existing worktree (idempotent)
         let config2 = WorktreeConfig {
             speck_path: PathBuf::from(".specks/specks-test.md"),
             base_branch: "main".to_string(),
             repo_root: temp_dir.clone(),
-            reuse_existing: true,
         };
 
         let session2 = create_worktree(&config2).unwrap();
+        assert!(session2.reused);
         assert_eq!(session2.worktree_path, session1.worktree_path);
         assert_eq!(session2.branch_name, session1.branch_name);
         // TempDir auto-cleans on drop - no manual cleanup needed
@@ -2092,7 +2060,6 @@ mod tests {
             speck_path: PathBuf::from(".specks/specks-test.md"),
             base_branch: "main".to_string(),
             repo_root: temp_dir.clone(),
-            reuse_existing: true,
         };
 
         let session = create_worktree(&config).unwrap();
@@ -2204,7 +2171,6 @@ mod tests {
             speck_path: PathBuf::from(".specks/specks-test.md"),
             base_branch: "main".to_string(),
             repo_root: temp_dir.clone(),
-            reuse_existing: false,
         };
 
         create_worktree(&config1).unwrap();

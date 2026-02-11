@@ -8,6 +8,19 @@ date: 2026-02-10T19:14:40Z
 bead: specks-jlu.4
 ---
 
+---
+step: #step-0
+date: 2025-02-11T17:33:54Z
+bead: specks-tgg.1
+---
+
+## #step-0: Remove reuse_existing flag, make worktree reuse always-on and idempotent
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
 ## #step-3: Simplified committer-agent from 887 lines to 69 lines (92% reduction). Replaced all manual git/log/bead/session operations with CLI delegation to specks step-commit and specks step-publish. Preserved input contracts. Added CLI documentation to CLAUDE.md. Updated implementer SKILL.md references.
 
 - Agent simplified to thin CLI wrapper
