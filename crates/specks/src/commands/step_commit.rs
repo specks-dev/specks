@@ -4,9 +4,7 @@
 
 use crate::commands::log::{log_prepend_inner, log_rotate_inner};
 use crate::output::{JsonResponse, StepCommitData};
-use specks_core::session::{
-    CurrentStep, Session, SessionStatus, StepSummary, now_iso8601, save_session_atomic,
-};
+use specks_core::session::{Session, StepSummary, now_iso8601, save_session_atomic};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -130,30 +128,18 @@ pub fn run_step_commit(
     let (bead_closed, warnings) =
         close_bead_in_worktree(worktree_path, &bead, close_reason.as_deref())?;
 
-    // If bead close failed after commit, set needs_reconcile
-    let needs_reconcile = !bead_closed;
+    // If bead close failed after commit, record in output
+    let bead_close_failed = !bead_closed;
 
     // Step 7: Update session
-    if bead_closed {
-        // Only update session if bead close succeeded
-        match update_session(&mut session_data, &step, &commit_hash, &summary, repo_root) {
-            Ok(_) => {}
-            Err(e) => {
-                // Session update failure is a warning, not an error (commit + bead close succeeded)
-                if !quiet {
-                    eprintln!("Warning: Session update failed: {}", e);
-                }
-            }
-        }
-    } else {
-        // Bead close failed - set NeedsReconcile status
-        session_data.status = SessionStatus::NeedsReconcile;
-        match save_session_atomic(&session_data, repo_root) {
-            Ok(_) => {}
-            Err(e) => {
-                if !quiet {
-                    eprintln!("Warning: Failed to update session to NeedsReconcile: {}", e);
-                }
+    // In v2, session only tracks metadata (no step-tracking status)
+    // Bead state is the source of truth for step completion
+    match update_session(&mut session_data, &step, &commit_hash, &summary, repo_root) {
+        Ok(_) => {}
+        Err(e) => {
+            // Session update failure is a warning, not an error (commit succeeded)
+            if !quiet {
+                eprintln!("Warning: Session update failed: {}", e);
             }
         }
     }
@@ -172,7 +158,7 @@ pub fn run_step_commit(
         log_rotated: rotate_result.rotated,
         archived_path: rotate_result.archived_path.clone(),
         files_staged: files_to_stage,
-        needs_reconcile,
+        bead_close_failed,
         warnings,
     };
 
@@ -199,7 +185,7 @@ pub fn run_step_commit(
         }
     }
 
-    // Exit 0 even if needs_reconcile (commit succeeded)
+    // Exit 0 even if bead_close_failed (commit succeeded)
     Ok(0)
 }
 
@@ -263,13 +249,8 @@ fn update_session(
     summary: &str,
     repo_root: &Path,
 ) -> Result<(), String> {
-    // Move step from remaining to completed
-    if let Some(ref mut remaining) = session.steps_remaining {
-        remaining.retain(|s| s != step);
-    }
-    if let Some(ref mut completed) = session.steps_completed {
-        completed.push(step.to_string());
-    }
+    // V2: Session only tracks step_summaries and timestamp
+    // Beads is the source of truth for step completion state
 
     // Append to step_summaries
     if session.step_summaries.is_none() {
@@ -281,17 +262,6 @@ fn update_session(
             commit_hash: commit_hash.to_string(),
             summary: summary.to_string(),
         });
-    }
-
-    // Advance current_step
-    if let Some(ref remaining) = session.steps_remaining {
-        if remaining.is_empty() {
-            session.current_step = CurrentStep::Done;
-        } else {
-            session.current_step = CurrentStep::Anchor(remaining[0].clone());
-        }
-    } else {
-        session.current_step = CurrentStep::Done;
     }
 
     // Update timestamp
@@ -312,7 +282,7 @@ fn error_response(message: &str, json: bool, quiet: bool) -> Result<i32, String>
         log_rotated: false,
         archived_path: None,
         files_staged: vec![],
-        needs_reconcile: false,
+        bead_close_failed: false,
         warnings: vec![],
     };
 

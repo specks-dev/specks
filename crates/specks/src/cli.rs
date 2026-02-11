@@ -171,7 +171,7 @@ pub enum Commands {
     ///
     /// Atomically performs log rotation, prepend, git commit, bead close, and session update.
     #[command(
-        long_about = "Commit a single implementation step.\n\nAtomic sequence:\n  1. Rotate log if over threshold\n  2. Prepend log entry\n  3. Stage files\n  4. Git commit\n  5. Close bead\n  6. Update session\n\nAll file paths are relative to worktree root.\nSession path must be absolute.\n\nPartial success: If commit succeeds but bead close fails, exits 0 with needs_reconcile=true."
+        long_about = "Commit a single implementation step.\n\nAtomic sequence:\n  1. Rotate log if over threshold\n  2. Prepend log entry\n  3. Stage files\n  4. Git commit\n  5. Close bead\n  6. Update session\n\nAll file paths are relative to worktree root.\nSession path must be absolute.\n\nPartial success: If commit succeeds but bead close fails, exits 0 with bead_close_failed=true."
     )]
     StepCommit {
         /// Absolute path to the worktree directory

@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-3
+date: 2025-02-11T18:13:32Z
+bead: specks-tgg.4
+---
+
+## #step-3: Slim Session struct: remove step-tracking fields, make beads single source of truth
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-11T17:47:12Z
 bead: specks-tgg.3

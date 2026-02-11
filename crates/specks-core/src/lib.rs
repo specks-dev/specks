@@ -39,7 +39,7 @@ pub use error::SpecksError;
 pub use interaction::{InteractionAdapter, InteractionError, InteractionResult, ProgressHandle};
 pub use parser::parse_speck;
 pub use session::{
-    Session, SessionStatus, artifacts_dir, load_session, now_iso8601, save_session,
+    Session, StepSummary, artifacts_dir, load_session, now_iso8601, save_session,
     session_file_path, session_id_from_worktree, sessions_dir,
 };
 pub use types::{

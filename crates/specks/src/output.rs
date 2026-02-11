@@ -329,6 +329,8 @@ pub struct BeadsCloseData {
 }
 
 /// Data payload for session reconcile command
+/// DEPRECATED in v2: session reconcile is deprecated; use specks beads close instead
+#[deprecated(since = "0.3.0", note = "session reconcile is deprecated; use specks beads close instead")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionReconcileData {
     /// Session ID that was reconciled
@@ -367,7 +369,8 @@ pub struct StepCommitData {
     /// List of files that were staged
     pub files_staged: Vec<String>,
     /// True if commit succeeded but bead close failed
-    pub needs_reconcile: bool,
+    #[serde(alias = "needs_reconcile")]  // v1 compat
+    pub bead_close_failed: bool,
     /// Any non-fatal warnings encountered
     pub warnings: Vec<String>,
 }
@@ -407,7 +410,7 @@ mod tests {
             log_rotated: false,
             archived_path: None,
             files_staged: vec!["a.rs".to_string(), "b.rs".to_string()],
-            needs_reconcile: false,
+            bead_close_failed: false,
             warnings: vec![],
         };
 
@@ -422,7 +425,7 @@ mod tests {
         assert!(!deserialized.log_rotated);
         assert_eq!(deserialized.archived_path, None);
         assert_eq!(deserialized.files_staged, vec!["a.rs", "b.rs"]);
-        assert!(!deserialized.needs_reconcile);
+        assert!(!deserialized.bead_close_failed);
         assert_eq!(deserialized.warnings.len(), 0);
     }
 
@@ -437,14 +440,14 @@ mod tests {
             log_rotated: true,
             archived_path: Some(".specks/archive/log-2026-02-11.md".to_string()),
             files_staged: vec!["x.rs".to_string()],
-            needs_reconcile: true,
+            bead_close_failed: true,
             warnings: vec!["Bead close failed".to_string()],
         };
 
         let json = serde_json::to_string(&data).unwrap();
         let deserialized: StepCommitData = serde_json::from_str(&json).unwrap();
 
-        assert!(deserialized.needs_reconcile);
+        assert!(deserialized.bead_close_failed);
         assert_eq!(deserialized.warnings, vec!["Bead close failed"]);
         assert_eq!(
             deserialized.archived_path,
