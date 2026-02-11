@@ -774,7 +774,10 @@ mod tests {
 
         match cli.command {
             Some(Commands::StepCommit { close_reason, .. }) => {
-                assert_eq!(close_reason, Some("Step completed successfully".to_string()));
+                assert_eq!(
+                    close_reason,
+                    Some("Step completed successfully".to_string())
+                );
             }
             _ => panic!("Expected StepCommit command"),
         }

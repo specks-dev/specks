@@ -3,7 +3,7 @@
 //! Pushes branch to remote, creates PR, and updates session status.
 
 use crate::output::{JsonResponse, StepPublishData};
-use specks_core::session::{now_iso8601, save_session_atomic, Session, SessionStatus};
+use specks_core::session::{Session, SessionStatus, now_iso8601, save_session_atomic};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -42,7 +42,11 @@ pub fn run_step_publish(
         .map_err(|e| format!("Failed to run gh auth status: {}", e))?;
 
     if !output.status.success() {
-        return error_response("GitHub CLI not authenticated. Run 'gh auth login'", json, quiet);
+        return error_response(
+            "GitHub CLI not authenticated. Run 'gh auth login'",
+            json,
+            quiet,
+        );
     }
 
     // Step 2: Derive repo from git remote if not provided
@@ -115,7 +119,10 @@ pub fn run_step_publish(
             let response = JsonResponse::ok("step-publish", data);
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
         } else if !quiet {
-            eprintln!("Branch pushed successfully, but PR creation failed: {}", stderr);
+            eprintln!(
+                "Branch pushed successfully, but PR creation failed: {}",
+                stderr
+            );
         }
 
         return Ok(0); // Exit 0 for partial success
@@ -214,7 +221,10 @@ fn derive_repo_from_remote(worktree_path: &Path) -> Result<String, String> {
         return Ok(repo.to_string());
     }
 
-    Err(format!("Cannot parse GitHub repo from remote URL: {}", remote_url))
+    Err(format!(
+        "Cannot parse GitHub repo from remote URL: {}",
+        remote_url
+    ))
 }
 
 /// Helper to generate PR body markdown
@@ -337,7 +347,10 @@ mod tests {
     fn test_parse_pr_info_with_url() {
         let output = "https://github.com/owner/repo/pull/123\n";
         let (url, number) = parse_pr_info(output);
-        assert_eq!(url, Some("https://github.com/owner/repo/pull/123".to_string()));
+        assert_eq!(
+            url,
+            Some("https://github.com/owner/repo/pull/123".to_string())
+        );
         assert_eq!(number, Some(123));
     }
 
@@ -345,7 +358,10 @@ mod tests {
     fn test_parse_pr_info_with_multiline_output() {
         let output = "Creating pull request...\nhttps://github.com/owner/repo/pull/456\nDone!\n";
         let (url, number) = parse_pr_info(output);
-        assert_eq!(url, Some("https://github.com/owner/repo/pull/456".to_string()));
+        assert_eq!(
+            url,
+            Some("https://github.com/owner/repo/pull/456".to_string())
+        );
         assert_eq!(number, Some(456));
     }
 

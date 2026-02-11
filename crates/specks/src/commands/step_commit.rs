@@ -4,7 +4,9 @@
 
 use crate::commands::log::{log_prepend_inner, log_rotate_inner};
 use crate::output::{JsonResponse, StepCommitData};
-use specks_core::session::{save_session_atomic, CurrentStep, Session, SessionStatus, StepSummary, now_iso8601};
+use specks_core::session::{
+    CurrentStep, Session, SessionStatus, StepSummary, now_iso8601, save_session_atomic,
+};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -30,19 +32,11 @@ pub fn run_step_commit(
 
     // Validate inputs
     if !worktree_path.exists() {
-        return error_response(
-            "Worktree directory does not exist",
-            json,
-            quiet,
-        );
+        return error_response("Worktree directory does not exist", json, quiet);
     }
 
     if !session_path.exists() {
-        return error_response(
-            "Session file does not exist",
-            json,
-            quiet,
-        );
+        return error_response("Session file does not exist", json, quiet);
     }
 
     // Validate that all files exist in worktree
@@ -133,7 +127,8 @@ pub fn run_step_commit(
     let commit_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     // Step 6: Close bead
-    let (bead_closed, warnings) = close_bead_in_worktree(worktree_path, &bead, close_reason.as_deref())?;
+    let (bead_closed, warnings) =
+        close_bead_in_worktree(worktree_path, &bead, close_reason.as_deref())?;
 
     // If bead close failed after commit, set needs_reconcile
     let needs_reconcile = !bead_closed;
@@ -168,7 +163,11 @@ pub fn run_step_commit(
         committed: true,
         commit_hash: Some(commit_hash),
         bead_closed,
-        bead_id: if bead_closed { Some(bead.clone()) } else { None },
+        bead_id: if bead_closed {
+            Some(bead.clone())
+        } else {
+            None
+        },
         log_updated: true,
         log_rotated: rotate_result.rotated,
         archived_path: rotate_result.archived_path.clone(),
@@ -183,9 +182,20 @@ pub fn run_step_commit(
     } else if !quiet {
         println!("Step committed successfully");
         println!("  Commit: {}", data.commit_hash.as_ref().unwrap());
-        println!("  Bead: {} ({})", bead, if bead_closed { "closed" } else { "FAILED - needs reconcile" });
+        println!(
+            "  Bead: {} ({})",
+            bead,
+            if bead_closed {
+                "closed"
+            } else {
+                "FAILED - needs reconcile"
+            }
+        );
         if rotate_result.rotated {
-            println!("  Log rotated: {}", rotate_result.archived_path.unwrap_or_default());
+            println!(
+                "  Log rotated: {}",
+                rotate_result.archived_path.unwrap_or_default()
+            );
         }
     }
 
@@ -195,11 +205,10 @@ pub fn run_step_commit(
 
 /// Helper to load session from file
 fn load_session_file(path: &Path) -> Result<Session, String> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read session file: {}", e))?;
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read session file: {}", e))?;
 
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse session JSON: {}", e))
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse session JSON: {}", e))
 }
 
 /// Helper to close bead in worktree context
@@ -212,14 +221,17 @@ fn close_bead_in_worktree(
 
     // Load config from worktree
     let config = Config::load_from_project(worktree_path).unwrap_or_default();
-    let bd_path = std::env::var("SPECKS_BD_PATH")
-        .unwrap_or_else(|_| config.specks.beads.bd_path.clone());
+    let bd_path =
+        std::env::var("SPECKS_BD_PATH").unwrap_or_else(|_| config.specks.beads.bd_path.clone());
 
     let beads = BeadsCli::new(bd_path);
 
     // Check if beads CLI is installed
     if !beads.is_installed() {
-        return Ok((false, vec!["beads CLI not installed or not found".to_string()]));
+        return Ok((
+            false,
+            vec!["beads CLI not installed or not found".to_string()],
+        ));
     }
 
     // Close bead - must run from worktree directory so bd finds .beads/
@@ -231,7 +243,9 @@ fn close_bead_in_worktree(
         cmd.arg("--reason").arg(r);
     }
 
-    let output = cmd.output().map_err(|e| format!("Failed to run bd close: {}", e))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to run bd close: {}", e))?;
 
     if output.status.success() {
         Ok((true, vec![]))
@@ -284,16 +298,11 @@ fn update_session(
     session.last_updated_at = Some(now_iso8601());
 
     // Save atomically
-    save_session_atomic(session, repo_root)
-        .map_err(|e| format!("Failed to save session: {}", e))
+    save_session_atomic(session, repo_root).map_err(|e| format!("Failed to save session: {}", e))
 }
 
 /// Helper to construct error response
-fn error_response(
-    message: &str,
-    json: bool,
-    quiet: bool,
-) -> Result<i32, String> {
+fn error_response(message: &str, json: bool, quiet: bool) -> Result<i32, String> {
     let data = StepCommitData {
         committed: false,
         commit_hash: None,
