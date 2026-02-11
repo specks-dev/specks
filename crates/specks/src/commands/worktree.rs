@@ -208,7 +208,21 @@ fn commit_bead_annotations(
 ) -> Result<(), specks_core::error::SpecksError> {
     use std::process::Command;
 
-    // Stage the speck file
+    // Stage the .specks/ directory (includes init files: config, log, skeleton)
+    let status = Command::new("git")
+        .args(["-C", &worktree_path.to_string_lossy(), "add", ".specks/"])
+        .status()
+        .map_err(|e| specks_core::error::SpecksError::BeadCommitFailed {
+            reason: format!("failed to stage .specks/ directory: {}", e),
+        })?;
+
+    if !status.success() {
+        return Err(specks_core::error::SpecksError::BeadCommitFailed {
+            reason: "git add .specks/ failed".to_string(),
+        });
+    }
+
+    // Stage the speck file (includes bead annotations)
     let status = Command::new("git")
         .args(["-C", &worktree_path.to_string_lossy(), "add", speck_path])
         .status()
@@ -218,12 +232,12 @@ fn commit_bead_annotations(
 
     if !status.success() {
         return Err(specks_core::error::SpecksError::BeadCommitFailed {
-            reason: "git add failed".to_string(),
+            reason: "git add speck failed".to_string(),
         });
     }
 
-    // Commit the changes
-    let commit_msg = format!("chore(beads): sync bead annotations for {}", speck_name);
+    // Commit the changes (both init files and bead annotations)
+    let commit_msg = format!("chore: init worktree and sync beads for {}", speck_name);
     let status = Command::new("git")
         .args([
             "-C",
@@ -334,13 +348,71 @@ pub fn run_worktree_create_with_root(
 
     match create_worktree(&config) {
         Ok(session) => {
-            // Sync beads and commit (always-on)
             let worktree_path = PathBuf::from(&session.worktree_path);
             let speck_name = speck_path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("unknown");
 
+            // Run specks init in the worktree (idempotent, creates .specks/ infrastructure)
+            let init_result = std::env::current_exe()
+                .map_err(|e| specks_core::error::SpecksError::InitFailed {
+                    reason: format!("failed to get current executable: {}", e),
+                })
+                .and_then(|exe| {
+                    use std::process::Command;
+                    Command::new(exe)
+                        .arg("init")
+                        .current_dir(&worktree_path)
+                        .output()
+                        .map_err(|e| specks_core::error::SpecksError::InitFailed {
+                            reason: format!("failed to execute init: {}", e),
+                        })
+                })
+                .and_then(|output| {
+                    if output.status.success() {
+                        Ok(())
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        Err(specks_core::error::SpecksError::InitFailed {
+                            reason: format!("init failed: {}", stderr),
+                        })
+                    }
+                });
+
+            if let Err(e) = init_result {
+                // Init failed - rollback
+                let _ = rollback_worktree_creation(
+                    &worktree_path,
+                    &session.branch_name,
+                    &repo_root,
+                );
+
+                if json_output {
+                    let data = CreateData {
+                        worktree_path: String::new(),
+                        branch_name: String::new(),
+                        base_branch: session.base_branch.clone(),
+                        speck_path: session.speck_path.clone(),
+                        total_steps: 0,
+                        bead_mapping: None,
+                        root_bead_id: None,
+                        rollback_performed: true,
+                        reused: false,
+                    };
+                    eprintln!(
+                        "{}",
+                        serde_json::to_string_pretty(&data)
+                            .map_err(|e| e.to_string())?
+                    );
+                } else if !quiet {
+                    eprintln!("error: {}", e);
+                    eprintln!("Rolled back worktree creation");
+                }
+                return Ok(e.exit_code());
+            }
+
+            // Sync beads and commit (always-on)
             // Try to sync beads
             let (bead_mapping, root_bead_id) = match sync_beads_in_worktree(&worktree_path, &speck) {
                 Ok((mapping, root_id)) => {

@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-2
+date: 2025-02-11T17:47:12Z
+bead: specks-tgg.3
+---
+
+## #step-2: Add automatic specks init inside worktree creation, before beads sync
+
+**Files changed:**
+- .specks/specks-3.md
+
+---
+
+---
 step: #step-1
 date: 2025-02-11T17:41:55Z
 bead: specks-tgg.2

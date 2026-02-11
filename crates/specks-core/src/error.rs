@@ -189,6 +189,10 @@ pub enum SpecksError {
     /// E036: Bead commit failed during worktree creation
     #[error("E036: Bead commit failed: {reason}")]
     BeadCommitFailed { reason: String },
+
+    /// E037: Init failed during worktree creation
+    #[error("E037: Init failed: {reason}")]
+    InitFailed { reason: String },
 }
 
 impl SpecksError {
@@ -234,6 +238,7 @@ impl SpecksError {
             SpecksError::WorktreeCleanupFailed { .. } => "E034",
             SpecksError::BeadsSyncFailed { .. } => "E035",
             SpecksError::BeadCommitFailed { .. } => "E036",
+            SpecksError::InitFailed { .. } => "E037",
         }
     }
 
@@ -311,6 +316,7 @@ impl SpecksError {
             SpecksError::WorktreeCleanupFailed { .. } => 1, // Worktree cleanup failed
             SpecksError::BeadsSyncFailed { .. } => 10,   // Beads sync failed (exit code 10 per S02)
             SpecksError::BeadCommitFailed { .. } => 11, // Bead commit failed (exit code 11 per S02)
+            SpecksError::InitFailed { .. } => 12,        // Init failed (exit code 12)
         }
     }
 }
