@@ -167,6 +167,90 @@ pub enum Commands {
         #[arg(short, long)]
         verbose: bool,
     },
+
+    /// Commit a single implementation step
+    ///
+    /// Atomically performs log rotation, prepend, git commit, bead close, and session update.
+    #[command(
+        long_about = "Commit a single implementation step.\n\nAtomic sequence:\n  1. Rotate log if over threshold\n  2. Prepend log entry\n  3. Stage files\n  4. Git commit\n  5. Close bead\n  6. Update session\n\nAll file paths are relative to worktree root.\nSession path must be absolute.\n\nPartial success: If commit succeeds but bead close fails, exits 0 with needs_reconcile=true."
+    )]
+    StepCommit {
+        /// Absolute path to the worktree directory
+        #[arg(long, value_name = "PATH")]
+        worktree: String,
+
+        /// Step anchor (e.g., #step-0)
+        #[arg(long, value_name = "ANCHOR")]
+        step: String,
+
+        /// Speck file path relative to repo root
+        #[arg(long, value_name = "PATH")]
+        speck: String,
+
+        /// Git commit message
+        #[arg(long, value_name = "MESSAGE")]
+        message: String,
+
+        /// Files to stage (relative to worktree root, repeatable)
+        #[arg(long, value_name = "FILE", num_args = 1..)]
+        files: Vec<String>,
+
+        /// Bead ID to close (e.g., bd-abc123)
+        #[arg(long, value_name = "BEAD_ID")]
+        bead: String,
+
+        /// One-line summary for log entry
+        #[arg(long, value_name = "TEXT")]
+        summary: String,
+
+        /// Absolute path to session JSON file
+        #[arg(long, value_name = "PATH")]
+        session: String,
+
+        /// Reason for closing the bead (optional)
+        #[arg(long, value_name = "TEXT")]
+        close_reason: Option<String>,
+    },
+
+    /// Publish implementation results via push and PR creation
+    ///
+    /// Pushes branch to remote, creates PR, and updates session status.
+    #[command(
+        long_about = "Publish implementation results via push and PR creation.\n\nSequence:\n  1. Check gh auth\n  2. Derive repo from remote (if not provided)\n  3. Generate PR body from step summaries\n  4. Push branch to remote\n  5. Create PR via gh\n  6. Update session to Completed\n\nRequires:\n  - GitHub CLI (gh) installed and authenticated\n  - Remote 'origin' configured"
+    )]
+    StepPublish {
+        /// Absolute path to the worktree directory
+        #[arg(long, value_name = "PATH")]
+        worktree: String,
+
+        /// Git branch name (e.g., specks/auth-20260208-143022)
+        #[arg(long, value_name = "BRANCH")]
+        branch: String,
+
+        /// Base branch to merge into (e.g., main)
+        #[arg(long, value_name = "BRANCH")]
+        base: String,
+
+        /// PR title
+        #[arg(long, value_name = "TEXT")]
+        title: String,
+
+        /// Speck file path relative to repo root
+        #[arg(long, value_name = "PATH")]
+        speck: String,
+
+        /// Step completion summaries for PR body (repeatable)
+        #[arg(long, value_name = "TEXT", num_args = 1..)]
+        step_summaries: Vec<String>,
+
+        /// Absolute path to session JSON file
+        #[arg(long, value_name = "PATH")]
+        session: String,
+
+        /// GitHub repo in owner/repo format (auto-derived if not provided)
+        #[arg(long, value_name = "REPO")]
+        repo: Option<String>,
+    },
 }
 
 /// Get the command args for use in the application
@@ -608,6 +692,173 @@ mod tests {
         match cli.command {
             Some(Commands::Doctor) => {}
             _ => panic!("Expected Doctor command"),
+        }
+    }
+
+    #[test]
+    fn test_step_commit_command() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "step-commit",
+            "--worktree",
+            "/path/to/worktree",
+            "--step",
+            "#step-0",
+            "--speck",
+            ".specks/specks-1.md",
+            "--message",
+            "feat: add feature",
+            "--files",
+            "src/a.rs",
+            "src/b.rs",
+            "--bead",
+            "bd-123",
+            "--summary",
+            "Completed step 0",
+            "--session",
+            "/path/to/session.json",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::StepCommit {
+                worktree,
+                step,
+                speck,
+                message,
+                files,
+                bead,
+                summary,
+                session,
+                close_reason,
+            }) => {
+                assert_eq!(worktree, "/path/to/worktree");
+                assert_eq!(step, "#step-0");
+                assert_eq!(speck, ".specks/specks-1.md");
+                assert_eq!(message, "feat: add feature");
+                assert_eq!(files, vec!["src/a.rs", "src/b.rs"]);
+                assert_eq!(bead, "bd-123");
+                assert_eq!(summary, "Completed step 0");
+                assert_eq!(session, "/path/to/session.json");
+                assert!(close_reason.is_none());
+            }
+            _ => panic!("Expected StepCommit command"),
+        }
+    }
+
+    #[test]
+    fn test_step_commit_with_close_reason() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "step-commit",
+            "--worktree",
+            "/path",
+            "--step",
+            "#step-1",
+            "--speck",
+            ".specks/specks-2.md",
+            "--message",
+            "fix: something",
+            "--files",
+            "a.rs",
+            "--bead",
+            "bd-456",
+            "--summary",
+            "Done",
+            "--session",
+            "/path/session.json",
+            "--close-reason",
+            "Step completed successfully",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::StepCommit { close_reason, .. }) => {
+                assert_eq!(close_reason, Some("Step completed successfully".to_string()));
+            }
+            _ => panic!("Expected StepCommit command"),
+        }
+    }
+
+    #[test]
+    fn test_step_publish_command() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "step-publish",
+            "--worktree",
+            "/path/to/worktree",
+            "--branch",
+            "specks/auth-123",
+            "--base",
+            "main",
+            "--title",
+            "feat: add authentication",
+            "--speck",
+            ".specks/specks-1.md",
+            "--step-summaries",
+            "Step 0: added models",
+            "Step 1: added handlers",
+            "--session",
+            "/path/to/session.json",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::StepPublish {
+                worktree,
+                branch,
+                base,
+                title,
+                speck,
+                step_summaries,
+                session,
+                repo,
+            }) => {
+                assert_eq!(worktree, "/path/to/worktree");
+                assert_eq!(branch, "specks/auth-123");
+                assert_eq!(base, "main");
+                assert_eq!(title, "feat: add authentication");
+                assert_eq!(speck, ".specks/specks-1.md");
+                assert_eq!(
+                    step_summaries,
+                    vec!["Step 0: added models", "Step 1: added handlers"]
+                );
+                assert_eq!(session, "/path/to/session.json");
+                assert!(repo.is_none());
+            }
+            _ => panic!("Expected StepPublish command"),
+        }
+    }
+
+    #[test]
+    fn test_step_publish_with_repo() {
+        let cli = Cli::try_parse_from([
+            "specks",
+            "step-publish",
+            "--worktree",
+            "/path",
+            "--branch",
+            "branch",
+            "--base",
+            "main",
+            "--title",
+            "title",
+            "--speck",
+            ".specks/specks-1.md",
+            "--step-summaries",
+            "summary",
+            "--session",
+            "/path/session.json",
+            "--repo",
+            "owner/repo",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(Commands::StepPublish { repo, .. }) => {
+                assert_eq!(repo, Some("owner/repo".to_string()));
+            }
+            _ => panic!("Expected StepPublish command"),
         }
     }
 }

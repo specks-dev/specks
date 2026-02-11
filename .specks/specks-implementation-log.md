@@ -3,6 +3,29 @@
 This log tracks completed implementation work.
 
 ---
+step: #step-0
+date: 2026-02-10T19:13:40Z
+bead: specks-jlu.1
+---
+
+## #step-0: Added StepCommitData and StepPublishData output structs, StepCommit and StepPublish CLI variants with all flags, stub command modules, and main dispatch wiring. 8 new tests added.
+
+- StepCommitData struct with 10 fields
+- StepPublishData struct with 6 fields
+- StepCommit CLI variant with flags
+- StepPublish CLI variant with flags
+- step_commit.rs stub module
+- step_publish.rs stub module
+- Module registration in mod.rs
+- Main dispatch wiring
+
+**Tests:** CLI parsing tests for both commands, Serialization round-trip tests for both structs, debug_assert verification
+
+**Checkpoints:**
+- Build passes with no warnings
+- All 305 tests pass
+
+---
 step: #step-3
 date: 2026-02-10T16:20:59Z
 bead: specks-w87.4

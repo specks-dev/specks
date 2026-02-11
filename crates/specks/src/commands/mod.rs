@@ -8,6 +8,8 @@ pub mod log;
 pub mod merge;
 pub mod session;
 pub mod status;
+pub mod step_commit;
+pub mod step_publish;
 pub mod validate;
 pub mod version;
 pub mod worktree;
@@ -20,6 +22,8 @@ pub use log::{LogCommands, run_log_prepend, run_log_rotate};
 pub use merge::run_merge;
 pub use session::{SessionCommands, run_session};
 pub use status::run_status;
+pub use step_commit::run_step_commit;
+pub use step_publish::run_step_publish;
 pub use validate::run_validate;
 pub use version::run_version;
 pub use worktree::{
