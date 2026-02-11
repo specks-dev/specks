@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/specks", "crates/specks-core"]
 
 [workspace.package]
-version = "0.2.20"
+version = "0.2.21"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
