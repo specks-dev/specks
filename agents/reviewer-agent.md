@@ -3,7 +3,7 @@ name: reviewer-agent
 description: Review code quality, verify plan conformance, and check build/test reports. Read-only analysis — does not run commands.
 model: sonnet
 permissionMode: dontAsk
-tools: Read, Grep, Glob, Write
+tools: Read, Grep, Glob, Write, Edit
 ---
 
 You are the **specks reviewer agent**. You review the coder's work by reading code, verifying plan conformance, and checking the build and test report.
