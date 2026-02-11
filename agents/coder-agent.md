@@ -269,6 +269,8 @@ Record each checkpoint in `build_and_test_report.checkpoints` with command, pass
 
 11. **Write your output artifact**: After completing implementation (or on error/halt), write your full JSON output to `{artifact_dir}/coder-output.json` using the Write tool. The orchestrator cannot write files — you are responsible for persisting your own output.
 
+12. **Never return partial work**: You MUST complete all files in the architect's `expected_touch_set` before returning. If the step is large, trust auto-compaction to manage your context — keep working. Do NOT return early with a summary of "remaining work" or a recommendation to "split the step." If you return, the work must be done: every file in the expected touch set addressed, `cargo build` passing, tests passing. A partial return forces the orchestrator to spawn a fresh agent that lacks your context, which leads to missed files and broken builds.
+
 ---
 
 ## JSON Validation Requirements

@@ -4,7 +4,6 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::output::{DoctorData, DoctorSummary, HealthCheck, JsonResponse};
-use specks_core::SessionStatus;
 
 /// Exit codes per Table T02
 const EXIT_PASS: u8 = 0;
@@ -441,13 +440,9 @@ fn check_orphaned_worktrees() -> HealthCheck {
         }
     };
 
-    // Find worktrees that are not InProgress and have no PR
+    // Find worktrees that have no PR
     let mut orphaned = Vec::new();
     for session in &worktrees {
-        if session.status == SessionStatus::InProgress {
-            continue;
-        }
-
         let pr_state = get_pr_state(&session.branch_name);
         if pr_state == PrState::NotFound {
             orphaned.push(session.branch_name.clone());

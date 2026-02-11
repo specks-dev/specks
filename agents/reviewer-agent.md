@@ -274,6 +274,19 @@ If `**References:**` cites anchors like `(#api-design, #error-codes)`:
 1. Read those sections from the speck
 2. Verify the implementation conforms to what those sections specify
 
+### 6. Verify File Coverage Against Expected Touch Set
+
+Compare the coder's `files_created` + `files_modified` against the architect's `expected_touch_set`. For every file in the expected touch set that does NOT appear in the coder's file lists:
+
+1. Check whether the file actually needed changes (it may not if the architect was conservative)
+2. If the file DOES still contain code that contradicts the step's goals (e.g., references to removed symbols, old API patterns), report it as:
+   - Issue type: `"missing_file"`
+   - Severity: `"major"`
+   - Description: what was expected vs what the file still contains
+3. This is a **REVISE** trigger — the coder must address every file the architect identified
+
+**This check is critical.** When a coder runs out of context and a fresh coder continues the work, files can be missed. The expected touch set is the contract. Verify it.
+
 ---
 
 ## Review Checklist

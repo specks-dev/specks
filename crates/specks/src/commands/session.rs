@@ -57,157 +57,164 @@ fn run_reconcile(
 ) -> Result<i32, String> {
     // V2: Reconcile command is deprecated
     if !quiet {
-        eprintln!("Error: 'session reconcile' is deprecated in v2. Use 'specks beads close <bead-id>' instead.");
+        eprintln!(
+            "Error: 'session reconcile' is deprecated in v2. Use 'specks beads close <bead-id>' instead."
+        );
     }
     if json_output {
-        println!(r#"{{"status":"error","message":"session reconcile is deprecated; use specks beads close <bead-id> instead"}}"#);
+        println!(
+            r#"{{"status":"error","message":"session reconcile is deprecated; use specks beads close <bead-id> instead"}}"#
+        );
     }
-    return Err("session reconcile is deprecated; use specks beads close <bead-id> instead".to_string());
+    return Err(
+        "session reconcile is deprecated; use specks beads close <bead-id> instead".to_string(),
+    );
 
     // Old code preserved but unreachable:
     #[allow(unreachable_code, unused_variables)]
     {
-    let session_id = _session_id;
-    let dry_run = _dry_run;
-    let project_root = match find_project_root() {
-        Ok(root) => root,
-        Err(_) => {
+        let session_id = _session_id;
+        let dry_run = _dry_run;
+        let project_root = match find_project_root() {
+            Ok(root) => root,
+            Err(_) => {
+                return output_error(
+                    json_output,
+                    "E009",
+                    ".specks directory not initialized",
+                    &session_id,
+                    9,
+                );
+            }
+        };
+
+        // Load session from external storage
+        let session_path = session_file_path(&project_root, &session_id);
+        if !session_path.exists() {
             return output_error(
                 json_output,
-                "E009",
-                ".specks directory not initialized",
+                "E037",
+                &format!("Session file not found: {}", session_path.display()),
                 &session_id,
-                9,
+                37,
             );
         }
-    };
 
-    // Load session from external storage
-    let session_path = session_file_path(&project_root, &session_id);
-    if !session_path.exists() {
-        return output_error(
-            json_output,
-            "E037",
-            &format!("Session file not found: {}", session_path.display()),
-            &session_id,
-            37,
-        );
-    }
+        // Read session file manually to get the worktree path
+        let session_content = std::fs::read_to_string(&session_path)
+            .map_err(|e| format!("Failed to read session file: {}", e))?;
 
-    // Read session file manually to get the worktree path
-    let session_content = std::fs::read_to_string(&session_path)
-        .map_err(|e| format!("Failed to read session file: {}", e))?;
+        let mut session: specks_core::session::Session = serde_json::from_str(&session_content)
+            .map_err(|e| format!("Failed to parse session file: {}", e))?;
 
-    let mut session: specks_core::session::Session = serde_json::from_str(&session_content)
-        .map_err(|e| format!("Failed to parse session file: {}", e))?;
+        // Verify session is in NeedsReconcile state
+        if true
+        /* v2: reconcile deprecated */
+        {
+            return output_error(
+                json_output,
+                "E038",
+                &format!(
+                    "Session is not in NeedsReconcile state (current: {})",
+                    "pending" /* v2: no status */
+                ),
+                &session_id,
+                38,
+            );
+        }
 
-    // Verify session is in NeedsReconcile state
-    if true /* v2: reconcile deprecated */ {
-        return output_error(
-            json_output,
-            "E038",
-            &format!(
-                "Session is not in NeedsReconcile state (current: {})",
-                "pending" /* v2: no status */
-            ),
-            &session_id,
-            38,
-        );
-    }
+        // Identify the bead to close (v2: deprecated logic)
+        let bead_id = "bd-deprecated".to_string();
 
-    // Identify the bead to close (v2: deprecated logic)
-    let bead_id = "bd-deprecated".to_string();
+        if dry_run {
+            // Dry run: just report what would happen
+            if json_output {
+                let data = SessionReconcileData {
+                    session_id: session_id.clone(),
+                    reconciled: false,
+                    previous_status: "pending" /* v2: no status */
+                        .to_string(),
+                    new_status: "completed".to_string(),
+                    bead_closed: Some(bead_id.clone()),
+                };
+                let response = JsonResponse::ok("session reconcile", data);
+                let json = serde_json::to_string_pretty(&response)
+                    .map_err(|e| format!("Failed to serialize JSON: {}", e))?;
+                println!("{}", json);
+            } else if !quiet {
+                println!("Dry run - would perform:");
+                println!("  1. Close bead: {}", bead_id);
+            }
+            return Ok(0);
+        }
 
-    if dry_run {
-        // Dry run: just report what would happen
+        // Load config and beads CLI
+        let config = Config::load_from_project(&project_root).unwrap_or_default();
+        let bd_path =
+            std::env::var("SPECKS_BD_PATH").unwrap_or_else(|_| config.specks.beads.bd_path.clone());
+        let beads = BeadsCli::new(bd_path);
+
+        // Check if beads CLI is installed
+        if !beads.is_installed() {
+            return output_error(
+                json_output,
+                "E005",
+                "beads CLI not installed or not found",
+                &session_id,
+                5,
+            );
+        }
+
+        // Close the bead
+        let previous_status = "pending" /* v2: no status */
+            .to_string();
+        if let Err(e) = beads.close(&bead_id, Some("Session reconciliation")) {
+            return output_error(
+                json_output,
+                "E040",
+                &format!("Failed to close bead {}: {}", bead_id, e),
+                &session_id,
+                40,
+            );
+        }
+
+        // Update session status to Completed
+        // v2: no session status to update
+
+        // Save updated session
+        if let Err(e) = save_session(&session, &project_root) {
+            return output_error(
+                json_output,
+                "E041",
+                &format!("Failed to save session: {}", e),
+                &session_id,
+                41,
+            );
+        }
+
+        // Success output
+        let new_status = "pending" /* v2: no status */
+            .to_string();
+        let data = SessionReconcileData {
+            session_id: session_id.clone(),
+            reconciled: true,
+            previous_status: previous_status.clone(),
+            new_status: new_status.clone(),
+            bead_closed: Some(bead_id.clone()),
+        };
+
         if json_output {
-            let data = SessionReconcileData {
-                session_id: session_id.clone(),
-                reconciled: false,
-                previous_status: "pending" /* v2: no status */.to_string(),
-                new_status: "completed".to_string(),
-                bead_closed: Some(bead_id.clone()),
-            };
             let response = JsonResponse::ok("session reconcile", data);
             let json = serde_json::to_string_pretty(&response)
                 .map_err(|e| format!("Failed to serialize JSON: {}", e))?;
             println!("{}", json);
         } else if !quiet {
-            println!("Dry run - would perform:");
-            println!("  1. Close bead: {}", bead_id);
-            println!(
-                "  2. Update session status: {} -> Completed",
-                "pending" /* v2: no status */
-            );
+            println!("Session reconciled: {}", session_id);
+            println!("  Closed bead: {}", bead_id);
+            println!("  Status: {} -> {}", previous_status, new_status);
         }
-        return Ok(0);
-    }
 
-    // Load config and beads CLI
-    let config = Config::load_from_project(&project_root).unwrap_or_default();
-    let bd_path =
-        std::env::var("SPECKS_BD_PATH").unwrap_or_else(|_| config.specks.beads.bd_path.clone());
-    let beads = BeadsCli::new(bd_path);
-
-    // Check if beads CLI is installed
-    if !beads.is_installed() {
-        return output_error(
-            json_output,
-            "E005",
-            "beads CLI not installed or not found",
-            &session_id,
-            5,
-        );
-    }
-
-    // Close the bead
-    let previous_status = "pending" /* v2: no status */.to_string();
-    if let Err(e) = beads.close(&bead_id, Some("Session reconciliation")) {
-        return output_error(
-            json_output,
-            "E040",
-            &format!("Failed to close bead {}: {}", bead_id, e),
-            &session_id,
-            40,
-        );
-    }
-
-    // Update session status to Completed
-    // v2: no session status to update
-
-    // Save updated session
-    if let Err(e) = save_session(&session, &project_root) {
-        return output_error(
-            json_output,
-            "E041",
-            &format!("Failed to save session: {}", e),
-            &session_id,
-            41,
-        );
-    }
-
-    // Success output
-    let new_status = "pending" /* v2: no status */.to_string();
-    let data = SessionReconcileData {
-        session_id: session_id.clone(),
-        reconciled: true,
-        previous_status: previous_status.clone(),
-        new_status: new_status.clone(),
-        bead_closed: Some(bead_id.clone()),
-    };
-
-    if json_output {
-        let response = JsonResponse::ok("session reconcile", data);
-        let json = serde_json::to_string_pretty(&response)
-            .map_err(|e| format!("Failed to serialize JSON: {}", e))?;
-        println!("{}", json);
-    } else if !quiet {
-        println!("Session reconciled: {}", session_id);
-        println!("  Closed bead: {}", bead_id);
-        println!("  Status: {} -> {}", previous_status, new_status);
-    }
-
-    Ok(0)
+        Ok(0)
     } // end unreachable block
 }
 

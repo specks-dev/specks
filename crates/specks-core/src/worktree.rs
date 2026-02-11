@@ -1318,9 +1318,7 @@ mod tests {
 
     #[test]
     fn test_remove_worktree_with_external_session() {
-        use crate::session::{
-            Session, artifacts_dir, save_session, session_file_path,
-        };
+        use crate::session::{Session, artifacts_dir, save_session, session_file_path};
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -1592,9 +1590,7 @@ mod tests {
 
     #[test]
     fn test_remove_worktree_with_both_locations() {
-        use crate::session::{
-            Session, artifacts_dir, save_session, session_file_path,
-        };
+        use crate::session::{Session, artifacts_dir, save_session, session_file_path};
         use std::process::Command;
         use tempfile::TempDir;
 
@@ -1905,7 +1901,10 @@ mod tests {
         // Create Session for first worktree so it can be found by reuse logic
         let session1 = Session {
             schema_version: "2".to_string(),
-            session_id: branch_name1.strip_prefix("specks/").unwrap_or(&branch_name1).to_string(),
+            session_id: branch_name1
+                .strip_prefix("specks/")
+                .unwrap_or(&branch_name1)
+                .to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "test".to_string(),
             branch_name: branch_name1.clone(),
@@ -2040,7 +2039,11 @@ mod tests {
         };
 
         let (worktree_path, _branch_name, _slug) = create_worktree(&config).unwrap();
-        assert!(worktree_path.to_string_lossy().contains(".specks-worktrees"));
+        assert!(
+            worktree_path
+                .to_string_lossy()
+                .contains(".specks-worktrees")
+        );
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
@@ -2286,7 +2289,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "test1".to_string(),
             branch_name: "specks/test1-20260208-120000".to_string(),
@@ -2368,7 +2371,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "orphan".to_string(),
             branch_name: "specks/orphan-20260208-120000".to_string(),
@@ -2454,7 +2457,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "orphaned".to_string(),
             branch_name: "specks/orphaned-20260208-120000".to_string(),
@@ -2536,7 +2539,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "active".to_string(),
             branch_name: "specks/active-20260208-120000".to_string(),
@@ -2641,7 +2644,7 @@ mod tests {
         // Create session with NeedsReconcile status
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "reconcile".to_string(),
             branch_name: "specks/reconcile-20260208-120000".to_string(),
@@ -2729,7 +2732,7 @@ mod tests {
         // Create session with NeedsReconcile status (no PR)
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "nopr".to_string(),
             branch_name: "specks/nopr-20260208-120000".to_string(),
@@ -2829,7 +2832,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "closed".to_string(),
             branch_name: "specks/closed-20260208-120000".to_string(),
@@ -2941,7 +2944,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "unknown".to_string(),
             branch_name: "specks/unknown-20260208-120000".to_string(),
@@ -3037,7 +3040,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "allclosed".to_string(),
             branch_name: "specks/allclosed-20260208-120000".to_string(),
@@ -3126,7 +3129,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "dirty".to_string(),
             branch_name: "specks/dirty-20260208-120000".to_string(),
@@ -3214,7 +3217,7 @@ mod tests {
 
         let session1 = Session {
             schema_version: "2".to_string(),
-        session_id: "test-20260208-120000".to_string(),
+            session_id: "test-20260208-120000".to_string(),
             speck_path: ".specks/specks-test.md".to_string(),
             speck_slug: "force".to_string(),
             branch_name: "specks/force-20260208-120000".to_string(),

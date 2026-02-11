@@ -316,7 +316,7 @@ impl SpecksError {
             SpecksError::WorktreeCleanupFailed { .. } => 1, // Worktree cleanup failed
             SpecksError::BeadsSyncFailed { .. } => 10,   // Beads sync failed (exit code 10 per S02)
             SpecksError::BeadCommitFailed { .. } => 11, // Bead commit failed (exit code 11 per S02)
-            SpecksError::InitFailed { .. } => 12,        // Init failed (exit code 12)
+            SpecksError::InitFailed { .. } => 12,       // Init failed (exit code 12)
         }
     }
 }

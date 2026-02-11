@@ -14,11 +14,7 @@ You report only to the **implementer skill**. You do not invoke other agents.
 
 ## Persistent Agent Pattern
 
-### Initial Spawn
-
 On your first invocation, you call the CLI to create the worktree (which handles all infrastructure setup), parse user intent, and resolve steps.
-
-### Resume (Re-run with User Answers)
 
 If the implementer needs clarification (e.g., step selection), you are resumed with `user_answers`. You retain knowledge of the worktree and can skip directly to intent resolution.
 
@@ -37,8 +33,6 @@ If the implementer needs clarification (e.g., step selection), you are resumed w
 }
 ```
 
----
-
 ## Output Contract
 
 ```json
@@ -47,36 +41,20 @@ If the implementer needs clarification (e.g., step selection), you are resumed w
   "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "branch_name": "specks/auth-20260208-143022",
   "base_branch": "main",
-  "prerequisites": {
-    "specks_initialized": true,
-    "beads_available": true,
-    "error": null
-  },
+  "prerequisites": { "specks_initialized": true, "beads_available": true, "error": null },
   "state": {
     "all_steps": ["#step-0", "#step-1", "#step-2"],
     "completed_steps": ["#step-0"],
     "remaining_steps": ["#step-1", "#step-2"],
     "next_step": "#step-1",
-    "total_count": 3,
-    "completed_count": 1,
-    "remaining_count": 2
+    "total_count": 3, "completed_count": 1, "remaining_count": 2
   },
-  "intent": {
-    "parsed_as": "next" | "remaining" | "range" | "specific" | "all" | "ambiguous",
-    "raw_input": "next step"
-  },
+  "intent": { "parsed_as": "next", "raw_input": "next step" },
   "resolved_steps": ["#step-1"],
-  "validation": {
-    "valid": true,
-    "issues": []
-  },
+  "validation": { "valid": true, "issues": [] },
   "beads": {
-    "sync_performed": true,
-    "root_bead": "bd-abc123",
-    "bead_mapping": {
-      "#step-0": "bd-abc123",
-      "#step-1": "bd-def456"
-    }
+    "sync_performed": true, "root_bead": "bd-abc123",
+    "bead_mapping": { "#step-0": "bd-abc123", "#step-1": "bd-def456" }
   },
   "beads_committed": true,
   "session": {
@@ -93,53 +71,24 @@ If the implementer needs clarification (e.g., step selection), you are resumed w
 
 ## Implementation: 3 Phases
 
-### Phase 1: Call CLI to Create Worktree (One-Shot Infrastructure Setup)
-
-Call the enriched CLI command:
+### Phase 1: Call CLI to Create Worktree
 
 ```bash
 specks worktree create <speck_path> --json
 ```
 
-This single command:
-- Creates/reuses worktree and branch
-- Runs `specks init` in worktree
-- Syncs beads and commits annotations
-- Parses speck to extract `all_steps` and `bead_mapping`
-- Queries `bd ready` to get `ready_steps`
-- Creates session file and artifact directories
-- Returns enriched JSON with everything you need
+This single command creates/reuses worktree, runs `specks init`, syncs beads, commits annotations, parses speck for `all_steps` and `bead_mapping`, queries `bd ready` for `ready_steps`, creates session and artifact directories, and returns enriched JSON.
 
-Parse the JSON response to extract:
-- `worktree_path` (absolute path)
-- `branch_name` (e.g., "specks/auth-20260208-143022")
-- `base_branch` (e.g., "main")
-- `all_steps` (array of step anchors)
-- `ready_steps` (array of ready step anchors from `bd ready`)
-- `bead_mapping` (map of step anchor → bead ID)
-- `root_bead_id` (root bead ID)
-- `session_id` (derived from branch name)
-- `session_file` (absolute path)
-- `artifacts_base` (absolute path)
-- `reused` (boolean, true if worktree was reused)
+Parse the JSON response for: `worktree_path`, `branch_name`, `base_branch`, `all_steps`, `ready_steps`, `bead_mapping`, `root_bead_id`, `session_id`, `session_file`, `artifacts_base`, `reused`.
 
 **State derivation:**
-- `completed_steps` = `all_steps` minus `ready_steps` (if a step is not in ready_steps, it's either completed or blocked)
-- `remaining_steps` = `ready_steps` (these are the open steps with all dependencies met)
+- `completed_steps` = `all_steps` minus `ready_steps`
+- `remaining_steps` = `ready_steps`
 - `next_step` = first item in `ready_steps` or null
 
-**Prerequisites check:**
-- `specks_initialized` = true (CLI ensures this)
-- `beads_available` = true if `root_bead_id` is present
-
-**Error handling:**
-- If CLI exits non-zero, parse stderr and return `status: "error"` with appropriate error message
-- Exit code 7 = speck file not found
-- Exit code 8 = speck has no steps
+**Error handling:** If CLI exits non-zero, parse stderr and return `status: "error"`. Exit code 7 = speck not found. Exit code 8 = no steps.
 
 ### Phase 2: Parse User Intent
-
-Analyze `user_input` to determine intent:
 
 | Pattern | Intent |
 |---------|--------|
@@ -152,17 +101,7 @@ Analyze `user_input` to determine intent:
 
 If `user_answers.step_selection` is provided, use that instead of parsing raw input.
 
-Populate `intent` object:
-```json
-{
-  "parsed_as": "<intent>",
-  "raw_input": "<user_input or null>"
-}
-```
-
 ### Phase 3: Resolve Steps
-
-Based on intent, compute `resolved_steps`:
 
 | Intent | Resolution |
 |--------|------------|
@@ -173,60 +112,8 @@ Based on intent, compute `resolved_steps`:
 | `range` | Parse start/end from input, generate sequence |
 | `ambiguous` | Cannot resolve → set `status: "needs_clarification"` |
 
-**Validation:**
+**Validation:** For each step in `resolved_steps`: (1) check step exists in `all_steps`, (2) check step has bead ID in `bead_mapping`, (3) note if step is in `completed_steps` (warn but allow re-execution). Populate `validation.issues` with `{type, step, details, blocking}`.
 
-For each step in `resolved_steps`:
-1. Check step exists in `all_steps`
-2. Check step has bead ID in `bead_mapping`
-3. Note if step is in `completed_steps` (warn but allow - user may want to re-execute)
+**Status:** prerequisites failed → `"error"` | ambiguous with no user_answers → `"needs_clarification"` | blocking validation issues → `"error"` | otherwise → `"ready"`
 
-Populate `validation.issues`:
-```json
-{
-  "type": "step_not_found" | "missing_bead_id" | "already_completed",
-  "step": "#step-3",
-  "details": "...",
-  "blocking": true | false
-}
-```
-
-**Status determination:**
-- If prerequisites failed → `status: "error"`
-- If intent is `ambiguous` and no `user_answers` → `status: "needs_clarification"`
-- If validation has blocking issues → `status: "error"`
-- Otherwise → `status: "ready"`
-
----
-
-## Clarification Templates
-
-When `status: "needs_clarification"`, populate `clarification_needed`:
-
-### Step Selection (intent is ambiguous)
-
-```json
-{
-  "type": "step_selection",
-  "question": "Speck has {total_count} total steps. {completed_count} completed, {remaining_count} remaining. What would you like to do?",
-  "header": "Steps",
-  "options": [
-    {
-      "label": "Next step ({next_step})",
-      "description": "Execute just the next step",
-      "value": "next"
-    },
-    {
-      "label": "All remaining ({remaining_count} steps)",
-      "description": "Complete the speck",
-      "value": "remaining"
-    },
-    {
-      "label": "Specific step or range",
-      "description": "I'll specify which steps",
-      "value": "specific"
-    }
-  ]
-}
-```
-
-Omit "Next step" option if `remaining_count` is 0.
+**Clarification:** When `status: "needs_clarification"`, set `clarification_needed` with `type: "step_selection"`, a question showing total/completed/remaining counts, and options: "Next step ({next_step})", "All remaining ({remaining_count} steps)", "Specific step or range". Omit "Next step" if `remaining_count` is 0.

@@ -330,7 +330,10 @@ pub struct BeadsCloseData {
 
 /// Data payload for session reconcile command
 /// DEPRECATED in v2: session reconcile is deprecated; use specks beads close instead
-#[deprecated(since = "0.3.0", note = "session reconcile is deprecated; use specks beads close instead")]
+#[deprecated(
+    since = "0.3.0",
+    note = "session reconcile is deprecated; use specks beads close instead"
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionReconcileData {
     /// Session ID that was reconciled
@@ -369,7 +372,7 @@ pub struct StepCommitData {
     /// List of files that were staged
     pub files_staged: Vec<String>,
     /// True if commit succeeded but bead close failed
-    #[serde(alias = "needs_reconcile")]  // v1 compat
+    #[serde(alias = "needs_reconcile")] // v1 compat
     pub bead_close_failed: bool,
     /// Any non-fatal warnings encountered
     pub warnings: Vec<String>,

@@ -341,6 +341,14 @@ Task(
 
 Parse the coder's JSON output. If `success == false` and `halted_for_drift == false`, output failure message and HALT.
 
+**Context exhaustion recovery:** If the coder resume fails with "Prompt is too long", the coder's context is full. Spawn a FRESH coder with the architect's complete strategy and an explicit list of files already modified (from the last successful coder output). The fresh coder prompt must include:
+- Full initial spawn JSON (worktree_path, speck_path, step_anchor, strategy, session_id, artifact_dir)
+- `"continuation": true`
+- `"files_already_modified": [<files from previous coder output>]`
+- Instruction: "A previous coder modified these files but did not complete the step. Verify ALL files in expected_touch_set are addressed. Do NOT re-modify files that are already correct."
+
+Save the NEW agent ID as `coder_id` (replacing the exhausted one). The old coder is dead — all subsequent resumes use the new ID.
+
 Output the Coder post-call message.
 
 #### 3c. Drift Check

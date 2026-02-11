@@ -3,7 +3,7 @@
 //! Pushes branch to remote, creates PR, and updates session status.
 
 use crate::output::{JsonResponse, StepPublishData};
-use specks_core::session::{Session, SessionStatus, now_iso8601, save_session_atomic};
+use specks_core::session::{Session, now_iso8601, save_session_atomic};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -141,7 +141,6 @@ pub fn run_step_publish(
         .and_then(|p| p.parent())
         .ok_or_else(|| "Cannot derive repo root from worktree path".to_string())?;
 
-    session_data.status = SessionStatus::Completed;
     session_data.last_updated_at = Some(now_iso8601());
 
     match save_session_atomic(&session_data, repo_root) {
