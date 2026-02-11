@@ -4,6 +4,106 @@ This log tracks completed implementation work.
 
 ---
 step: #step-3
+date: 2026-02-10T19:14:40Z
+bead: specks-jlu.4
+---
+
+## #step-3: Simplified committer-agent from 887 lines to 69 lines (92% reduction). Replaced all manual git/log/bead/session operations with CLI delegation to specks step-commit and specks step-publish. Preserved input contracts. Added CLI documentation to CLAUDE.md. Updated implementer SKILL.md references.
+
+- Agent simplified to thin CLI wrapper
+- Input contracts preserved
+- Output contracts transformed to pass-through
+- CLAUDE.md documented both commands
+- SKILL.md references updated
+
+**Tests:** All 312 tests pass, Agent under 100 lines (69)
+
+**Checkpoints:**
+- Build passes with no warnings
+- All 312 tests pass
+- Agent line count 69 < 100
+
+---
+step: #step-2
+date: 2026-02-10T19:14:20Z
+bead: specks-jlu.3
+---
+
+## #step-2: Implemented full step-publish pipeline: gh auth check, repo derivation from git remote (SSH/HTTPS), PR body markdown generation, git push, gh pr create with --body-file, PR URL parsing, session status update to Completed. 7 new tests added.
+
+- gh auth status check
+- Repo derivation from git remote
+- PR body markdown generation
+- Git push with -C pattern
+- PR creation via gh pr create --body-file
+- PR URL and number parsing
+- Session update to Completed
+- Partial success handling
+
+**Tests:** All 312 tests pass, 7 new unit tests for URL parsing, PR body, PR info parsing
+
+**Checkpoints:**
+- Build passes with no warnings
+- All 312 tests pass
+- D03 no step validation
+- D06 git -C pattern
+- D07 PR body from step summaries
+
+---
+step: #step-1
+date: 2026-02-10T19:14:00Z
+bead: specks-jlu.2
+---
+
+## #step-1: Refactored log.rs to extract log_rotate_inner and log_prepend_inner helpers returning structured results. Implemented full step-commit pipeline: validate inputs, load session, rotate/prepend log, stage files, git commit, close bead, handle partial failure (needs_reconcile), update session atomically.
+
+- log_rotate_inner helper
+- log_prepend_inner helper
+- CLI wrapper refactoring
+- Input validation
+- Log rotation with archive staging
+- File staging via git -C
+- Git commit and hash retrieval
+- Bead close with current_dir
+- Partial failure handling
+- Session update with atomic save
+
+**Tests:** All 305 existing tests pass, Log tests pass after refactoring
+
+**Checkpoints:**
+- Build passes with no warnings
+- All 305 tests pass
+- D01 worktree-relative paths
+- D02 exit 0 with needs_reconcile
+- D04 internal helpers
+- D05 direct session manipulation
+- D06 git -C pattern
+
+---
+step: #step-0
+date: 2026-02-10T19:13:40Z
+bead: specks-jlu.1
+---
+
+## #step-0: Added StepCommitData and StepPublishData output structs, StepCommit and StepPublish CLI variants with all flags, stub command modules, and main dispatch wiring. 8 new tests added.
+
+- StepCommitData struct with 10 fields
+- StepPublishData struct with 6 fields
+- StepCommit CLI variant with flags
+- StepPublish CLI variant with flags
+- step_commit.rs stub module
+- step_publish.rs stub module
+- Module registration in mod.rs
+- Main dispatch wiring
+
+**Tests:** CLI parsing tests for both commands, Serialization round-trip tests for both structs, debug_assert verification
+
+**Checkpoints:**
+- Build passes with no warnings
+- All 305 tests pass
+
+---
+step: #step-3
 date: 2026-02-10T16:20:59Z
 bead: specks-w87.4
 ---

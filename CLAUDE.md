@@ -127,6 +127,30 @@ specks log rotate              # Rotate implementation log when over threshold (
 specks log rotate --force      # Force rotation even if under threshold
 specks log prepend --step <anchor> --speck <path> --summary <text>  # Add entry to log
 
+# Step commit and publish commands (used by committer-agent)
+specks step-commit \
+  --worktree <path> \
+  --step <anchor> \
+  --speck <path> \
+  --message <text> \
+  --files <file1> <file2> ... \
+  --bead <bead-id> \
+  --summary <text> \
+  --session <path> \
+  --close-reason <text> \
+  --json                       # Atomic commit: log rotate, prepend, git commit, bead close, session update
+
+specks step-publish \
+  --worktree <path> \
+  --branch <name> \
+  --base <branch> \
+  --title <text> \
+  --speck <path> \
+  --step-summaries <text1> <text2> ... \
+  --session <path> \
+  --repo <owner/repo> \
+  --json                       # Atomic publish: push branch, create PR, session update
+
 # Health check command
 specks doctor                  # Run health checks (log size, worktrees, broken refs)
 specks doctor --json           # Output health check results in JSON

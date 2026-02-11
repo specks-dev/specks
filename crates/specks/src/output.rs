@@ -343,3 +343,158 @@ pub struct SessionReconcileData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bead_closed: Option<String>,
 }
+
+/// Data payload for step-commit command (Spec S01)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepCommitData {
+    /// Whether the git commit was created
+    pub committed: bool,
+    /// Full git commit hash, null if not committed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_hash: Option<String>,
+    /// Whether the bead was closed successfully
+    pub bead_closed: bool,
+    /// Bead ID that was closed, null if not closed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bead_id: Option<String>,
+    /// Whether the implementation log was updated
+    pub log_updated: bool,
+    /// Whether log rotation occurred before prepend
+    pub log_rotated: bool,
+    /// Path to archived log file if rotation occurred
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_path: Option<String>,
+    /// List of files that were staged
+    pub files_staged: Vec<String>,
+    /// True if commit succeeded but bead close failed
+    pub needs_reconcile: bool,
+    /// Any non-fatal warnings encountered
+    pub warnings: Vec<String>,
+}
+
+/// Data payload for step-publish command (Spec S02)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepPublishData {
+    /// Whether both push and PR creation succeeded
+    pub success: bool,
+    /// Whether the branch was pushed to remote
+    pub pushed: bool,
+    /// Whether the PR was created
+    pub pr_created: bool,
+    /// GitHub repo in `owner/repo` format
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    /// Full URL to the created PR
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pr_url: Option<String>,
+    /// PR number
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pr_number: Option<i64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_step_commit_data_serialization() {
+        let data = StepCommitData {
+            committed: true,
+            commit_hash: Some("abc1234".to_string()),
+            bead_closed: true,
+            bead_id: Some("bd-123".to_string()),
+            log_updated: true,
+            log_rotated: false,
+            archived_path: None,
+            files_staged: vec!["a.rs".to_string(), "b.rs".to_string()],
+            needs_reconcile: false,
+            warnings: vec![],
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let deserialized: StepCommitData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.committed, true);
+        assert_eq!(deserialized.commit_hash, Some("abc1234".to_string()));
+        assert_eq!(deserialized.bead_closed, true);
+        assert_eq!(deserialized.bead_id, Some("bd-123".to_string()));
+        assert_eq!(deserialized.log_updated, true);
+        assert_eq!(deserialized.log_rotated, false);
+        assert_eq!(deserialized.archived_path, None);
+        assert_eq!(deserialized.files_staged, vec!["a.rs", "b.rs"]);
+        assert_eq!(deserialized.needs_reconcile, false);
+        assert_eq!(deserialized.warnings.len(), 0);
+    }
+
+    #[test]
+    fn test_step_commit_data_with_warnings() {
+        let data = StepCommitData {
+            committed: true,
+            commit_hash: Some("def5678".to_string()),
+            bead_closed: false,
+            bead_id: None,
+            log_updated: true,
+            log_rotated: true,
+            archived_path: Some(".specks/archive/log-2026-02-11.md".to_string()),
+            files_staged: vec!["x.rs".to_string()],
+            needs_reconcile: true,
+            warnings: vec!["Bead close failed".to_string()],
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let deserialized: StepCommitData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.needs_reconcile, true);
+        assert_eq!(deserialized.warnings, vec!["Bead close failed"]);
+        assert_eq!(
+            deserialized.archived_path,
+            Some(".specks/archive/log-2026-02-11.md".to_string())
+        );
+    }
+
+    #[test]
+    fn test_step_publish_data_serialization() {
+        let data = StepPublishData {
+            success: true,
+            pushed: true,
+            pr_created: true,
+            repo: Some("owner/repo".to_string()),
+            pr_url: Some("https://github.com/owner/repo/pull/42".to_string()),
+            pr_number: Some(42),
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let deserialized: StepPublishData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.success, true);
+        assert_eq!(deserialized.pushed, true);
+        assert_eq!(deserialized.pr_created, true);
+        assert_eq!(deserialized.repo, Some("owner/repo".to_string()));
+        assert_eq!(
+            deserialized.pr_url,
+            Some("https://github.com/owner/repo/pull/42".to_string())
+        );
+        assert_eq!(deserialized.pr_number, Some(42));
+    }
+
+    #[test]
+    fn test_step_publish_data_partial_success() {
+        let data = StepPublishData {
+            success: false,
+            pushed: true,
+            pr_created: false,
+            repo: Some("owner/repo".to_string()),
+            pr_url: None,
+            pr_number: None,
+        };
+
+        let json = serde_json::to_string(&data).unwrap();
+        let deserialized: StepPublishData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.success, false);
+        assert_eq!(deserialized.pushed, true);
+        assert_eq!(deserialized.pr_created, false);
+        assert_eq!(deserialized.pr_url, None);
+        assert_eq!(deserialized.pr_number, None);
+    }
+}
