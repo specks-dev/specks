@@ -438,6 +438,68 @@ fn normalize_speck_path(input: &str) -> PathBuf {
     }
 }
 
+/// Check if local main is in sync with origin/main
+#[allow(dead_code)] // Will be used in step-1
+fn check_main_sync(repo_root: &Path) -> Result<(), String> {
+    // Step 1: Fetch origin/main to get latest state
+    let fetch_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["fetch", "origin", "main"])
+        .output()
+        .map_err(|e| format!("Failed to fetch origin/main: {}", e))?;
+
+    if !fetch_output.status.success() {
+        let stderr = String::from_utf8_lossy(&fetch_output.stderr);
+        return Err(format!("Failed to fetch origin/main: {}", stderr));
+    }
+
+    // Step 2: Get local main hash
+    let local_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["rev-parse", "main"])
+        .output()
+        .map_err(|e| format!("Failed to get local main hash: {}", e))?;
+
+    if !local_output.status.success() {
+        let stderr = String::from_utf8_lossy(&local_output.stderr);
+        return Err(format!("Failed to get local main hash: {}", stderr));
+    }
+
+    let local_hash = String::from_utf8_lossy(&local_output.stdout).trim().to_string();
+
+    // Step 3: Get origin/main hash
+    let remote_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["rev-parse", "origin/main"])
+        .output()
+        .map_err(|e| format!("Failed to get origin/main hash: {}", e))?;
+
+    if !remote_output.status.success() {
+        let stderr = String::from_utf8_lossy(&remote_output.stderr);
+        return Err(format!("Failed to get origin/main hash: {}", stderr));
+    }
+
+    let remote_hash = String::from_utf8_lossy(&remote_output.stdout).trim().to_string();
+
+    // Step 4: Compare hashes
+    if local_hash != remote_hash {
+        return Err(format!(
+            "Local main is out of sync with origin/main.\n\
+             Local:  {}\n\
+             Remote: {}\n\
+             \n\
+             Please push your local changes first:\n\
+             git push origin main",
+            local_hash, remote_hash
+        ));
+    }
+
+    Ok(())
+}
+
 /// Run the merge command
 pub fn run_merge(
     speck: String,
@@ -1419,5 +1481,166 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files.contains(&".beads/beads.jsonl".to_string()));
         assert!(files.contains(&"new_file.txt".to_string()));
+    }
+
+    // -- check_main_sync tests --
+
+    #[test]
+    fn test_check_main_sync_in_sync() {
+        use tempfile::TempDir;
+
+        // Create bare origin repo
+        let origin_dir = TempDir::new().unwrap();
+        let origin_path = origin_dir.path();
+        Command::new("git")
+            .arg("-C")
+            .arg(origin_path)
+            .args(["init", "--bare"])
+            .output()
+            .expect("git init --bare");
+
+        // Create clone
+        let clone_dir = TempDir::new().unwrap();
+        let clone_path = clone_dir.path();
+        Command::new("git")
+            .args(["clone", origin_path.to_str().unwrap(), clone_path.to_str().unwrap()])
+            .output()
+            .expect("git clone");
+
+        // Configure clone
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("git config email");
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("git config name");
+
+        // Make initial commit and push to origin
+        fs::write(clone_path.join("README.md"), "Test").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("git add");
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["commit", "-m", "Initial commit"])
+            .output()
+            .expect("git commit");
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["push", "origin", "main"])
+            .output()
+            .expect("git push");
+
+        // Check sync — should pass since we just pushed
+        let result = check_main_sync(clone_path);
+        assert!(result.is_ok(), "Expected sync check to pass: {:?}", result);
+    }
+
+    #[test]
+    fn test_check_main_sync_diverged() {
+        use tempfile::TempDir;
+
+        // Create bare origin repo
+        let origin_dir = TempDir::new().unwrap();
+        let origin_path = origin_dir.path();
+        Command::new("git")
+            .arg("-C")
+            .arg(origin_path)
+            .args(["init", "--bare"])
+            .output()
+            .expect("git init --bare");
+
+        // Create clone
+        let clone_dir = TempDir::new().unwrap();
+        let clone_path = clone_dir.path();
+        Command::new("git")
+            .args(["clone", origin_path.to_str().unwrap(), clone_path.to_str().unwrap()])
+            .output()
+            .expect("git clone");
+
+        // Configure clone
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["config", "user.email", "test@example.com"])
+            .output()
+            .expect("git config email");
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["config", "user.name", "Test User"])
+            .output()
+            .expect("git config name");
+
+        // Initial commit and push
+        fs::write(clone_path.join("README.md"), "Test").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["add", "README.md"])
+            .output()
+            .expect("git add");
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["commit", "-m", "Initial"])
+            .output()
+            .expect("git commit");
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["push", "origin", "main"])
+            .output()
+            .expect("git push");
+
+        // Make local commit but don't push
+        fs::write(clone_path.join("local.txt"), "local change").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["add", "local.txt"])
+            .output()
+            .expect("git add");
+        Command::new("git")
+            .arg("-C")
+            .arg(clone_path)
+            .args(["commit", "-m", "Local commit"])
+            .output()
+            .expect("git commit");
+
+        // Check sync — should fail with actionable message
+        let result = check_main_sync(clone_path);
+        assert!(result.is_err(), "Expected sync check to fail");
+        let err = result.unwrap_err();
+        assert!(err.contains("out of sync"), "Error should mention sync: {}", err);
+        assert!(err.contains("git push origin main"), "Error should suggest push: {}", err);
+    }
+
+    #[test]
+    fn test_check_main_sync_no_origin() {
+        use tempfile::TempDir;
+
+        // Create standalone repo without origin remote
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Check sync — should fail because no origin remote
+        let result = check_main_sync(temp_path);
+        assert!(result.is_err(), "Expected sync check to fail without origin");
+        let err = result.unwrap_err();
+        assert!(err.contains("Failed to"), "Error should indicate fetch failure: {}", err);
     }
 }

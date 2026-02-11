@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-0
+date: 2025-02-11T20:22:16Z
+bead: specks-xuf.1
+---
+
+## #step-0: Added check_main_sync(repo_root) helper that fetches origin/main, compares rev-parse hashes, returns actionable error if diverged. Added 3 unit tests: in_sync, diverged, no_origin.
+
+**Files changed:**
+- .specks/specks-4.md
+
+---
+
+---
 step: #step-6
 date: 2025-02-11T18:35:20Z
 bead: specks-tgg.7
