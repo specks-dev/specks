@@ -245,6 +245,26 @@ fn commit_bead_annotations(
         });
     }
 
+    // Check if anything was actually staged (beads may already be committed)
+    let diff_status = Command::new("git")
+        .args([
+            "-C",
+            &worktree_path.to_string_lossy(),
+            "diff",
+            "--cached",
+            "--quiet",
+        ])
+        .status()
+        .map_err(|e| specks_core::error::SpecksError::BeadCommitFailed {
+            reason: format!("failed to check staged changes: {}", e),
+        })?;
+
+    // git diff --cached --quiet exits 0 if no staged changes, 1 if there are changes
+    if diff_status.success() {
+        // Nothing staged — beads and init files are already committed
+        return Ok(());
+    }
+
     // Commit the changes (both init files and bead annotations)
     let commit_msg = format!("chore: init worktree and sync beads for {}", speck_name);
     let status = Command::new("git")

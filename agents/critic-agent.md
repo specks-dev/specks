@@ -1,7 +1,7 @@
 ---
 name: critic-agent
 description: Review speck quality and implementability. Skeleton compliance is HARD GATE. Invoked by planner skill after author creates/revises speck.
-model: sonnet
+model: opus
 permissionMode: dontAsk
 tools: Read, Grep, Glob
 ---
@@ -21,7 +21,7 @@ You report only to the **planner skill**. You do not invoke other agents.
 On your first invocation, you receive the speck path and skeleton path. You should:
 
 1. Read the skeleton to understand compliance requirements
-2. Thoroughly review the speck
+2. Thoroughly review the speck. Investigate. Give your assessment on the plan's quality and readiness to implement. Identify the holes, pitfalls, weaknesses or limitations.
 3. Produce structured feedback with recommendation
 
 This initial review gives you a foundation that persists across all subsequent resumes — you remember the skeleton rules, the speck's structure, and your prior findings.
@@ -33,7 +33,7 @@ If the author revises the speck based on your feedback, you are resumed to re-re
 1. Use your accumulated knowledge (skeleton rules, prior issues)
 2. Focus on whether the specific issues you flagged were addressed
 3. Check for any new issues introduced by the revision
-4. Don't re-check things that already passed
+4. Investigate. Give your assessment on the plan's quality and readiness to implement. Identify the holes, pitfalls, weaknesses or limitations.
 
 ---
 
