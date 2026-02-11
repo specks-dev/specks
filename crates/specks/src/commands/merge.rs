@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 use specks_core::{derive_speck_slug, find_worktree_by_speck, remove_worktree};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -435,6 +436,183 @@ fn normalize_speck_path(input: &str) -> PathBuf {
         PathBuf::from(s)
     } else {
         PathBuf::from(format!(".specks/{}", s))
+    }
+}
+
+/// Save infrastructure files to a temporary directory.
+/// Creates a temp dir at std::env::temp_dir()/specks-merge-{timestamp}-{nanos},
+/// copies files preserving relative paths including nested directories.
+#[allow(dead_code)] // Will be used in step-2
+fn save_infra_to_temp(repo_root: &Path, infra_files: &[&str]) -> Result<PathBuf, String> {
+    // Create temp directory with timestamp + nanos to avoid collisions in parallel tests
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Failed to get timestamp: {}", e))?;
+    let timestamp = now.as_secs();
+    let nanos = now.subsec_nanos();
+    let temp_dir = std::env::temp_dir().join(format!("specks-merge-{}-{}", timestamp, nanos));
+
+    fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+
+    // Copy each infrastructure file, preserving directory structure
+    for file in infra_files {
+        let src = repo_root.join(file);
+        if !src.exists() {
+            continue; // Skip files that don't exist
+        }
+
+        let dest = temp_dir.join(file);
+
+        // Create parent directories if needed
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
+        }
+
+        // Copy file
+        fs::copy(&src, &dest).map_err(|e| {
+            format!(
+                "Failed to copy {} to {}: {}",
+                src.display(),
+                dest.display(),
+                e
+            )
+        })?;
+    }
+
+    Ok(temp_dir)
+}
+
+/// Copy infrastructure files from temp directory back to repo WITHOUT git operations.
+/// Used for error recovery to restore files without staging or committing.
+#[allow(dead_code)] // Will be used in step-2
+fn copy_infra_from_temp(
+    temp_dir: &Path,
+    repo_root: &Path,
+    infra_files: &[&str],
+) -> Result<(), String> {
+    for file in infra_files {
+        let src = temp_dir.join(file);
+        if !src.exists() {
+            continue; // Skip files that weren't saved
+        }
+
+        let dest = repo_root.join(file);
+
+        // Create parent directories if needed
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
+        }
+
+        // Copy file back
+        fs::copy(&src, &dest).map_err(|e| {
+            format!(
+                "Failed to copy {} to {}: {}",
+                src.display(),
+                dest.display(),
+                e
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Restore infrastructure files from temp directory to repo with git commit.
+/// Calls copy_infra_from_temp, then stages and commits changes, then cleans up temp dir.
+/// Handles "nothing to commit" gracefully.
+#[allow(dead_code)] // Will be used in step-2
+fn restore_infra_from_temp(
+    temp_dir: &Path,
+    repo_root: &Path,
+    infra_files: &[&str],
+) -> Result<(), String> {
+    // Step 1: Copy files back
+    copy_infra_from_temp(temp_dir, repo_root, infra_files)?;
+
+    // Step 2: Stage files
+    let mut add_args = vec!["add", "--"];
+    let infra_owned: Vec<String> = infra_files.iter().map(|s| (*s).to_string()).collect();
+    add_args.extend(infra_owned.iter().map(|s| s.as_str()));
+
+    let add_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(&add_args)
+        .output()
+        .map_err(|e| format!("Failed to stage infrastructure files: {}", e))?;
+
+    if !add_output.status.success() {
+        let stderr = String::from_utf8_lossy(&add_output.stderr);
+        return Err(format!("Failed to stage infrastructure files: {}", stderr));
+    }
+
+    // Step 3: Commit (handle "nothing to commit" gracefully)
+    let commit_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["commit", "-m", "chore: post-merge infrastructure sync"])
+        .output()
+        .map_err(|e| format!("Failed to commit infrastructure files: {}", e))?;
+
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        let stdout = String::from_utf8_lossy(&commit_output.stdout);
+        // Treat "nothing to commit" as success
+        if !stderr.contains("nothing to commit")
+            && !stdout.contains("nothing to commit")
+            && !stderr.contains("no changes added to commit")
+            && !stdout.contains("no changes added to commit")
+        {
+            return Err(format!("Failed to commit infrastructure files: {}", stderr));
+        }
+    }
+
+    // Step 4: Clean up temp directory
+    fs::remove_dir_all(temp_dir)
+        .map_err(|e| format!("Failed to remove temp directory: {}", e))?;
+
+    Ok(())
+}
+
+/// RAII guard for temporary infrastructure backup.
+/// Automatically restores files on drop (error recovery).
+/// Call defuse() to prevent restoration (happy path).
+#[allow(dead_code)] // Will be used in step-2
+struct TempDirGuard {
+    temp_dir: Option<PathBuf>,
+    repo_root: PathBuf,
+    infra_files: Vec<String>,
+}
+
+#[allow(dead_code)] // Will be used in step-2
+impl TempDirGuard {
+    fn new(temp_dir: PathBuf, repo_root: PathBuf, infra_files: Vec<String>) -> Self {
+        TempDirGuard {
+            temp_dir: Some(temp_dir),
+            repo_root,
+            infra_files,
+        }
+    }
+
+    /// Defuse the guard so it won't restore on drop (happy path).
+    fn defuse(&mut self) {
+        self.temp_dir = None;
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        if let Some(ref temp_dir) = self.temp_dir {
+            // Best-effort restoration: copy files back without git operations
+            let infra_refs: Vec<&str> = self.infra_files.iter().map(|s| s.as_str()).collect();
+            let _ = copy_infra_from_temp(temp_dir, &self.repo_root, &infra_refs);
+
+            // Best-effort cleanup
+            let _ = fs::remove_dir_all(temp_dir);
+        }
     }
 }
 
@@ -1642,5 +1820,321 @@ mod tests {
         assert!(result.is_err(), "Expected sync check to fail without origin");
         let err = result.unwrap_err();
         assert!(err.contains("Failed to"), "Error should indicate fetch failure: {}", err);
+    }
+
+    // -- Infrastructure save/restore tests --
+
+    #[test]
+    fn test_save_infra_to_temp() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        init_git_repo(repo_path);
+        make_initial_commit(repo_path);
+
+        // Create infrastructure files after initial commit
+        fs::create_dir_all(repo_path.join(".specks")).unwrap();
+        fs::write(repo_path.join(".specks/config.toml"), "test config").unwrap();
+        fs::write(
+            repo_path.join(".specks/specks-implementation-log.md"),
+            "# Log\nentry1\nentry2",
+        )
+        .unwrap();
+
+        // Save to temp
+        let infra_files = vec![
+            ".specks/config.toml",
+            ".specks/specks-implementation-log.md",
+        ];
+        let temp_backup = save_infra_to_temp(repo_path, &infra_files).unwrap();
+
+        // Verify temp directory exists
+        assert!(temp_backup.exists());
+        assert!(temp_backup.join(".specks/config.toml").exists());
+        assert!(temp_backup
+            .join(".specks/specks-implementation-log.md")
+            .exists());
+
+        // Verify content
+        let config_content = fs::read_to_string(temp_backup.join(".specks/config.toml")).unwrap();
+        assert_eq!(config_content, "test config");
+
+        let log_content =
+            fs::read_to_string(temp_backup.join(".specks/specks-implementation-log.md")).unwrap();
+        assert_eq!(log_content, "# Log\nentry1\nentry2");
+
+        // Cleanup
+        let _ = fs::remove_dir_all(temp_backup);
+    }
+
+    #[test]
+    fn test_copy_infra_from_temp() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        init_git_repo(repo_path);
+        make_initial_commit(repo_path);
+
+        // Create infrastructure file after initial commit
+        fs::create_dir_all(repo_path.join(".specks")).unwrap();
+        fs::write(repo_path.join(".specks/config.toml"), "original").unwrap();
+
+        // Save to temp
+        let infra_files = vec![".specks/config.toml"];
+        let temp_backup = save_infra_to_temp(repo_path, &infra_files).unwrap();
+
+        // Modify original
+        fs::write(repo_path.join(".specks/config.toml"), "modified").unwrap();
+        assert_eq!(
+            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap(),
+            "modified"
+        );
+
+        // Copy back from temp
+        copy_infra_from_temp(&temp_backup, repo_path, &infra_files).unwrap();
+
+        // Verify content was restored
+        let restored =
+            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        assert_eq!(restored, "original");
+
+        // Verify nothing is staged (copy doesn't touch git)
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .args(["diff", "--cached", "--name-only"])
+            .output()
+            .unwrap();
+        let staged = String::from_utf8_lossy(&status.stdout);
+        assert!(staged.is_empty(), "No files should be staged after copy");
+
+        // Cleanup
+        let _ = fs::remove_dir_all(temp_backup);
+    }
+
+    #[test]
+    fn test_restore_infra_from_temp() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        init_git_repo(repo_path);
+        make_initial_commit(repo_path);
+
+        // Create infrastructure file after initial commit
+        fs::create_dir_all(repo_path.join(".specks")).unwrap();
+        fs::write(repo_path.join(".specks/config.toml"), "original").unwrap();
+
+        // Save to temp
+        let infra_files = vec![".specks/config.toml"];
+        let temp_backup = save_infra_to_temp(repo_path, &infra_files).unwrap();
+
+        // Modify original
+        fs::write(repo_path.join(".specks/config.toml"), "modified").unwrap();
+
+        // Stage and commit the modification
+        Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .args(["add", ".specks/config.toml"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .args(["commit", "-m", "Modified config"])
+            .output()
+            .unwrap();
+
+        // Restore from temp (this creates a commit and cleans up temp)
+        restore_infra_from_temp(&temp_backup, repo_path, &infra_files).unwrap();
+
+        // Verify content was restored
+        let restored =
+            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        assert_eq!(restored, "original");
+
+        // Verify changes are committed
+        let log = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .args(["log", "--oneline"])
+            .output()
+            .unwrap();
+        let log_str = String::from_utf8_lossy(&log.stdout);
+        assert!(
+            log_str.contains("post-merge infrastructure sync"),
+            "Should have commit message: {}",
+            log_str
+        );
+
+        // Verify temp directory was cleaned up by restore_infra_from_temp
+        assert!(!temp_backup.exists(), "Temp dir should be removed");
+    }
+
+    #[test]
+    fn test_save_restore_round_trip() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        init_git_repo(repo_path);
+        make_initial_commit(repo_path);
+
+        // Create infrastructure file with specific content after initial commit
+        fs::create_dir_all(repo_path.join(".specks")).unwrap();
+        let original_content = "original content\nline 2\nline 3";
+        fs::write(repo_path.join(".specks/config.toml"), original_content).unwrap();
+
+        // Save to temp
+        let infra_files = vec![".specks/config.toml"];
+        let temp_backup = save_infra_to_temp(repo_path, &infra_files).unwrap();
+
+        // Modify original significantly
+        fs::write(repo_path.join(".specks/config.toml"), "completely different").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .args(["add", ".specks/config.toml"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .args(["commit", "-m", "Changed"])
+            .output()
+            .unwrap();
+
+        // Restore (this cleans up temp_backup)
+        restore_infra_from_temp(&temp_backup, repo_path, &infra_files).unwrap();
+
+        // Verify exact content match
+        let final_content =
+            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        assert_eq!(
+            final_content, original_content,
+            "Content should be identical to original"
+        );
+    }
+
+    #[test]
+    fn test_save_infra_nested_dirs() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        init_git_repo(repo_path);
+        make_initial_commit(repo_path);
+
+        // Create nested infrastructure structure after initial commit
+        fs::create_dir_all(repo_path.join(".specks/archive")).unwrap();
+        fs::write(
+            repo_path.join(".specks/archive/old.md"),
+            "archived content",
+        )
+        .unwrap();
+        fs::create_dir_all(repo_path.join(".beads")).unwrap();
+        fs::write(repo_path.join(".beads/beads.jsonl"), "{}").unwrap();
+
+        // Save nested files
+        let infra_files = vec![".specks/archive/old.md", ".beads/beads.jsonl"];
+        let temp_backup = save_infra_to_temp(repo_path, &infra_files).unwrap();
+
+        // Verify nested directories were created in temp
+        assert!(temp_backup.join(".specks/archive").is_dir());
+        assert!(temp_backup.join(".specks/archive/old.md").exists());
+        assert!(temp_backup.join(".beads/beads.jsonl").exists());
+
+        // Verify content
+        let archived =
+            fs::read_to_string(temp_backup.join(".specks/archive/old.md")).unwrap();
+        assert_eq!(archived, "archived content");
+
+        // Cleanup
+        let _ = fs::remove_dir_all(temp_backup);
+    }
+
+    #[test]
+    fn test_temp_dir_guard_drop() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        init_git_repo(repo_path);
+        make_initial_commit(repo_path);
+
+        // Create infrastructure file after initial commit
+        fs::create_dir_all(repo_path.join(".specks")).unwrap();
+        fs::write(repo_path.join(".specks/config.toml"), "original").unwrap();
+
+        // Save to temp
+        let infra_files = vec![".specks/config.toml"];
+        let temp_backup = save_infra_to_temp(repo_path, &infra_files).unwrap();
+
+        // Modify original
+        fs::write(repo_path.join(".specks/config.toml"), "modified").unwrap();
+
+        {
+            // Create guard and drop it (simulates error path)
+            let _guard = TempDirGuard::new(
+                temp_backup.clone(),
+                repo_path.to_path_buf(),
+                infra_files.iter().map(|s| s.to_string()).collect(),
+            );
+
+            // Guard drops here, should restore files
+        }
+
+        // Verify content was restored by drop
+        let restored =
+            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        assert_eq!(restored, "original", "Drop should have restored the file");
+    }
+
+    #[test]
+    fn test_temp_dir_guard_defuse() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        init_git_repo(repo_path);
+        make_initial_commit(repo_path);
+
+        // Create infrastructure file after initial commit
+        fs::create_dir_all(repo_path.join(".specks")).unwrap();
+        fs::write(repo_path.join(".specks/config.toml"), "original").unwrap();
+
+        // Save to temp
+        let infra_files = vec![".specks/config.toml"];
+        let temp_backup = save_infra_to_temp(repo_path, &infra_files).unwrap();
+
+        // Modify original
+        fs::write(repo_path.join(".specks/config.toml"), "modified").unwrap();
+
+        {
+            // Create guard, defuse it, then drop
+            let mut guard = TempDirGuard::new(
+                temp_backup.clone(),
+                repo_path.to_path_buf(),
+                infra_files.iter().map(|s| s.to_string()).collect(),
+            );
+
+            guard.defuse();
+
+            // Guard drops here but should NOT restore files
+        }
+
+        // Verify content was NOT restored (defused)
+        let final_content =
+            fs::read_to_string(repo_path.join(".specks/config.toml")).unwrap();
+        assert_eq!(
+            final_content, "modified",
+            "Defused guard should not restore files"
+        );
+
+        // Manual cleanup
+        let _ = fs::remove_dir_all(temp_backup);
     }
 }

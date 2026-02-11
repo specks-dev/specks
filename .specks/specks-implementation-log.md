@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-1
+date: 2025-02-11T20:30:32Z
+bead: specks-xuf.2
+---
+
+## #step-1: Added infrastructure save/restore/copy helpers and TempDirGuard RAII struct for error recovery during merge. save_infra_to_temp creates temp copy, copy_infra_from_temp restores without git ops, restore_infra_from_temp restores with commit. TempDirGuard auto-restores on Drop, defuse() disables.
+
+**Files changed:**
+- .specks/specks-4.md
+
+---
+
+---
 step: #step-0
 date: 2025-02-11T20:22:16Z
 bead: specks-xuf.1
