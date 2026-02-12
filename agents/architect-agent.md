@@ -55,8 +55,8 @@ If resumed with revision feedback, adjust your strategy to address the issues ra
   "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-N.md",
   "step_anchor": "#step-0",
-  "all_steps": ["#step-0", "#step-1", "#step-2"],
-  "artifact_dir": "/abs/repo/.specks-worktrees/.artifacts/auth-20260208-143022/step-0"
+  "bead_id": "bd-abc123.0",
+  "all_steps": ["#step-0", "#step-1", "#step-2"]
 }
 ```
 
@@ -65,19 +65,19 @@ If resumed with revision feedback, adjust your strategy to address the issues ra
 | `worktree_path` | Absolute path to the worktree directory |
 | `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the step to plan strategy for |
+| `bead_id` | Bead ID for this step (e.g., "bd-abc123.0") |
 | `all_steps` | List of all steps to be implemented this session (for context) |
-| `artifact_dir` | Absolute path to the step's artifact directory |
 
 ### Resume (Next Step)
 
 ```
-Plan strategy for step #step-1. Previous step accomplished: <summary>. Artifact dir: <path>.
+Plan strategy for step #step-1. Bead ID: bd-abc123.1. Previous step accomplished: <summary>.
 ```
 
 ### Resume (Revision Feedback)
 
 ```
-Revision needed for step #step-N. Feedback: <issues>. Adjust your strategy. Artifact dir: <path>.
+Revision needed for step #step-N. Bead ID: bd-abc123.N. Feedback: <issues>. Adjust your strategy.
 ```
 
 **IMPORTANT: File Path Handling**
@@ -135,6 +135,61 @@ If drift exceeds thresholds, implementation halts. Therefore:
 
 ---
 
+## Bead-Mediated Communication
+
+### Self-Fetch Behavior
+
+**As your FIRST action**, fetch the bead data for this step:
+
+```bash
+cd {worktree_path} && specks beads inspect {bead_id} --working-dir {worktree_path} --json
+```
+
+This retrieves:
+- **description**: The step's task description and implementation requirements
+- **acceptance_criteria**: Success criteria for this step
+- **design**: Previously written strategy (if resuming) — your prior work is after the `---` separator
+
+### Field Ownership (What You Read)
+
+Per Table T01, you READ:
+- **description**: Step task and requirements (from speck sync)
+- **acceptance_criteria**: Success criteria (from speck sync)
+- **design**: Existing strategies from prior invocations (after `---` separator)
+
+### Field Ownership (What You Write)
+
+Per Table T02, you WRITE to:
+- **design**: Append your strategy after a `---` separator
+
+After producing your strategy, write it to the bead:
+
+```bash
+cd {worktree_path} && specks beads append-design {bead_id} \
+  --working-dir {worktree_path} \
+  --content "## Strategy
+
+Approach: <high-level approach>
+
+Expected touch set:
+- file1.rs
+- file2.rs
+
+Implementation steps:
+1. <step description>
+2. <step description>
+
+Test plan: <verification>
+
+Risks: <potential issues>"
+```
+
+### Artifact Files
+
+**Note**: Artifact files are managed by the orchestrator. Your strategy persists in the bead's `design` field, which is the authoritative source for downstream agents.
+
+---
+
 ## Behavior Rules
 
 1. **Read the speck first** (initial spawn): Understand all steps, their tasks, references, and artifacts.
@@ -148,8 +203,6 @@ If drift exceeds thresholds, implementation halts. Therefore:
 5. **Be specific**: Implementation steps should be concrete enough that the coder agent can execute without ambiguity.
 
 6. **Identify risks**: Note anything that could complicate implementation.
-
-7. **Write your output artifact**: After producing your strategy, write the full JSON output to `{artifact_dir}/architect-output.json`. The orchestrator cannot write files — you are responsible for persisting your own output.
 
 ---
 

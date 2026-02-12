@@ -10,6 +10,84 @@ bead: specks-jlu.4
 
 ---
 step: #step-5
+date: 2025-02-12T15:48:36Z
+bead: specks-bvq.7
+---
+
+## #step-5: Add integration tests for bead-mediated communication and cleanup stale references
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
+step: #step-4
+date: 2025-02-12T15:34:21Z
+bead: specks-bvq.6
+---
+
+## #step-4: Update setup agent artifact path documentation to worktree-local
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
+step: #step-3
+date: 2025-02-12T15:30:22Z
+bead: specks-bvq.5
+---
+
+## #step-3: Update implementer skill for bead-mediated orchestration
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
+step: #step-2
+date: 2025-02-12T15:23:24Z
+bead: specks-bvq.3
+---
+
+## #step-2: Update agent definitions for bead-mediated communication
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
+step: #step-1
+date: 2025-02-12T15:09:04Z
+bead: specks-bvq.2
+---
+
+## #step-1: Move artifact directory into worktree for automatic cleanup
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
+step: #step-0
+date: 2025-02-12T15:01:43Z
+bead: specks-bvq.1
+---
+
+## #step-0: Add BeadsCli methods and CLI subcommands for agent-bead communication
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
+step: #step-5
 date: 2025-02-12T00:43:13Z
 bead: specks-0kf.6
 ---

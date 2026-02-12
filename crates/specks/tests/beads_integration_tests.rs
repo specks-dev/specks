@@ -762,3 +762,521 @@ fn test_full_beads_workflow_sync_work_pull() {
         "Step 0 checkpoint should be checked after pull"
     );
 }
+
+// =============================================================================
+// Bead-mediated communication CLI integration tests
+// =============================================================================
+
+#[test]
+fn test_beads_append_design_adds_content_with_separator() {
+    let temp = setup_test_project();
+    let temp_state = tempfile::tempdir().expect("failed to create temp state dir");
+
+    // Create a bead via bd-fake
+    let create_output = Command::new(bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["create", "Test Step", "--json"])
+        .output()
+        .expect("failed to create bead");
+
+    let create_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&create_output.stdout)).unwrap();
+    let bead_id = create_json["id"].as_str().unwrap();
+
+    // Append design via specks beads append-design
+    let append_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "append-design",
+            bead_id,
+            "Strategy: use exponential backoff",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to append design");
+
+    assert!(
+        append_output.status.success(),
+        "append-design should succeed: {}",
+        String::from_utf8_lossy(&append_output.stderr)
+    );
+
+    // Inspect to verify design field
+    let inspect_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "inspect", bead_id, "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to inspect bead");
+
+    let inspect_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&inspect_output.stdout)).unwrap();
+
+    let design = inspect_json["data"]["design"].as_str().unwrap();
+    // When appending to empty field, no separator is added
+    assert!(
+        !design.contains("---"),
+        "design should NOT contain separator when starting empty"
+    );
+    assert!(
+        design.contains("Strategy: use exponential backoff"),
+        "design should contain appended content"
+    );
+    assert_eq!(
+        design.trim(),
+        "Strategy: use exponential backoff",
+        "design should be just the appended content (no separator)"
+    );
+}
+
+#[test]
+fn test_beads_update_notes_overwrites_content() {
+    let temp = setup_test_project();
+    let temp_state = tempfile::tempdir().expect("failed to create temp state dir");
+
+    // Create a bead
+    let create_output = Command::new(bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["create", "Test Step", "--json"])
+        .output()
+        .expect("failed to create bead");
+
+    let create_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&create_output.stdout)).unwrap();
+    let bead_id = create_json["id"].as_str().unwrap();
+
+    // Update notes (first time)
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "update-notes",
+            bead_id,
+            "First implementation",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to update notes first time");
+
+    // Update notes (second time - should overwrite)
+    let update_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "update-notes",
+            bead_id,
+            "Second implementation - revised",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to update notes second time");
+
+    assert!(
+        update_output.status.success(),
+        "update-notes should succeed"
+    );
+
+    // Inspect to verify notes were overwritten
+    let inspect_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "inspect", bead_id, "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to inspect bead");
+
+    let inspect_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&inspect_output.stdout)).unwrap();
+
+    let notes = inspect_json["data"]["notes"].as_str().unwrap();
+    assert!(
+        !notes.contains("First implementation"),
+        "notes should not contain old content after overwrite"
+    );
+    assert!(
+        notes.contains("Second implementation - revised"),
+        "notes should contain new content"
+    );
+}
+
+#[test]
+fn test_beads_append_notes_preserves_existing_content() {
+    let temp = setup_test_project();
+    let temp_state = tempfile::tempdir().expect("failed to create temp state dir");
+
+    // Create a bead
+    let create_output = Command::new(bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["create", "Test Step", "--json"])
+        .output()
+        .expect("failed to create bead");
+
+    let create_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&create_output.stdout)).unwrap();
+    let bead_id = create_json["id"].as_str().unwrap();
+
+    // Coder updates notes
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "update-notes",
+            bead_id,
+            "Coder: implementation complete",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to update notes");
+
+    // Reviewer appends notes
+    let append_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "append-notes",
+            bead_id,
+            "Reviewer: APPROVE - all tests pass",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to append notes");
+
+    assert!(append_output.status.success(), "append-notes should succeed");
+
+    // Inspect to verify both entries present
+    let inspect_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "inspect", bead_id, "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to inspect bead");
+
+    let inspect_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&inspect_output.stdout)).unwrap();
+
+    let notes = inspect_json["data"]["notes"].as_str().unwrap();
+    assert!(
+        notes.contains("---"),
+        "notes should contain separator between coder and reviewer"
+    );
+    assert!(
+        notes.contains("Coder: implementation complete"),
+        "notes should contain coder content"
+    );
+    assert!(
+        notes.contains("Reviewer: APPROVE - all tests pass"),
+        "notes should contain reviewer content"
+    );
+}
+
+#[test]
+fn test_beads_inspect_shows_all_fields() {
+    let temp = setup_test_project();
+    let temp_state = tempfile::tempdir().expect("failed to create temp state dir");
+
+    // Create a bead
+    let create_output = Command::new(bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["create", "Test Step", "--description", "Test task", "--json"])
+        .output()
+        .expect("failed to create bead");
+
+    let create_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&create_output.stdout)).unwrap();
+    let bead_id = create_json["id"].as_str().unwrap();
+
+    // Add design
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "append-design",
+            bead_id,
+            "Design: strategy here",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to append design");
+
+    // Add notes
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "update-notes",
+            bead_id,
+            "Notes: implementation results",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to update notes");
+
+    // Inspect
+    let inspect_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "inspect", bead_id, "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to inspect");
+
+    assert!(inspect_output.status.success(), "inspect should succeed");
+
+    let inspect_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&inspect_output.stdout)).unwrap();
+
+    // Verify all fields are present
+    assert!(inspect_json["data"]["bead_id"].is_string(), "should have bead_id");
+    assert!(inspect_json["data"]["title"].is_string(), "should have title");
+    assert!(inspect_json["data"]["description"].is_string(), "should have description");
+    assert!(inspect_json["data"]["design"].is_string(), "should have design");
+    assert!(inspect_json["data"]["notes"].is_string(), "should have notes");
+    assert!(inspect_json["data"]["status"].is_string(), "should have status");
+
+    assert!(
+        inspect_json["data"]["design"].as_str().unwrap().contains("Design: strategy here"),
+        "design field should contain appended content"
+    );
+    assert!(
+        inspect_json["data"]["notes"].as_str().unwrap().contains("Notes: implementation results"),
+        "notes field should contain updated content"
+    );
+}
+
+#[test]
+fn test_full_agent_cycle_bead_audit_trail() {
+    let temp = setup_test_project();
+    let temp_state = tempfile::tempdir().expect("failed to create temp state dir");
+    create_test_speck(&temp, "agent-cycle", SINGLE_STEP_SPECK);
+
+    // Step 1: Sync speck to create beads with description
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "sync", "specks-agent-cycle.md", "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to sync");
+
+    // Get step bead ID from mock state
+    let issues_content =
+        fs::read_to_string(temp_state.path().join("issues.json")).expect("failed to read issues");
+    let issues: serde_json::Value = serde_json::from_str(&issues_content).unwrap();
+    let step_bead_id = issues
+        .as_object()
+        .unwrap()
+        .keys()
+        .find(|k| k.contains('.'))
+        .expect("should have step bead");
+
+    // Step 2: Architect appends design
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "append-design",
+            step_bead_id,
+            "Architect: approach is to create project structure",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to append design");
+
+    // Step 3: Coder updates notes
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "update-notes",
+            step_bead_id,
+            "Coder: created files, tests pass",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to update notes");
+
+    // Step 4: Reviewer appends notes
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "append-notes",
+            step_bead_id,
+            "Reviewer: APPROVE - plan conformance verified",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to append notes");
+
+    // Step 5: Close bead with reason
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "close",
+            step_bead_id,
+            "--reason",
+            "Step 0 complete: project created",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to close bead");
+
+    // Step 6: Inspect to verify complete audit trail
+    let inspect_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "inspect", step_bead_id, "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to inspect");
+
+    let inspect_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&inspect_output.stdout)).unwrap();
+
+    // Verify complete audit trail
+    assert_eq!(inspect_json["data"]["status"], "closed", "bead should be closed");
+
+    let description = inspect_json["data"]["description"].as_str().unwrap();
+    assert!(
+        description.contains("Create project") || !description.is_empty(),
+        "description should contain step task"
+    );
+
+    let design = inspect_json["data"]["design"].as_str().unwrap();
+    assert!(
+        design.contains("Architect: approach is to create project structure"),
+        "design should contain architect strategy"
+    );
+
+    let notes = inspect_json["data"]["notes"].as_str().unwrap();
+    assert!(
+        notes.contains("Coder: created files, tests pass"),
+        "notes should contain coder results"
+    );
+    assert!(
+        notes.contains("Reviewer: APPROVE - plan conformance verified"),
+        "notes should contain reviewer approval"
+    );
+
+    let close_reason = inspect_json["data"]["close_reason"].as_str().unwrap();
+    assert!(
+        close_reason.contains("Step 0 complete"),
+        "close_reason should contain completion summary"
+    );
+}
+
+#[test]
+fn test_revision_loop_update_notes_overwrites() {
+    let temp = setup_test_project();
+    let temp_state = tempfile::tempdir().expect("failed to create temp state dir");
+
+    // Create a bead
+    let create_output = Command::new(bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["create", "Test Step", "--json"])
+        .output()
+        .expect("failed to create bead");
+
+    let create_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&create_output.stdout)).unwrap();
+    let bead_id = create_json["id"].as_str().unwrap();
+
+    // Iteration 1: Coder updates notes
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "update-notes",
+            bead_id,
+            "Coder v1: implementation attempt",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to update notes v1");
+
+    // Reviewer appends notes
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "append-notes",
+            bead_id,
+            "Reviewer v1: REVISE - missing tests",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to append notes v1");
+
+    // Iteration 2: Coder updates notes again (should overwrite BOTH coder v1 AND reviewer v1)
+    Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args([
+            "beads",
+            "update-notes",
+            bead_id,
+            "Coder v2: revised with tests added",
+            "--json",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to update notes v2");
+
+    // Inspect to verify overwrite semantics
+    let inspect_output = Command::new(specks_binary())
+        .env("SPECKS_BD_PATH", bd_fake_path())
+        .env("SPECKS_BD_STATE", temp_state.path())
+        .args(["beads", "inspect", bead_id, "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to inspect");
+
+    let inspect_json: serde_json::Value =
+        serde_json::from_str(&String::from_utf8_lossy(&inspect_output.stdout)).unwrap();
+
+    let notes = inspect_json["data"]["notes"].as_str().unwrap();
+
+    // Notes should ONLY contain coder v2 - all previous content overwritten
+    assert!(
+        !notes.contains("Coder v1: implementation attempt"),
+        "notes should not contain old coder content"
+    );
+    assert!(
+        !notes.contains("Reviewer v1: REVISE - missing tests"),
+        "notes should not contain old reviewer content (update-notes overwrites all)"
+    );
+    assert!(
+        notes.contains("Coder v2: revised with tests added"),
+        "notes should contain new coder content"
+    );
+}

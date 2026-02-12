@@ -305,7 +305,7 @@ fn check_worktrees() -> HealthCheck {
         let path = entry.path();
         if path.is_dir() {
             // Only validate directories matching specks__* pattern
-            // Exclude infrastructure directories like .sessions, .artifacts
+            // Exclude infrastructure directories like .sessions
             let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
             if !dir_name.starts_with("specks__") {
                 continue;

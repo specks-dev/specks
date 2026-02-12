@@ -7,18 +7,22 @@
 //! Requires: beads CLI (`bd`) installed, `.beads/` initialized, network connectivity.
 
 pub mod close;
+pub mod inspect;
 pub mod link;
 pub mod pull;
 pub mod status;
 pub mod sync;
+pub mod update;
 
 use clap::Subcommand;
 
 pub use close::run_close;
+pub use inspect::run_inspect;
 pub use link::run_link;
 pub use pull::run_pull;
 pub use status::run_beads_status;
 pub use sync::run_sync;
+pub use update::{run_append_design, run_append_notes, run_update_notes};
 
 /// Beads subcommands
 #[derive(Subcommand, Debug)]
@@ -111,5 +115,89 @@ pub enum BeadsCommands {
         /// Reason for closing (e.g., "Step completed per speck")
         #[arg(long)]
         reason: Option<String>,
+    },
+
+    /// Inspect a bead showing all fields
+    ///
+    /// Displays all fields of a bead including design, notes, close_reason, and metadata.
+    #[command(
+        long_about = "Inspect a bead showing all fields.\n\nDisplays:\n  - Basic fields: id, title, description, status, priority, type\n  - Rich fields: design, acceptance_criteria, notes\n  - Metadata: close_reason, metadata JSON\n\nUse --json for machine-readable output."
+    )]
+    Inspect {
+        /// Bead ID to inspect
+        bead_id: String,
+
+        /// Working directory for bd command (optional, for worktree context)
+        #[arg(long)]
+        working_dir: Option<String>,
+    },
+
+    /// Update the notes field of a bead (replaces existing content)
+    ///
+    /// Replaces the entire notes field with new content.
+    #[command(
+        long_about = "Update the notes field of a bead.\n\nReplaces the entire notes field with new content.\nFor large content (>64KB), uses temporary file to avoid ARG_MAX issues.\n\nTo append instead of replace, use `specks beads append-notes`."
+    )]
+    UpdateNotes {
+        /// Bead ID to update
+        bead_id: String,
+
+        /// New notes content (use --content-file to read from file instead)
+        #[arg(conflicts_with = "content_file")]
+        content: Option<String>,
+
+        /// Path to file containing content to write
+        #[arg(long, conflicts_with = "content")]
+        content_file: Option<String>,
+
+        /// Working directory for bd command (optional, for worktree context)
+        #[arg(long)]
+        working_dir: Option<String>,
+    },
+
+    /// Append content to the notes field of a bead
+    ///
+    /// Appends content to existing notes using "---" separator.
+    #[command(
+        long_about = "Append content to the notes field of a bead.\n\nAppends new content to existing notes with a \"---\" separator.\nIf notes field is empty, no separator is added.\n\nFor large content (>64KB), uses temporary file to avoid ARG_MAX issues."
+    )]
+    AppendNotes {
+        /// Bead ID to update
+        bead_id: String,
+
+        /// Content to append (use --content-file to read from file instead)
+        #[arg(conflicts_with = "content_file")]
+        content: Option<String>,
+
+        /// Path to file containing content to append
+        #[arg(long, conflicts_with = "content")]
+        content_file: Option<String>,
+
+        /// Working directory for bd command (optional, for worktree context)
+        #[arg(long)]
+        working_dir: Option<String>,
+    },
+
+    /// Append content to the design field of a bead
+    ///
+    /// Appends content to existing design using "---" separator.
+    #[command(
+        long_about = "Append content to the design field of a bead.\n\nAppends new content to existing design with a \"---\" separator.\nIf design field is empty, no separator is added.\n\nFor large content (>64KB), uses temporary file to avoid ARG_MAX issues."
+    )]
+    AppendDesign {
+        /// Bead ID to update
+        bead_id: String,
+
+        /// Content to append (use --content-file to read from file instead)
+        #[arg(conflicts_with = "content_file")]
+        content: Option<String>,
+
+        /// Path to file containing content to append
+        #[arg(long, conflicts_with = "content")]
+        content_file: Option<String>,
+
+        /// Working directory for bd command (optional, for worktree context)
+        #[arg(long)]
+        working_dir: Option<String>,
     },
 }

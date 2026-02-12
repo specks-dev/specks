@@ -977,9 +977,10 @@ pub(crate) fn cleanup_stale_branches_with_pr_checker(
 /// Remove a worktree and clean up all associated files
 ///
 /// This function orchestrates the cleanup of a worktree by:
-/// 1. Deleting external session and artifacts at `.specks-worktrees/.sessions/` and `.specks-worktrees/.artifacts/`
+/// 1. Deleting external session files at `.specks-worktrees/.sessions/`
 /// 2. Deleting legacy internal session files at `{worktree}/.specks/session.json`
-/// 3. Removing the worktree directory using git worktree remove (without --force)
+/// 3. Deleting worktree-local artifacts at `{worktree}/.specks/artifacts/`
+/// 4. Removing the worktree directory using git worktree remove (without --force)
 ///
 /// The function ensures all session data is cleaned up before git removes the worktree,
 /// so that git worktree remove can succeed without needing --force.
@@ -1014,6 +1015,12 @@ pub fn remove_worktree(worktree_path: &Path, repo_root: &Path) -> Result<(), Spe
         std::fs::remove_dir_all(&internal_artifacts)?;
     }
 
+    // Delete current artifacts directory (new location)
+    let artifacts = worktree_path.join(".specks").join("artifacts");
+    if artifacts.exists() {
+        std::fs::remove_dir_all(&artifacts)?;
+    }
+
     // Now remove the worktree using git (without --force since files are cleaned)
     let git = GitCli::new(repo_root);
     git.worktree_remove(worktree_path)?;
@@ -1021,13 +1028,15 @@ pub fn remove_worktree(worktree_path: &Path, repo_root: &Path) -> Result<(), Spe
     Ok(())
 }
 
-/// Clean up orphaned session files and artifact directories.
+/// Clean up orphaned session files.
 ///
-/// Scans `.specks-worktrees/.sessions/` for session files and `.specks-worktrees/.artifacts/`
-/// for artifact directories that don't have a corresponding worktree directory.
-/// Removes any orphaned entries found.
+/// Scans `.specks-worktrees/.sessions/` for session files that don't have a corresponding
+/// worktree directory. Removes any orphaned entries found.
+///
+/// Note: Artifacts are now stored inside worktrees at `{worktree}/.specks/artifacts/`,
+/// so they are automatically cleaned up when the worktree is removed.
 fn cleanup_orphaned_sessions(repo_root: &Path, dry_run: bool) {
-    use crate::session::{artifacts_dir, delete_session, sessions_dir};
+    use crate::session::{delete_session, sessions_dir};
 
     let sessions_path = sessions_dir(repo_root);
     if !sessions_path.exists() {
@@ -1057,23 +1066,8 @@ fn cleanup_orphaned_sessions(repo_root: &Path, dry_run: bool) {
         }
     }
 
-    // Also check for orphaned artifact directories without session files
-    let artifacts_base = repo_root.join(".specks-worktrees").join(".artifacts");
-    if artifacts_base.exists() {
-        if let Ok(entries) = std::fs::read_dir(&artifacts_base) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                let worktree_dir = worktrees_dir.join(format!("specks__{}", name));
-                if !worktree_dir.exists() {
-                    // Orphaned artifacts - no corresponding worktree
-                    if !dry_run {
-                        let artifact_path = artifacts_dir(repo_root, &name);
-                        let _ = std::fs::remove_dir_all(&artifact_path);
-                    }
-                }
-            }
-        }
-    }
+    // Note: Artifact cleanup is no longer needed here since artifacts now live inside
+    // worktrees at {worktree}/.specks/artifacts/ and are removed when the worktree is removed.
 }
 
 /// Clean up worktrees based on cleanup mode
@@ -1438,8 +1432,8 @@ mod tests {
 
         save_session(&session, temp_dir).unwrap();
 
-        // Create artifacts
-        let artifacts_path = artifacts_dir(temp_dir, "test-20260208-120000");
+        // Create artifacts inside worktree (new location)
+        let artifacts_path = artifacts_dir(&worktree_path);
         let step_dir = artifacts_path.join("step-1");
         std::fs::create_dir_all(&step_dir).unwrap();
         std::fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
@@ -1447,7 +1441,7 @@ mod tests {
         // Verify session and artifacts exist
         let session_file = session_file_path(temp_dir, "test-20260208-120000");
         assert!(session_file.exists(), "Session file should exist");
-        assert!(artifacts_path.exists(), "Artifacts should exist");
+        assert!(artifacts_path.exists(), "Artifacts should exist inside worktree");
         assert!(worktree_path.exists(), "Worktree should exist");
 
         // Remove worktree
@@ -1455,8 +1449,9 @@ mod tests {
 
         // Verify cleanup
         assert!(!session_file.exists(), "Session file should be deleted");
-        assert!(!artifacts_path.exists(), "Artifacts should be deleted");
+        // Artifacts are inside worktree, so they're automatically deleted with it
         assert!(!worktree_path.exists(), "Worktree should be deleted");
+        assert!(!artifacts_path.exists(), "Artifacts should be deleted with worktree");
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
@@ -1710,45 +1705,37 @@ mod tests {
 
         save_session(&session, temp_dir).unwrap();
 
-        // Create external artifacts
-        let external_artifacts = artifacts_dir(temp_dir, "both-20260208-120000");
-        let external_step_dir = external_artifacts.join("step-1");
-        std::fs::create_dir_all(&external_step_dir).unwrap();
-        std::fs::write(external_step_dir.join("architect-output.json"), "{}").unwrap();
+        // Create artifacts inside worktree (new location)
+        let artifacts_path = artifacts_dir(&worktree_path);
+        let step_dir = artifacts_path.join("step-1");
+        std::fs::create_dir_all(&step_dir).unwrap();
+        std::fs::write(step_dir.join("architect-output.json"), "{}").unwrap();
 
-        // Also create legacy internal session and artifacts
+        // Also create legacy internal session file (for backward compat test)
         let legacy_specks_dir = worktree_path.join(".specks");
         std::fs::create_dir_all(&legacy_specks_dir).unwrap();
         std::fs::write(legacy_specks_dir.join("session.json"), "{}").unwrap();
 
-        let legacy_artifacts = legacy_specks_dir.join("step-artifacts");
-        let legacy_step_dir = legacy_artifacts.join("step-1");
-        std::fs::create_dir_all(&legacy_step_dir).unwrap();
-        std::fs::write(legacy_step_dir.join("architect-output.json"), "{}").unwrap();
-
-        // Verify both exist
+        // Verify session and artifacts exist
         let session_file = session_file_path(temp_dir, "both-20260208-120000");
         assert!(session_file.exists(), "External session should exist");
         assert!(
-            external_artifacts.exists(),
-            "External artifacts should exist"
+            artifacts_path.exists(),
+            "Artifacts should exist inside worktree"
         );
         assert!(
             legacy_specks_dir.join("session.json").exists(),
             "Legacy session should exist"
         );
-        assert!(legacy_artifacts.exists(), "Legacy artifacts should exist");
 
         // Remove worktree
         remove_worktree(&worktree_path, temp_dir).unwrap();
 
         // Verify all cleaned up
         assert!(!session_file.exists(), "External session should be deleted");
-        assert!(
-            !external_artifacts.exists(),
-            "External artifacts should be deleted"
-        );
         assert!(!worktree_path.exists(), "Worktree should be deleted");
+        // Artifacts are inside worktree, so they're automatically deleted with it
+        assert!(!artifacts_path.exists(), "Artifacts should be deleted with worktree");
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 

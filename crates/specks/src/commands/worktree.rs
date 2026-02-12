@@ -533,7 +533,7 @@ pub fn run_worktree_create_with_root(
             let ready_steps: Option<Vec<String>> = if let Some(ref root_id) = root_bead_id {
                 use specks_core::beads::BeadsCli;
                 let bd = BeadsCli::default();
-                match bd.ready(Some(root_id)) {
+                match bd.ready(Some(root_id), None) {
                     Ok(ready_beads) => {
                         // Map bead IDs to step anchors using bead_mapping
                         if let Some(ref mapping) = bead_mapping {
@@ -564,10 +564,8 @@ pub fn run_worktree_create_with_root(
                 .unwrap_or(&branch_name)
                 .to_string();
 
-            // Create artifact directories
-            let artifacts_base = repo_root
-                .join(".specks-worktrees/.artifacts")
-                .join(&session_id);
+            // Create artifact directories inside worktree
+            let artifacts_base = worktree_path.join(".specks/artifacts");
             if let Err(e) = std::fs::create_dir_all(&artifacts_base) {
                 eprintln!("warning: failed to create artifacts base directory: {}", e);
             }
