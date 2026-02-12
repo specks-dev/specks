@@ -7,7 +7,6 @@ use clap::Subcommand;
 use serde::Serialize;
 use specks_core::{
     ValidationLevel,
-    session::{Session, delete_session, session_id_from_worktree},
     worktree::{
         CleanupMode, DiscoveredWorktree, WorktreeConfig, cleanup_worktrees, create_worktree,
         list_worktrees, remove_worktree,
@@ -22,7 +21,7 @@ pub enum WorktreeCommands {
     ///
     /// Creates a git worktree and branch for implementing a speck in isolation.
     #[command(
-        long_about = "Create worktree for speck implementation.\n\nCreates:\n  - Branch: specks/<slug>-<timestamp>\n  - Worktree: .specks-worktrees/<sanitized-branch-name>/\n  - Session: session.json tracking state\n\nBeads sync is always-on:\n  - Atomically syncs beads and commits annotations in worktree\n  - Full rollback if sync or commit fails\n\nWorktree creation is idempotent:\n  - Returns existing worktree if one exists for this speck\n  - Creates new worktree if none exists\n\nValidates that the speck has at least one execution step."
+        long_about = "Create worktree for speck implementation.\n\nCreates:\n  - Branch: specks/<slug>-<timestamp>\n  - Worktree: .specks-worktrees/<sanitized-branch-name>/\n\nBeads sync is always-on:\n  - Atomically syncs beads and commits annotations in worktree\n  - Full rollback if sync or commit fails\n\nWorktree creation is idempotent:\n  - Returns existing worktree if one exists for this speck\n  - Creates new worktree if none exists\n\nValidates that the speck has at least one execution step."
     )]
     Create {
         /// Speck file to implement
@@ -103,13 +102,7 @@ pub struct CreateData {
     pub root_bead_id: Option<String>,
     #[serde(skip_serializing_if = "is_false")]
     pub reused: bool,
-    // V2 enriched fields
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_file: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub artifacts_base: Option<String>,
+    // Bead-derived fields
     #[serde(skip_serializing_if = "Option::is_none")]
     pub all_steps: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -467,16 +460,15 @@ pub fn run_worktree_create_with_root(
     };
 
     match create_worktree(&config) {
-        Ok((worktree_path, branch_name, speck_slug)) => {
+        Ok((worktree_path, branch_name, _speck_slug)) => {
             let speck_name = speck_path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("unknown");
 
-            // Check if this is a reused worktree by looking for existing session
-            let existing_session =
-                specks_core::session::load_session(&worktree_path, Some(&repo_root)).ok();
-            let reused = existing_session.is_some();
+            // Reuse detection is now handled by find_existing_worktree() in core
+            // We can determine reuse by checking if the worktree already had content
+            let reused = worktree_path.join(".specks").exists();
 
             // Run specks init in the worktree (idempotent, creates .specks/ infrastructure)
             let init_result = std::env::current_exe()
@@ -518,9 +510,6 @@ pub fn run_worktree_create_with_root(
                         bead_mapping: None,
                         root_bead_id: None,
                         reused: false,
-                        session_id: None,
-                        session_file: None,
-                        artifacts_base: None,
                         all_steps: None,
                         ready_steps: None,
                     };
@@ -561,9 +550,6 @@ pub fn run_worktree_create_with_root(
                                     bead_mapping: None,
                                     root_bead_id: None,
                                     reused: false,
-                                    session_id: None,
-                                    session_file: None,
-                                    artifacts_base: None,
                                     all_steps: None,
                                     ready_steps: None,
                                 };
@@ -594,9 +580,6 @@ pub fn run_worktree_create_with_root(
                             bead_mapping: None,
                             root_bead_id: None,
                             reused: false,
-                            session_id: None,
-                            session_file: None,
-                            artifacts_base: None,
                             all_steps: None,
                             ready_steps: None,
                         };
@@ -655,12 +638,6 @@ pub fn run_worktree_create_with_root(
                 None
             };
 
-            // Derive session_id from branch name: "specks/auth-20260208-143022" -> "auth-20260208-143022"
-            let session_id = branch_name
-                .strip_prefix("specks/")
-                .unwrap_or(&branch_name)
-                .to_string();
-
             // Create artifact directories inside worktree
             let artifacts_base = worktree_path.join(".specks/artifacts");
             if let Err(e) = std::fs::create_dir_all(&artifacts_base) {
@@ -678,34 +655,6 @@ pub fn run_worktree_create_with_root(
                 }
             }
 
-            // Create Session in CLI layer (schema v2)
-            let session = Session {
-                schema_version: "2".to_string(),
-                session_id: session_id.clone(),
-                speck_path: speck.clone(),
-                speck_slug: speck_slug.clone(),
-                branch_name: branch_name.clone(),
-                base_branch: config.base_branch.clone(),
-                worktree_path: worktree_path.display().to_string(),
-                created_at: specks_core::session::now_iso8601(),
-                last_updated_at: None,
-                total_steps,
-                root_bead_id: root_bead_id.clone(),
-                reused,
-                step_summaries: None,
-                ..Default::default()
-            };
-
-            // Save session to external sessions dir
-            if let Err(e) = specks_core::session::save_session(&session, &repo_root) {
-                eprintln!("warning: failed to save session: {}", e);
-            }
-
-            // Compute session_file path for output
-            let session_file = repo_root
-                .join(".specks-worktrees/.sessions")
-                .join(format!("{}.json", session_id));
-
             if json_output {
                 let data = CreateData {
                     worktree_path: worktree_path.display().to_string(),
@@ -716,9 +665,6 @@ pub fn run_worktree_create_with_root(
                     bead_mapping,
                     root_bead_id,
                     reused,
-                    session_id: Some(session_id),
-                    session_file: Some(session_file.display().to_string()),
-                    artifacts_base: Some(artifacts_base.display().to_string()),
                     all_steps: Some(all_steps),
                     ready_steps,
                 };
@@ -1090,11 +1036,6 @@ pub fn run_worktree_remove_with_root(
             }
             return Ok(1);
         }
-
-        // Clean up legacy session files if present
-        if let Some(session_id) = session_id_from_worktree(worktree_path) {
-            let _ = delete_session(&session_id, &repo_root);
-        }
     } else {
         // Use the remove_worktree function which handles cleanup
         if let Err(e) = remove_worktree(worktree_path, &repo_root) {
@@ -1170,9 +1111,6 @@ mod tests {
             bead_mapping: None,
             root_bead_id: None,
             reused: false,
-            session_id: None,
-            session_file: None,
-            artifacts_base: None,
             all_steps: None,
             ready_steps: None,
         };
@@ -1182,6 +1120,10 @@ mod tests {
         assert!(json.contains("branch_name"));
         // reused should be skipped when false
         assert!(!json.contains("reused"));
+        // session fields should not be present
+        assert!(!json.contains("session_id"));
+        assert!(!json.contains("session_file"));
+        assert!(!json.contains("artifacts_base"));
     }
 
     #[test]

@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-4
+date: 2025-02-12T21:31:27Z
+bead: specks-t9v.5
+---
+
+## #step-4: Remove session creation from worktree create command — no more session files written
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
 step: #step-3
 date: 2025-02-12T21:24:40Z
 bead: specks-t9v.4
