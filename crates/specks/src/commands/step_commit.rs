@@ -229,32 +229,18 @@ fn close_bead_in_worktree(
 
     let beads = BeadsCli::new(bd_path);
 
-    // Check if beads CLI is installed
-    if !beads.is_installed(None) {
+    // Check if beads CLI is installed (from worktree context)
+    if !beads.is_installed(Some(worktree_path)) {
         return Ok((
             false,
             vec!["beads CLI not installed or not found".to_string()],
         ));
     }
 
-    // Close bead - must run from worktree directory so bd finds .beads/
-    // Use Command::current_dir instead of calling BeadsCli::close directly
-    let mut cmd = Command::new(&beads.bd_path);
-    cmd.arg("close").arg(bead_id).current_dir(worktree_path);
-
-    if let Some(r) = reason {
-        cmd.arg("--reason").arg(r);
-    }
-
-    let output = cmd
-        .output()
-        .map_err(|e| format!("Failed to run bd close: {}", e))?;
-
-    if output.status.success() {
-        Ok((true, vec![]))
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Ok((false, vec![format!("Bead close failed: {}", stderr)]))
+    // Close bead via BeadsCli with working_dir so bd finds .beads/
+    match beads.close(bead_id, reason, Some(worktree_path)) {
+        Ok(_) => Ok((true, vec![])),
+        Err(e) => Ok((false, vec![format!("Bead close failed: {}", e)])),
     }
 }
 

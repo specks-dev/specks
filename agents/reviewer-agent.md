@@ -324,7 +324,7 @@ After verifying plan conformance, review the code and the coder's build/test rep
 
 | Check | What to Look For | How to Verify |
 |-------|------------------|---------------|
-| **Build and test report** | Build failures, test failures, lint warnings, checkpoint failures | Read `coder_output.build_and_test_report` |
+| **Build and test report** | Build failures, test failures, lint warnings, checkpoint failures | Read coder's results from bead `notes` field (via `specks beads inspect`) |
 | **Correctness** | Off-by-one, null derefs, boundary conditions, logic errors | Read changed code |
 | **Error handling** | Unhandled errors, crashes in prod paths, swallowed exceptions | Grep for error-prone patterns |
 | **Security** | Hardcoded secrets, injection patterns, unsafe code | Grep for patterns, read security-sensitive code |
