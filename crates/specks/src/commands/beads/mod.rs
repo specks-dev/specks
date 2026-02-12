@@ -38,13 +38,9 @@ pub enum BeadsCommands {
         #[arg(long)]
         dry_run: bool,
 
-        /// Update bead titles for already-linked steps
+        /// Enrich all beads with rich content fields (description, design, acceptance_criteria)
         #[arg(long)]
-        update_title: bool,
-
-        /// Update bead descriptions for already-linked steps
-        #[arg(long)]
-        update_body: bool,
+        enrich: bool,
 
         /// Remove beads deps not present in the speck
         #[arg(long)]

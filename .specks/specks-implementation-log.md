@@ -9,6 +9,84 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-5
+date: 2025-02-12T00:43:13Z
+bead: specks-0kf.6
+---
+
+## #step-5: Added beads sync with --enrich to planner finalization on APPROVE and Accept-as-is paths, updated session end message with beads status, updated orchestration diagram
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
+step: #step-4
+date: 2025-02-12T00:37:23Z
+bead: specks-0kf.5
+---
+
+## #step-4: Created enrichment-test.md fixture and golden output files (step-description, step-acceptance, step-design, root-description), added 4 golden tests to integration_tests.rs
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
+step: #step-3
+date: 2025-02-12T00:28:25Z
+bead: specks-0kf.4
+---
+
+## #step-3: Refactored ensure_step_bead/ensure_substep_bead to take &SyncContext, added speck param, changed return to (String, bool), enriched new beads at creation, tracked created_beads to skip double-enrichment
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
+step: #step-2
+date: 2025-02-12T00:20:24Z
+bead: specks-0kf.3
+---
+
+## #step-2: Added --enrich flag to beads sync command, removed dead update_title/update_body code, implemented resolve_step_design, enrich_root_bead, enrich_step_bead functions with best-effort error collection
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
+step: #step-1
+date: 2025-02-12T00:11:12Z
+bead: specks-0kf.2
+---
+
+## #step-1: Extended BeadsCli and bd-fake with rich bead fields (design, acceptance_criteria, notes), update methods, and create extensions
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
+step: #step-0
+date: 2025-02-11T23:59:40Z
+bead: specks-0kf.1
+---
+
+## #step-0: Extended parser to capture Artifacts sections and added content-rendering methods (render_description, render_acceptance_criteria, extract_section_by_anchor, render_root_description, render_root_design, render_root_acceptance) to types
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-11T20:46:51Z
 bead: specks-xuf.3

@@ -14,6 +14,7 @@
 | Tracking issue/PR | — |
 | Last updated | 2026-02-11 |
 | Beads Root | `specks-v3v` |
+| Beads Root | `specks-0kf` |
 
 ---
 
@@ -314,7 +315,7 @@ No new crate files. Test mock is extended. Golden test fixtures are new.
 
 #### Step 0: Extend parser for Artifacts and add content-rendering methods {#step-0}
 
-**Bead:** `specks-v3v.1`
+**Bead:** `specks-0kf.1`
 
 **Commit:** `feat(types): capture artifacts in parser and add content-rendering methods`
 
@@ -368,7 +369,7 @@ No new crate files. Test mock is extended. Golden test fixtures are new.
 
 **Depends on:** #step-0
 
-**Bead:** `specks-v3v.2`
+**Bead:** `specks-0kf.2`
 
 **Commit:** `feat(beads): add rich field support to BeadsCli, IssueDetails, and bd-fake`
 
@@ -421,7 +422,7 @@ No new crate files. Test mock is extended. Golden test fixtures are new.
 
 **Depends on:** #step-0, #step-1
 
-**Bead:** `specks-v3v.3`
+**Bead:** `specks-0kf.3`
 
 **Commit:** `feat(sync): add --enrich flag with rich bead content population`
 
@@ -475,7 +476,7 @@ No new crate files. Test mock is extended. Golden test fixtures are new.
 
 **Depends on:** #step-2
 
-**Bead:** `specks-v3v.4`
+**Bead:** `specks-0kf.4`
 
 **Commit:** `feat(sync): populate rich content on newly created beads`
 
@@ -519,7 +520,7 @@ No new crate files. Test mock is extended. Golden test fixtures are new.
 
 **Depends on:** #step-3
 
-**Bead:** `specks-v3v.5`
+**Bead:** `specks-0kf.5`
 
 **Commit:** `test(sync): add golden tests for enriched bead content`
 
@@ -561,7 +562,7 @@ No new crate files. Test mock is extended. Golden test fixtures are new.
 
 **Depends on:** #step-2
 
-**Bead:** `specks-v3v.6`
+**Bead:** `specks-0kf.6`
 
 **Commit:** `feat(planner): sync beads with enriched content after critic approves`
 

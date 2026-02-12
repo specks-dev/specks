@@ -35,8 +35,6 @@ validate_bead_ids = true
 bd_path = "bd"
 
 # Sync behavior defaults (safe, non-destructive)
-update_title = false
-update_body = false
 prune_deps = false
 
 # Root bead type (epic recommended for bd ready --parent)

@@ -42,13 +42,16 @@ next_id() {
 cmd_create() {
   need_jq
   init_state
-  local title="" description="" parent="" type="task" priority=2
+  local title="" description="" parent="" type="task" priority=2 design="" acceptance="" notes=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --json) shift ;;
       --parent) parent="$2"; shift 2 ;;
       --type|-t) type="$2"; shift 2 ;;
       --description) description="$2"; shift 2 ;;
+      --design) design="$2"; shift 2 ;;
+      --acceptance) acceptance="$2"; shift 2 ;;
+      --notes) notes="$2"; shift 2 ;;
       -p*) priority="${1#-p}"; shift ;;
       *) title="$1"; shift ;;
     esac
@@ -57,13 +60,17 @@ cmd_create() {
   local id
   id=$(next_id "$parent")
   local issue
+  # Initialize all fields, using empty string as default (will be converted to null by show)
   issue=$(jq -n \
     --arg id "$id" \
     --arg title "$title" \
     --arg desc "$description" \
     --arg type "$type" \
     --argjson priority "$priority" \
-    '{id: $id, title: $title, description: $desc, status: "open", priority: $priority, issue_type: $type}')
+    --arg design "$design" \
+    --arg acceptance "$acceptance" \
+    --arg notes "$notes" \
+    '{id: $id, title: $title, description: $desc, status: "open", priority: $priority, issue_type: $type, design: $design, acceptance_criteria: $acceptance, notes: $notes}')
   local issues
   issues=$(jq -r --arg id "$id" --argjson obj "$issue" '. + {($id): ($obj | . + {id: $id})}' "$ISSUES_JSON")
   echo "$issues" > "$ISSUES_JSON"
@@ -86,7 +93,12 @@ cmd_show() {
   local deps
   deps=$(jq -r -c --arg id "$id" '[.[] | select(.issue_id == $id) | {id: .depends_on_id, dependency_type: .type}]' "$DEPS_JSON")
   local details
-  details=$(echo "$issue" | jq -c --argjson deps "$deps" '. + {dependencies: $deps}')
+  # Ensure design, acceptance_criteria, and notes fields exist
+  # Convert empty strings or missing fields to null
+  details=$(echo "$issue" | jq -c --argjson deps "$deps" '. + {dependencies: $deps} |
+    if (.design // "") == "" then .design = null else . end |
+    if (.acceptance_criteria // "") == "" then .acceptance_criteria = null else . end |
+    if (.notes // "") == "" then .notes = null else . end')
   # Output as single-object (contract allows array or object)
   echo "$details"
 }
@@ -150,6 +162,56 @@ cmd_dep_list() {
 cmd_init() {
   init_state
   echo "Initialized bd-fake state at $STATE_DIR"
+}
+
+cmd_update() {
+  need_jq
+  init_state
+  local id="$1"
+  shift
+  [[ -z "$id" ]] && { echo "bd-fake: update requires id" >&2; exit 1; }
+
+  # Check if issue exists
+  local issue
+  issue=$(jq -r --arg id "$id" '.[$id] // empty' "$ISSUES_JSON")
+  if [[ -z "$issue" || "$issue" == "null" ]]; then
+    echo "bd-fake: issue $id not found" >&2
+    exit 1
+  fi
+
+  local description="" design="" acceptance="" notes=""
+  local has_update=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --description) description="$2"; has_update=true; shift 2 ;;
+      --design) design="$2"; has_update=true; shift 2 ;;
+      --acceptance) acceptance="$2"; has_update=true; shift 2 ;;
+      --notes) notes="$2"; has_update=true; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ "$has_update" == "false" ]] && { echo "bd-fake: update requires at least one field flag" >&2; exit 1; }
+
+  # Build jq update expression
+  local updated
+  updated=$(jq -r --arg id "$id" \
+    --arg desc "$description" \
+    --arg design "$design" \
+    --arg acceptance "$acceptance" \
+    --arg notes "$notes" \
+    '
+    # Ensure the rich fields exist in the issue object
+    .[$id].design = (.[$id].design // "") |
+    .[$id].acceptance_criteria = (.[$id].acceptance_criteria // "") |
+    .[$id].notes = (.[$id].notes // "") |
+    # Update fields if provided
+    if $desc != "" then .[$id].description = $desc else . end |
+    if $design != "" then .[$id].design = $design else . end |
+    if $acceptance != "" then .[$id].acceptance_criteria = $acceptance else . end |
+    if $notes != "" then .[$id].notes = $notes else . end
+    ' "$ISSUES_JSON")
+  echo "$updated" > "$ISSUES_JSON"
 }
 
 cmd_close() {
@@ -269,6 +331,7 @@ case "$SUBCMD" in
   create)   cmd_create "$@" ;;
   show)     cmd_show "$@" ;;
   list)     cmd_list "$@" ;;
+  update)   cmd_update "$@" ;;
   dep)
     SUB="$1"
     shift || true
@@ -286,7 +349,7 @@ case "$SUBCMD" in
   --version) cmd_version ;;
   -v)       cmd_version ;;
   *)
-    echo "bd-fake: unknown command $SUBCMD (create|show|list|dep|init|close|ready|sync)" >&2
+    echo "bd-fake: unknown command $SUBCMD (create|show|list|update|dep|init|close|ready|sync)" >&2
     exit 1
     ;;
 esac
