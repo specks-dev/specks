@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-2
+date: 2025-02-12T22:52:40Z
+bead: specks-99w.3
+---
+
+## #step-2: Refactored committer-agent.md: removed all publish mode content (input/output contracts, implementation section, references). Added fixup mode per Spec S05/S06 with three-step process (specks log prepend, git add, git commit). Fixup commits have no bead tracking per [D03]. PR creation responsibility moved to integrator per [D07].
+
+**Files changed:**
+- .specks/specks-9.md
+
+---
+
+---
 step: #step-1
 date: 2025-02-12T22:47:48Z
 bead: specks-99w.2
