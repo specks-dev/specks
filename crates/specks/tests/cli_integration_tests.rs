@@ -671,8 +671,8 @@ This triggers P003.
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Parse JSON
-    let json: serde_json::Value =
-        serde_json::from_str(&stdout).expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|_| panic!("Failed to parse JSON. Output:\n{}", stdout));
 
     // Should have diagnostics array in data
     assert!(
@@ -759,8 +759,8 @@ This triggers P001.
         .expect("failed to run specks validate --level lenient");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value =
-        serde_json::from_str(&stdout).expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|_| panic!("Failed to parse JSON. Output:\n{}", stdout));
 
     // Diagnostics should be empty in lenient mode
     let diagnostics = json["data"]["diagnostics"].as_array().unwrap();
@@ -815,8 +815,8 @@ fn test_validate_invalid_level_rejected_json() {
         .expect("failed to run specks validate --level foo --json");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value =
-        serde_json::from_str(&stdout).expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|_| panic!("Failed to parse JSON. Output:\n{}", stdout));
 
     assert_eq!(
         json["status"].as_str().unwrap(),
