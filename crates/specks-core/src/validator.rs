@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
-use crate::types::Speck;
+use crate::types::{ParseDiagnostic, Speck};
 
 /// Regex for valid anchor format (only a-z, 0-9, - allowed)
 static VALID_ANCHOR: LazyLock<Regex> =
@@ -49,6 +49,9 @@ pub struct ValidationResult {
     pub valid: bool,
     /// List of validation issues
     pub issues: Vec<ValidationIssue>,
+    /// Parse diagnostics (near-miss patterns, code block issues)
+    #[serde(default)]
+    pub diagnostics: Vec<ParseDiagnostic>,
 }
 
 impl ValidationResult {
@@ -57,6 +60,7 @@ impl ValidationResult {
         Self {
             valid: true,
             issues: vec![],
+            diagnostics: vec![],
         }
     }
 
@@ -90,6 +94,11 @@ impl ValidationResult {
             .iter()
             .filter(|i| i.severity == Severity::Info)
             .count()
+    }
+
+    /// Count diagnostics
+    pub fn diagnostic_count(&self) -> usize {
+        self.diagnostics.len()
     }
 }
 
@@ -308,6 +317,11 @@ pub fn validate_speck_with_config(speck: &Speck, config: &ValidationConfig) -> V
         // I002: Deep dive sections exceed 50% of document
         // Note: This would require parsing deep dive sections, which we don't currently track
         // Skipping for now as it's informational
+    }
+
+    // Copy parse diagnostics from speck (filtered by validation level)
+    if config.level.include_warnings() {
+        result.diagnostics = speck.diagnostics.clone();
     }
 
     result

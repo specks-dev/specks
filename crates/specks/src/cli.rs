@@ -60,9 +60,13 @@ pub enum Commands {
         /// Speck file to validate (validates all if not specified)
         file: Option<String>,
 
-        /// Enable strict validation mode (warnings become errors)
-        #[arg(long)]
+        /// Enable strict validation mode (deprecated: use --level strict)
+        #[arg(long, hide = true)]
         strict: bool,
+
+        /// Validation level: lenient, normal, or strict
+        #[arg(long, value_name = "LEVEL")]
+        level: Option<String>,
     },
 
     /// List all specks with summary information
@@ -349,9 +353,10 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "validate"]).unwrap();
 
         match cli.command {
-            Some(Commands::Validate { file, strict }) => {
+            Some(Commands::Validate { file, strict, level }) => {
                 assert!(file.is_none());
                 assert!(!strict);
+                assert!(level.is_none());
             }
             _ => panic!("Expected Validate command"),
         }
@@ -362,9 +367,52 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "validate", "specks-1.md"]).unwrap();
 
         match cli.command {
-            Some(Commands::Validate { file, strict }) => {
+            Some(Commands::Validate { file, strict, level }) => {
                 assert_eq!(file, Some("specks-1.md".to_string()));
                 assert!(!strict);
+                assert!(level.is_none());
+            }
+            _ => panic!("Expected Validate command"),
+        }
+    }
+
+    #[test]
+    fn test_validate_command_with_level_strict() {
+        let cli = Cli::try_parse_from(["specks", "validate", "--level", "strict"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Validate { file, strict, level }) => {
+                assert!(file.is_none());
+                assert!(!strict);
+                assert_eq!(level, Some("strict".to_string()));
+            }
+            _ => panic!("Expected Validate command"),
+        }
+    }
+
+    #[test]
+    fn test_validate_command_with_level_lenient() {
+        let cli = Cli::try_parse_from(["specks", "validate", "--level", "lenient"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Validate { file, strict, level }) => {
+                assert!(file.is_none());
+                assert!(!strict);
+                assert_eq!(level, Some("lenient".to_string()));
+            }
+            _ => panic!("Expected Validate command"),
+        }
+    }
+
+    #[test]
+    fn test_validate_command_with_strict_deprecated() {
+        let cli = Cli::try_parse_from(["specks", "validate", "--strict"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Validate { file, strict, level }) => {
+                assert!(file.is_none());
+                assert!(strict);
+                assert!(level.is_none());
             }
             _ => panic!("Expected Validate command"),
         }

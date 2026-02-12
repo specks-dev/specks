@@ -8,12 +8,13 @@ use specks_core::{
     find_specks, parse_speck, speck_name_from_path, validate_speck_with_config,
 };
 
-use crate::output::{JsonIssue, JsonResponse, ValidateData, ValidatedFile};
+use crate::output::{JsonDiagnostic, JsonIssue, JsonResponse, ValidateData, ValidatedFile};
 
 /// Run the validate command
 pub fn run_validate(
     file: Option<String>,
     strict: bool,
+    level_arg: Option<String>,
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
@@ -32,7 +33,7 @@ pub fn run_validate(
                     anchor: None,
                 }];
                 let response: JsonResponse<ValidateData> =
-                    JsonResponse::error("validate", ValidateData { files: vec![] }, issues);
+                    JsonResponse::error("validate", ValidateData { files: vec![], ..Default::default() }, issues);
                 println!("{}", serde_json::to_string_pretty(&response).unwrap());
             } else {
                 eprintln!("error: {}", message);
@@ -44,8 +45,10 @@ pub fn run_validate(
     // Load configuration
     let config = Config::load_from_project(&project_root).unwrap_or_default();
 
-    // Determine validation level
-    let level = if strict {
+    // Determine validation level with precedence: --level > --strict > config > default
+    let level = if let Some(level_str) = level_arg {
+        ValidationLevel::parse(&level_str)
+    } else if strict {
         ValidationLevel::Strict
     } else {
         ValidationLevel::parse(&config.specks.validation_level)
@@ -73,7 +76,7 @@ pub fn run_validate(
                         anchor: None,
                     }];
                     let response: JsonResponse<ValidateData> =
-                        JsonResponse::error("validate", ValidateData { files: vec![] }, issues);
+                        JsonResponse::error("validate", ValidateData { files: vec![], ..Default::default() }, issues);
                     println!("{}", serde_json::to_string_pretty(&response).unwrap());
                 } else {
                     eprintln!("error: {}", message);
@@ -98,7 +101,7 @@ pub fn run_validate(
                             anchor: None,
                         }];
                         let response: JsonResponse<ValidateData> =
-                            JsonResponse::error("validate", ValidateData { files: vec![] }, issues);
+                            JsonResponse::error("validate", ValidateData { files: vec![], ..Default::default() }, issues);
                         println!("{}", serde_json::to_string_pretty(&response).unwrap());
                     } else {
                         eprintln!("error: {}", message);
@@ -111,7 +114,7 @@ pub fn run_validate(
 
     if files_to_validate.is_empty() {
         if json_output {
-            let response = JsonResponse::ok("validate", ValidateData { files: vec![] });
+            let response = JsonResponse::ok("validate", ValidateData { files: vec![], ..Default::default() });
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
         } else if !quiet {
             println!("No speck files found to validate");
@@ -202,6 +205,7 @@ fn validate_file(path: &Path, config: &ValidationConfig) -> ValidationResult {
 fn output_json(project_root: &Path, results: &[(PathBuf, ValidationResult)], has_errors: bool) {
     let mut files = Vec::new();
     let mut all_issues = Vec::new();
+    let mut all_diagnostics = Vec::new();
 
     for (path, result) in results {
         let relative_path = make_relative_path(project_root, path);
@@ -211,17 +215,23 @@ fn output_json(project_root: &Path, results: &[(PathBuf, ValidationResult)], has
             valid: result.valid,
             error_count: result.error_count(),
             warning_count: result.warning_count(),
+            diagnostic_count: result.diagnostic_count(),
         });
 
         for issue in &result.issues {
             all_issues.push(JsonIssue::from(issue).with_file(&relative_path));
         }
+
+        // Collect diagnostics
+        for diagnostic in &result.diagnostics {
+            all_diagnostics.push(JsonDiagnostic::from(diagnostic).with_file(&relative_path));
+        }
     }
 
     let response = if has_errors {
-        JsonResponse::error("validate", ValidateData { files }, all_issues)
+        JsonResponse::error("validate", ValidateData { files, diagnostics: all_diagnostics }, all_issues)
     } else {
-        JsonResponse::ok_with_issues("validate", ValidateData { files }, all_issues)
+        JsonResponse::ok_with_issues("validate", ValidateData { files, diagnostics: all_diagnostics }, all_issues)
     };
 
     println!("{}", serde_json::to_string_pretty(&response).unwrap());
@@ -287,7 +297,26 @@ fn output_text(project_root: &Path, results: &[(PathBuf, ValidationResult)]) {
             }
         }
 
+        // Print parse diagnostics (P-codes)
+        if !result.diagnostics.is_empty() {
+            println!("\nDiagnostics:");
+            for diagnostic in &result.diagnostics {
+                print_diagnostic(diagnostic);
+            }
+        }
+
         println!();
+    }
+}
+
+/// Print a single diagnostic
+fn print_diagnostic(diagnostic: &specks_core::ParseDiagnostic) {
+    println!(
+        "  warning[{}]: line {}: {}",
+        diagnostic.code, diagnostic.line, diagnostic.message
+    );
+    if let Some(ref suggestion) = diagnostic.suggestion {
+        println!("    suggestion: {}", suggestion);
     }
 }
 

@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-3
+date: 2025-02-12T18:13:01Z
+bead: specks-70x.4
+---
+
+## #step-3: Surfaced parse diagnostics in validate output with --level flag
+
+**Files changed:**
+- .specks/specks-7.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-12T17:56:49Z
 bead: specks-70x.3

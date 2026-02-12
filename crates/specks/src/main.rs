@@ -17,8 +17,8 @@ fn main() -> ExitCode {
         Some(Commands::Init { force, check }) => {
             commands::run_init(force, check, cli.json, cli.quiet)
         }
-        Some(Commands::Validate { file, strict }) => {
-            commands::run_validate(file, strict, cli.json, cli.quiet)
+        Some(Commands::Validate { file, strict, level }) => {
+            commands::run_validate(file, strict, level, cli.json, cli.quiet)
         }
         Some(Commands::List { status }) => commands::run_list(status, cli.json, cli.quiet),
         Some(Commands::Status { file, verbose }) => {
