@@ -368,27 +368,6 @@ pub struct BeadsCloseData {
     pub archived_path: Option<String>,
 }
 
-/// Data payload for session reconcile command
-/// DEPRECATED in v2: session reconcile is deprecated; use specks beads close instead
-#[deprecated(
-    since = "0.3.0",
-    note = "session reconcile is deprecated; use specks beads close instead"
-)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionReconcileData {
-    /// Session ID that was reconciled
-    pub session_id: String,
-    /// Whether reconciliation was successful
-    pub reconciled: bool,
-    /// Previous status before reconciliation
-    pub previous_status: String,
-    /// New status after reconciliation
-    pub new_status: String,
-    /// Bead ID that was closed (if applicable)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bead_closed: Option<String>,
-}
-
 /// Data payload for step-commit command (Spec S01)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepCommitData {

@@ -9,6 +9,32 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-2
+date: 2025-02-12T20:44:54Z
+bead: specks-t9v.3
+---
+
+## #step-2: Remove deprecated session CLI subcommand entirely — delete session.rs, remove module/imports/variants/match arms
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
+step: #step-2
+date: 2025-02-12T20:44:41Z
+bead: specks-t9v.3
+---
+
+## #step-2: Remove deprecated session CLI subcommand entirely — delete session.rs, remove module/imports/variants/match arms
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
 step: #step-1
 date: 2025-02-12T20:39:20Z
 bead: specks-t9v.2

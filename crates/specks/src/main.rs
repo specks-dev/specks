@@ -138,9 +138,6 @@ fn main() -> ExitCode {
                 bead,
             } => commands::run_log_prepend(None, step, speck, summary, bead, cli.json, cli.quiet),
         },
-        Some(Commands::Session(session_cmd)) => {
-            commands::run_session(session_cmd, cli.json, cli.quiet)
-        }
         Some(Commands::Doctor) => commands::run_doctor(cli.json, cli.quiet),
         Some(Commands::Version { verbose }) => commands::run_version(verbose, cli.json, cli.quiet),
         Some(Commands::StepCommit {

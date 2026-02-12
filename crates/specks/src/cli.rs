@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 
-use crate::commands::{BeadsCommands, LogCommands, SessionCommands, WorktreeCommands};
+use crate::commands::{BeadsCommands, LogCommands, WorktreeCommands};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -130,15 +130,6 @@ pub enum Commands {
         long_about = "Health checks for specks project.\n\nRuns checks:\n  - initialized: Verify .specks/ exists with required files\n  - log_size: Check implementation log within thresholds\n  - worktrees: Verify worktree paths are valid\n  - broken_refs: Check for broken anchor references\n\nExit codes:\n  0 - All checks passed\n  1 - Some checks have warnings\n  2 - Some checks failed\n\nUse --json for machine-readable output."
     )]
     Doctor,
-
-    /// Session management commands
-    ///
-    /// Manage implementation session state and recovery.
-    #[command(
-        subcommand,
-        long_about = "Session management commands.\n\nProvides session state recovery functionality:\n  - Reconcile: Manually recover sessions stuck in NeedsReconcile state\n\nSubcommands:\n  reconcile  Close pending bead and transition session to Completed\n\nTypical workflow:\n  1. Session enters NeedsReconcile after commit succeeds but bead close fails\n  2. specks session reconcile <session-id>  # Recover session"
-    )]
-    Session(SessionCommands),
 
     /// Merge a speck's implementation and clean up worktree
     ///
