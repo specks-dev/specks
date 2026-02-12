@@ -413,7 +413,8 @@ fn sync_speck_to_beads(
                                 artifacts: substep.artifacts.clone(),
                                 substeps: vec![],
                             };
-                            let substep_errors = enrich_step_bead(&substep_as_step, bead_id, speck, ctx);
+                            let substep_errors =
+                                enrich_step_bead(&substep_as_step, bead_id, speck, ctx);
                             enrich_errors.extend(substep_errors);
                         }
                     }
@@ -475,8 +476,16 @@ fn ensure_root_bead(
         None,
         Some(issue_type),
         None,
-        if !design.is_empty() { Some(&design) } else { None },
-        if !acceptance.is_empty() { Some(&acceptance) } else { None },
+        if !design.is_empty() {
+            Some(&design)
+        } else {
+            None
+        },
+        if !acceptance.is_empty() {
+            Some(&acceptance)
+        } else {
+            None
+        },
         None,
     )?;
 
@@ -526,8 +535,16 @@ fn ensure_step_bead(
         Some(root_id),
         None,
         None,
-        if !design.is_empty() { Some(&design) } else { None },
-        if !acceptance.is_empty() { Some(&acceptance) } else { None },
+        if !design.is_empty() {
+            Some(&design)
+        } else {
+            None
+        },
+        if !acceptance.is_empty() {
+            Some(&acceptance)
+        } else {
+            None
+        },
         None,
     )?;
 
@@ -594,8 +611,16 @@ fn ensure_substep_bead(
         Some(parent_bead_id),
         None,
         None,
-        if !design.is_empty() { Some(&design) } else { None },
-        if !acceptance.is_empty() { Some(&acceptance) } else { None },
+        if !design.is_empty() {
+            Some(&design)
+        } else {
+            None
+        },
+        if !acceptance.is_empty() {
+            Some(&acceptance)
+        } else {
+            None
+        },
         None,
     )?;
 
@@ -794,10 +819,8 @@ fn resolve_step_design(step: &specks_core::Step, speck: &Speck) -> String {
     use regex::Regex;
     use std::sync::LazyLock;
 
-    static DECISION_REF: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\[([DQ]\d+)\]").unwrap());
-    static ANCHOR_REF: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"#([a-z0-9-]+)").unwrap());
+    static DECISION_REF: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[([DQ]\d+)\]").unwrap());
+    static ANCHOR_REF: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"#([a-z0-9-]+)").unwrap());
 
     let references = match &step.references {
         Some(r) => r,
@@ -858,11 +881,7 @@ fn resolve_step_design(step: &specks_core::Step, speck: &Speck) -> String {
 }
 
 /// Enrich root bead with full speck content
-fn enrich_root_bead(
-    speck: &Speck,
-    root_id: &str,
-    ctx: &SyncContext<'_>,
-) -> Vec<String> {
+fn enrich_root_bead(speck: &Speck, root_id: &str, ctx: &SyncContext<'_>) -> Vec<String> {
     let mut errors = Vec::new();
 
     if ctx.dry_run {
@@ -913,7 +932,10 @@ fn enrich_step_bead(
     let description = step.render_description();
     if !description.is_empty() {
         if let Err(e) = ctx.beads.update_description(bead_id, &description) {
-            errors.push(format!("Failed to update description for {}: {}", bead_id, e));
+            errors.push(format!(
+                "Failed to update description for {}: {}",
+                bead_id, e
+            ));
         }
     }
 

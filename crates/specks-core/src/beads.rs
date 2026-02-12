@@ -750,7 +750,10 @@ mod tests {
         assert_eq!(original.id, deserialized.id);
         assert_eq!(original.title, deserialized.title);
         assert_eq!(original.design, deserialized.design);
-        assert_eq!(original.acceptance_criteria, deserialized.acceptance_criteria);
+        assert_eq!(
+            original.acceptance_criteria,
+            deserialized.acceptance_criteria
+        );
         assert_eq!(original.notes, deserialized.notes);
     }
 }

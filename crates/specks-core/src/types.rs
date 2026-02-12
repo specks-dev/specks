@@ -419,7 +419,9 @@ impl Speck {
         let anchor_pattern = format!("{{#{}}}", anchor);
 
         // Find the line with the anchor
-        let start_idx = lines.iter().position(|line| line.contains(&anchor_pattern))?;
+        let start_idx = lines
+            .iter()
+            .position(|line| line.contains(&anchor_pattern))?;
 
         // Determine the heading level of the anchor line
         let anchor_line = lines[start_idx];
