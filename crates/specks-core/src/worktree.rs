@@ -1021,9 +1021,6 @@ pub fn remove_worktree(worktree_path: &Path, repo_root: &Path) -> Result<(), Spe
     Ok(())
 }
 
-/// Clean up orphaned session files.
-///
-
 /// Clean up worktrees based on cleanup mode
 ///
 /// Implements comprehensive cleanup with drift detection per Table T01.

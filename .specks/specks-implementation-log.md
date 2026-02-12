@@ -9,6 +9,32 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-7
+date: 2025-02-12T21:54:02Z
+bead: specks-t9v.8
+---
+
+## #step-7: Gut session.rs to now_iso8601() stub and final cleanup — Phase C complete
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
+step: #step-7
+date: 2025-02-12T21:53:57Z
+bead: specks-t9v.8
+---
+
+## #step-7: Gut session.rs to now_iso8601() stub and final cleanup — Phase C complete
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
 step: #step-6
 date: 2025-02-12T21:43:32Z
 bead: specks-t9v.7

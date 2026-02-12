@@ -136,9 +136,8 @@ specks step-commit \
   --files <file1> <file2> ... \
   --bead <bead-id> \
   --summary <text> \
-  --session <path> \
   --close-reason <text> \
-  --json                       # Atomic commit: log rotate, prepend, git commit, bead close, session update
+  --json                       # Atomic commit: log rotate, prepend, git commit, bead close
 
 specks step-publish \
   --worktree <path> \
@@ -146,10 +145,8 @@ specks step-publish \
   --base <branch> \
   --title <text> \
   --speck <path> \
-  --step-summaries <text1> <text2> ... \
-  --session <path> \
   --repo <owner/repo> \
-  --json                       # Atomic publish: push branch, create PR, session update
+  --json                       # Atomic publish: push branch, create PR (body from git log)
 
 # Health check command
 specks doctor                  # Run health checks (log size, worktrees, broken refs)
@@ -364,7 +361,7 @@ git worktree prune
 git branch -d specks/<name>-<timestamp>
 ```
 
-#### Session in "needs_reconcile" state
+#### Step commit succeeds but bead close fails
 
 This happens when a step commit succeeds but the bead close fails. The worktree is left in a consistent state, but beads tracking is out of sync. To fix:
 
