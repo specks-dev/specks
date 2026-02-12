@@ -93,12 +93,13 @@ cmd_show() {
   local deps
   deps=$(jq -r -c --arg id "$id" '[.[] | select(.issue_id == $id) | {id: .depends_on_id, dependency_type: .type}]' "$DEPS_JSON")
   local details
-  # Ensure design, acceptance_criteria, and notes fields exist
+  # Ensure design, acceptance_criteria, notes, and close_reason fields exist
   # Convert empty strings or missing fields to null
   details=$(echo "$issue" | jq -c --argjson deps "$deps" '. + {dependencies: $deps} |
     if (.design // "") == "" then .design = null else . end |
     if (.acceptance_criteria // "") == "" then .acceptance_criteria = null else . end |
-    if (.notes // "") == "" then .notes = null else . end')
+    if (.notes // "") == "" then .notes = null else . end |
+    if (.close_reason // "") == "" then .close_reason = null else . end')
   # Output as single-object (contract allows array or object)
   echo "$details"
 }
@@ -228,9 +229,68 @@ cmd_close() {
       *) shift ;;
     esac
   done
-  # Update issue status to closed
+  # Update issue status to closed and store close_reason
   local updated
-  updated=$(jq -r --arg id "$id" '.[$id].status = "closed"' "$ISSUES_JSON")
+  updated=$(jq -r --arg id "$id" --arg reason "$reason" '
+    .[$id].status = "closed" |
+    if $reason != "" then .[$id].close_reason = $reason else . end
+  ' "$ISSUES_JSON")
+  echo "$updated" > "$ISSUES_JSON"
+}
+
+cmd_append() {
+  need_jq
+  init_state
+  local id="$1"
+  shift
+  [[ -z "$id" ]] && { echo "bd-fake: append requires id" >&2; exit 1; }
+
+  # Check if issue exists
+  local issue
+  issue=$(jq -r --arg id "$id" '.[$id] // empty' "$ISSUES_JSON")
+  if [[ -z "$issue" || "$issue" == "null" ]]; then
+    echo "bd-fake: issue $id not found" >&2
+    exit 1
+  fi
+
+  local design="" notes=""
+  local has_update=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --design) design="$2"; has_update=true; shift 2 ;;
+      --notes) notes="$2"; has_update=true; shift 2 ;;
+      --json) shift ;;
+      *) shift ;;
+    esac
+  done
+
+  [[ "$has_update" == "false" ]] && { echo "bd-fake: append requires at least one field flag" >&2; exit 1; }
+
+  # Append with --- separator
+  local updated
+  updated=$(jq -r --arg id "$id" \
+    --arg design "$design" \
+    --arg notes "$notes" \
+    '
+    # Ensure the rich fields exist in the issue object
+    .[$id].design = (.[$id].design // "") |
+    .[$id].notes = (.[$id].notes // "") |
+    # Append fields if provided (with --- separator)
+    if $design != "" then
+      if .[$id].design == "" then
+        .[$id].design = $design
+      else
+        .[$id].design = .[$id].design + "\n\n---\n\n" + $design
+      end
+    else . end |
+    if $notes != "" then
+      if .[$id].notes == "" then
+        .[$id].notes = $notes
+      else
+        .[$id].notes = .[$id].notes + "\n\n---\n\n" + $notes
+      end
+    else . end
+    ' "$ISSUES_JSON")
   echo "$updated" > "$ISSUES_JSON"
 }
 
@@ -332,6 +392,7 @@ case "$SUBCMD" in
   show)     cmd_show "$@" ;;
   list)     cmd_list "$@" ;;
   update)   cmd_update "$@" ;;
+  append)   cmd_append "$@" ;;
   dep)
     SUB="$1"
     shift || true
@@ -349,7 +410,7 @@ case "$SUBCMD" in
   --version) cmd_version ;;
   -v)       cmd_version ;;
   *)
-    echo "bd-fake: unknown command $SUBCMD (create|show|list|update|dep|init|close|ready|sync)" >&2
+    echo "bd-fake: unknown command $SUBCMD (create|show|list|update|append|dep|init|close|ready|sync)" >&2
     exit 1
     ;;
 esac

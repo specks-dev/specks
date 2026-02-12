@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-5
+date: 2025-02-12T15:48:36Z
+bead: specks-bvq.7
+---
+
+## #step-5: Add integration tests for bead-mediated communication and cleanup stale references
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
 step: #step-4
 date: 2025-02-12T15:34:21Z
 bead: specks-bvq.6

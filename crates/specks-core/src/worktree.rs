@@ -977,9 +977,10 @@ pub(crate) fn cleanup_stale_branches_with_pr_checker(
 /// Remove a worktree and clean up all associated files
 ///
 /// This function orchestrates the cleanup of a worktree by:
-/// 1. Deleting external session and artifacts at `.specks-worktrees/.sessions/` and `.specks-worktrees/.artifacts/`
+/// 1. Deleting external session files at `.specks-worktrees/.sessions/`
 /// 2. Deleting legacy internal session files at `{worktree}/.specks/session.json`
-/// 3. Removing the worktree directory using git worktree remove (without --force)
+/// 3. Deleting worktree-local artifacts at `{worktree}/.specks/artifacts/`
+/// 4. Removing the worktree directory using git worktree remove (without --force)
 ///
 /// The function ensures all session data is cleaned up before git removes the worktree,
 /// so that git worktree remove can succeed without needing --force.
@@ -1027,11 +1028,13 @@ pub fn remove_worktree(worktree_path: &Path, repo_root: &Path) -> Result<(), Spe
     Ok(())
 }
 
-/// Clean up orphaned session files and artifact directories.
+/// Clean up orphaned session files.
 ///
-/// Scans `.specks-worktrees/.sessions/` for session files and `.specks-worktrees/.artifacts/`
-/// for artifact directories that don't have a corresponding worktree directory.
-/// Removes any orphaned entries found.
+/// Scans `.specks-worktrees/.sessions/` for session files that don't have a corresponding
+/// worktree directory. Removes any orphaned entries found.
+///
+/// Note: Artifacts are now stored inside worktrees at `{worktree}/.specks/artifacts/`,
+/// so they are automatically cleaned up when the worktree is removed.
 fn cleanup_orphaned_sessions(repo_root: &Path, dry_run: bool) {
     use crate::session::{delete_session, sessions_dir};
 
