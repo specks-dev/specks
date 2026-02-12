@@ -1052,6 +1052,38 @@ pub fn run_merge(
         println!("Worktree cleaned up");
     }
 
+    // Step 4b: Commit any dirty infrastructure files (beads state, implementation log, etc.)
+    let post_dirty = get_dirty_files(&repo_root).unwrap_or_default();
+    let post_infra: Vec<&str> = post_dirty
+        .iter()
+        .filter(|f| is_infrastructure_path(f))
+        .map(|f| f.as_str())
+        .collect();
+    if !post_infra.is_empty() {
+        if !quiet {
+            println!("Syncing {} infrastructure file(s)...", post_infra.len());
+        }
+        let mut add_args = vec!["add", "--"];
+        add_args.extend(post_infra.iter());
+        let _ = Command::new("git")
+            .current_dir(&repo_root)
+            .args(&add_args)
+            .output();
+        let commit = Command::new("git")
+            .current_dir(&repo_root)
+            .args(["commit", "-m", "chore: post-merge infrastructure sync"])
+            .output();
+        if let Ok(ref o) = commit {
+            if o.status.success() {
+                // Auto-push if we have an origin
+                let _ = Command::new("git")
+                    .current_dir(&repo_root)
+                    .args(["push", "origin", "main"])
+                    .output();
+            }
+        }
+    }
+
     // Step 5: Success response
     let data = MergeData {
         status: "ok".to_string(),
