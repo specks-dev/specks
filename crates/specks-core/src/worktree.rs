@@ -1441,7 +1441,10 @@ mod tests {
         // Verify session and artifacts exist
         let session_file = session_file_path(temp_dir, "test-20260208-120000");
         assert!(session_file.exists(), "Session file should exist");
-        assert!(artifacts_path.exists(), "Artifacts should exist inside worktree");
+        assert!(
+            artifacts_path.exists(),
+            "Artifacts should exist inside worktree"
+        );
         assert!(worktree_path.exists(), "Worktree should exist");
 
         // Remove worktree
@@ -1451,7 +1454,10 @@ mod tests {
         assert!(!session_file.exists(), "Session file should be deleted");
         // Artifacts are inside worktree, so they're automatically deleted with it
         assert!(!worktree_path.exists(), "Worktree should be deleted");
-        assert!(!artifacts_path.exists(), "Artifacts should be deleted with worktree");
+        assert!(
+            !artifacts_path.exists(),
+            "Artifacts should be deleted with worktree"
+        );
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 
@@ -1735,7 +1741,10 @@ mod tests {
         assert!(!session_file.exists(), "External session should be deleted");
         assert!(!worktree_path.exists(), "Worktree should be deleted");
         // Artifacts are inside worktree, so they're automatically deleted with it
-        assert!(!artifacts_path.exists(), "Artifacts should be deleted with worktree");
+        assert!(
+            !artifacts_path.exists(),
+            "Artifacts should be deleted with worktree"
+        );
         // TempDir auto-cleans on drop - no manual cleanup needed
     }
 

@@ -176,13 +176,11 @@ impl BeadsCli {
         let filename = format!("beads-body-{}.txt", std::process::id());
         let path = temp_dir.join(filename);
 
-        let mut file = File::create(&path).map_err(|e| {
-            SpecksError::BeadsCommand(format!("failed to create temp file: {}", e))
-        })?;
+        let mut file = File::create(&path)
+            .map_err(|e| SpecksError::BeadsCommand(format!("failed to create temp file: {}", e)))?;
 
-        file.write_all(content.as_bytes()).map_err(|e| {
-            SpecksError::BeadsCommand(format!("failed to write temp file: {}", e))
-        })?;
+        file.write_all(content.as_bytes())
+            .map_err(|e| SpecksError::BeadsCommand(format!("failed to write temp file: {}", e)))?;
 
         Ok(path)
     }
@@ -341,7 +339,12 @@ impl BeadsCli {
     }
 
     /// Update the description field of a bead
-    pub fn update_description(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+    pub fn update_description(
+        &self,
+        id: &str,
+        content: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<(), SpecksError> {
         let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("update").arg(id).arg("--description");
 
@@ -379,7 +382,12 @@ impl BeadsCli {
     }
 
     /// Update the design field of a bead
-    pub fn update_design(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+    pub fn update_design(
+        &self,
+        id: &str,
+        content: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<(), SpecksError> {
         let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("update").arg(id).arg("--design");
 
@@ -417,7 +425,12 @@ impl BeadsCli {
     }
 
     /// Update the acceptance_criteria field of a bead
-    pub fn update_acceptance(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+    pub fn update_acceptance(
+        &self,
+        id: &str,
+        content: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<(), SpecksError> {
         let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("update").arg(id).arg("--acceptance");
 
@@ -455,7 +468,12 @@ impl BeadsCli {
     }
 
     /// Update the notes field of a bead (replaces existing content)
-    pub fn update_notes(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+    pub fn update_notes(
+        &self,
+        id: &str,
+        content: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<(), SpecksError> {
         let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("update").arg(id).arg("--notes");
 
@@ -494,7 +512,12 @@ impl BeadsCli {
 
     /// Append content to the notes field of a bead
     /// Uses "---" separator convention per D03
-    pub fn append_notes(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+    pub fn append_notes(
+        &self,
+        id: &str,
+        content: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<(), SpecksError> {
         // Fetch current notes
         let details = self.show(id, working_dir)?;
         let current_notes = details.notes.unwrap_or_default();
@@ -512,7 +535,12 @@ impl BeadsCli {
 
     /// Append content to the design field of a bead
     /// Uses "---" separator convention per D03
-    pub fn append_design(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+    pub fn append_design(
+        &self,
+        id: &str,
+        content: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<(), SpecksError> {
         // Fetch current design
         let details = self.show(id, working_dir)?;
         let current_design = details.design.unwrap_or_default();
@@ -529,7 +557,12 @@ impl BeadsCli {
     }
 
     /// Add a dependency edge
-    pub fn dep_add(&self, from_id: &str, to_id: &str, working_dir: Option<&Path>) -> Result<DepResult, SpecksError> {
+    pub fn dep_add(
+        &self,
+        from_id: &str,
+        to_id: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<DepResult, SpecksError> {
         let output = self
             .cmd_with_dir(working_dir)
             .arg("dep")
@@ -561,7 +594,12 @@ impl BeadsCli {
     }
 
     /// Remove a dependency edge
-    pub fn dep_remove(&self, from_id: &str, to_id: &str, working_dir: Option<&Path>) -> Result<DepResult, SpecksError> {
+    pub fn dep_remove(
+        &self,
+        from_id: &str,
+        to_id: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<DepResult, SpecksError> {
         let output = self
             .cmd_with_dir(working_dir)
             .arg("dep")
@@ -593,7 +631,11 @@ impl BeadsCli {
     }
 
     /// List dependencies for a bead
-    pub fn dep_list(&self, id: &str, working_dir: Option<&Path>) -> Result<Vec<IssueWithDependencyMetadata>, SpecksError> {
+    pub fn dep_list(
+        &self,
+        id: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<Vec<IssueWithDependencyMetadata>, SpecksError> {
         let output = self
             .cmd_with_dir(working_dir)
             .arg("dep")
@@ -624,7 +666,12 @@ impl BeadsCli {
     }
 
     /// Close a bead
-    pub fn close(&self, id: &str, reason: Option<&str>, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+    pub fn close(
+        &self,
+        id: &str,
+        reason: Option<&str>,
+        working_dir: Option<&Path>,
+    ) -> Result<(), SpecksError> {
         let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("close").arg(id);
 
@@ -653,13 +700,17 @@ impl BeadsCli {
 
     /// Sync beads state
     pub fn sync(&self, working_dir: Option<&Path>) -> Result<(), SpecksError> {
-        let output = self.cmd_with_dir(working_dir).arg("sync").output().map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                SpecksError::BeadsNotInstalled
-            } else {
-                SpecksError::BeadsCommand(format!("failed to run bd sync: {}", e))
-            }
-        })?;
+        let output = self
+            .cmd_with_dir(working_dir)
+            .arg("sync")
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    SpecksError::BeadsNotInstalled
+                } else {
+                    SpecksError::BeadsCommand(format!("failed to run bd sync: {}", e))
+                }
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -814,7 +865,11 @@ impl BeadsCli {
 
     /// Get all children of a parent bead in a single subprocess call.
     /// Uses: `bd children <id> --json`
-    pub fn children(&self, parent_id: &str, working_dir: Option<&Path>) -> Result<Vec<Issue>, SpecksError> {
+    pub fn children(
+        &self,
+        parent_id: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<Vec<Issue>, SpecksError> {
         let output = self
             .cmd_with_dir(working_dir)
             .args(["children", parent_id, "--json"])
@@ -843,7 +898,11 @@ impl BeadsCli {
 
     /// Get all ready beads (open beads with all dependencies complete).
     /// Uses: `bd ready --json` (all ready beads) or `bd ready <parent_id> --json` (ready children of parent).
-    pub fn ready(&self, parent_id: Option<&str>, working_dir: Option<&Path>) -> Result<Vec<Issue>, SpecksError> {
+    pub fn ready(
+        &self,
+        parent_id: Option<&str>,
+        working_dir: Option<&Path>,
+    ) -> Result<Vec<Issue>, SpecksError> {
         let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("ready");
 

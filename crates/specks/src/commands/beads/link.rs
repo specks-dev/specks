@@ -61,9 +61,9 @@ pub fn run_link(
     // If beads validation is enabled, verify bead exists
     if config.specks.beads.enabled && config.specks.beads.validate_bead_ids {
         let beads = BeadsCli::new(bd_path);
-        if beads.is_installed()
+        if beads.is_installed(None)
             && beads.is_initialized(&project_root)
-            && !beads.bead_exists(&bead_id)
+            && !beads.bead_exists(&bead_id, None)
         {
             return output_error(
                 json_output,

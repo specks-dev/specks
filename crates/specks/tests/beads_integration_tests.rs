@@ -953,7 +953,10 @@ fn test_beads_append_notes_preserves_existing_content() {
         .output()
         .expect("failed to append notes");
 
-    assert!(append_output.status.success(), "append-notes should succeed");
+    assert!(
+        append_output.status.success(),
+        "append-notes should succeed"
+    );
 
     // Inspect to verify both entries present
     let inspect_output = Command::new(specks_binary())
@@ -990,7 +993,13 @@ fn test_beads_inspect_shows_all_fields() {
     // Create a bead
     let create_output = Command::new(bd_fake_path())
         .env("SPECKS_BD_STATE", temp_state.path())
-        .args(["create", "Test Step", "--description", "Test task", "--json"])
+        .args([
+            "create",
+            "Test Step",
+            "--description",
+            "Test task",
+            "--json",
+        ])
         .output()
         .expect("failed to create bead");
 
@@ -1043,19 +1052,43 @@ fn test_beads_inspect_shows_all_fields() {
         serde_json::from_str(&String::from_utf8_lossy(&inspect_output.stdout)).unwrap();
 
     // Verify all fields are present
-    assert!(inspect_json["data"]["bead_id"].is_string(), "should have bead_id");
-    assert!(inspect_json["data"]["title"].is_string(), "should have title");
-    assert!(inspect_json["data"]["description"].is_string(), "should have description");
-    assert!(inspect_json["data"]["design"].is_string(), "should have design");
-    assert!(inspect_json["data"]["notes"].is_string(), "should have notes");
-    assert!(inspect_json["data"]["status"].is_string(), "should have status");
+    assert!(
+        inspect_json["data"]["bead_id"].is_string(),
+        "should have bead_id"
+    );
+    assert!(
+        inspect_json["data"]["title"].is_string(),
+        "should have title"
+    );
+    assert!(
+        inspect_json["data"]["description"].is_string(),
+        "should have description"
+    );
+    assert!(
+        inspect_json["data"]["design"].is_string(),
+        "should have design"
+    );
+    assert!(
+        inspect_json["data"]["notes"].is_string(),
+        "should have notes"
+    );
+    assert!(
+        inspect_json["data"]["status"].is_string(),
+        "should have status"
+    );
 
     assert!(
-        inspect_json["data"]["design"].as_str().unwrap().contains("Design: strategy here"),
+        inspect_json["data"]["design"]
+            .as_str()
+            .unwrap()
+            .contains("Design: strategy here"),
         "design field should contain appended content"
     );
     assert!(
-        inspect_json["data"]["notes"].as_str().unwrap().contains("Notes: implementation results"),
+        inspect_json["data"]["notes"]
+            .as_str()
+            .unwrap()
+            .contains("Notes: implementation results"),
         "notes field should contain updated content"
     );
 }
@@ -1160,7 +1193,10 @@ fn test_full_agent_cycle_bead_audit_trail() {
         serde_json::from_str(&String::from_utf8_lossy(&inspect_output.stdout)).unwrap();
 
     // Verify complete audit trail
-    assert_eq!(inspect_json["data"]["status"], "closed", "bead should be closed");
+    assert_eq!(
+        inspect_json["data"]["status"], "closed",
+        "bead should be closed"
+    );
 
     let description = inspect_json["data"]["description"].as_str().unwrap();
     assert!(

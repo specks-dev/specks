@@ -27,7 +27,7 @@ pub fn run_close(
     let beads = BeadsCli::new(bd_path);
 
     // Check if beads CLI is installed
-    if !beads.is_installed() {
+    if !beads.is_installed(None) {
         return output_error(
             json_output,
             "E005",
@@ -37,7 +37,7 @@ pub fn run_close(
     }
 
     // Attempt to close the bead
-    match beads.close(&bead_id, reason.as_deref()) {
+    match beads.close(&bead_id, reason.as_deref(), None) {
         Ok(()) => {
             // Check if log rotation is needed
             let (log_rotated, archived_path) = check_and_rotate_log(&project_root)?;

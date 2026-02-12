@@ -155,7 +155,7 @@ fn run_reconcile(
         let beads = BeadsCli::new(bd_path);
 
         // Check if beads CLI is installed
-        if !beads.is_installed() {
+        if !beads.is_installed(None) {
             return output_error(
                 json_output,
                 "E005",
@@ -168,7 +168,7 @@ fn run_reconcile(
         // Close the bead
         let previous_status = "pending" /* v2: no status */
             .to_string();
-        if let Err(e) = beads.close(&bead_id, Some("Session reconciliation")) {
+        if let Err(e) = beads.close(&bead_id, Some("Session reconciliation"), None) {
             return output_error(
                 json_output,
                 "E040",

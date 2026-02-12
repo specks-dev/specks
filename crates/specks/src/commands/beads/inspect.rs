@@ -33,7 +33,9 @@ pub fn run_inspect(
     quiet: bool,
 ) -> Result<i32, String> {
     // Convert working_dir to Path if provided
-    let working_path = working_dir.as_ref().map(|s| std::path::Path::new(s.as_str()));
+    let working_path = working_dir
+        .as_ref()
+        .map(|s| std::path::Path::new(s.as_str()));
 
     // Find project root
     let project_root = match find_project_root() {
@@ -121,7 +123,10 @@ pub fn run_inspect(
 
                 if let Some(metadata) = &details.metadata {
                     println!("Metadata:");
-                    println!("{}", serde_json::to_string_pretty(metadata).unwrap_or_else(|_| "{}".to_string()));
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(metadata).unwrap_or_else(|_| "{}".to_string())
+                    );
                 }
             }
 

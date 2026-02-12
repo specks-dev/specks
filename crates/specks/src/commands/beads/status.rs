@@ -60,7 +60,7 @@ pub fn run_beads_status(
     let beads = BeadsCli::new(bd_path);
 
     // Check if beads CLI is installed
-    if !beads.is_installed() {
+    if !beads.is_installed(None) {
         return output_error(
             json_output,
             "E005",
@@ -236,7 +236,7 @@ fn get_file_beads_status(path: &Path, speck: &Speck, beads: &BeadsCli) -> FileBe
 
 /// Check if a bead is complete
 fn check_bead_complete(bead_id: &str, beads: &BeadsCli) -> bool {
-    match beads.show(bead_id) {
+    match beads.show(bead_id, None) {
         Ok(details) => details.status.to_lowercase() == "closed",
         Err(_) => false,
     }

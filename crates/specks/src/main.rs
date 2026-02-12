@@ -56,18 +56,49 @@ fn main() -> ExitCode {
             BeadsCommands::Close { bead_id, reason } => {
                 commands::run_close(bead_id, reason, cli.json, cli.quiet)
             }
-            BeadsCommands::Inspect { bead_id, working_dir } => {
-                commands::run_inspect(bead_id, working_dir, cli.json, cli.quiet)
-            }
-            BeadsCommands::UpdateNotes { bead_id, content, content_file, working_dir } => {
-                commands::run_update_notes(bead_id, content, content_file, working_dir, cli.json, cli.quiet)
-            }
-            BeadsCommands::AppendNotes { bead_id, content, content_file, working_dir } => {
-                commands::run_append_notes(bead_id, content, content_file, working_dir, cli.json, cli.quiet)
-            }
-            BeadsCommands::AppendDesign { bead_id, content, content_file, working_dir } => {
-                commands::run_append_design(bead_id, content, content_file, working_dir, cli.json, cli.quiet)
-            }
+            BeadsCommands::Inspect {
+                bead_id,
+                working_dir,
+            } => commands::run_inspect(bead_id, working_dir, cli.json, cli.quiet),
+            BeadsCommands::UpdateNotes {
+                bead_id,
+                content,
+                content_file,
+                working_dir,
+            } => commands::run_update_notes(
+                bead_id,
+                content,
+                content_file,
+                working_dir,
+                cli.json,
+                cli.quiet,
+            ),
+            BeadsCommands::AppendNotes {
+                bead_id,
+                content,
+                content_file,
+                working_dir,
+            } => commands::run_append_notes(
+                bead_id,
+                content,
+                content_file,
+                working_dir,
+                cli.json,
+                cli.quiet,
+            ),
+            BeadsCommands::AppendDesign {
+                bead_id,
+                content,
+                content_file,
+                working_dir,
+            } => commands::run_append_design(
+                bead_id,
+                content,
+                content_file,
+                working_dir,
+                cli.json,
+                cli.quiet,
+            ),
         },
         Some(Commands::Worktree(worktree_cmd)) => match worktree_cmd {
             WorktreeCommands::Create { speck, base } => {

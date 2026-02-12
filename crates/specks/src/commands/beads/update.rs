@@ -24,10 +24,8 @@ pub fn run_update_notes(
     // Require either content or content_file
     let content_text = match (content, content_file) {
         (Some(c), None) => c,
-        (None, Some(f)) => {
-            std::fs::read_to_string(&f)
-                .map_err(|e| format!("Failed to read content file {}: {}", f, e))?
-        }
+        (None, Some(f)) => std::fs::read_to_string(&f)
+            .map_err(|e| format!("Failed to read content file {}: {}", f, e))?,
         (Some(_), Some(_)) => {
             return output_error(
                 json_output,
@@ -47,7 +45,9 @@ pub fn run_update_notes(
     };
 
     // Convert working_dir to Path if provided
-    let working_path = working_dir.as_ref().map(|s| std::path::Path::new(s.as_str()));
+    let working_path = working_dir
+        .as_ref()
+        .map(|s| std::path::Path::new(s.as_str()));
 
     // Find project root
     let project_root = match find_project_root() {
@@ -112,10 +112,8 @@ pub fn run_append_notes(
     // Require either content or content_file
     let content_text = match (content, content_file) {
         (Some(c), None) => c,
-        (None, Some(f)) => {
-            std::fs::read_to_string(&f)
-                .map_err(|e| format!("Failed to read content file {}: {}", f, e))?
-        }
+        (None, Some(f)) => std::fs::read_to_string(&f)
+            .map_err(|e| format!("Failed to read content file {}: {}", f, e))?,
         (Some(_), Some(_)) => {
             return output_error(
                 json_output,
@@ -135,7 +133,9 @@ pub fn run_append_notes(
     };
 
     // Convert working_dir to Path if provided
-    let working_path = working_dir.as_ref().map(|s| std::path::Path::new(s.as_str()));
+    let working_path = working_dir
+        .as_ref()
+        .map(|s| std::path::Path::new(s.as_str()));
 
     // Find project root
     let project_root = match find_project_root() {
@@ -200,10 +200,8 @@ pub fn run_append_design(
     // Require either content or content_file
     let content_text = match (content, content_file) {
         (Some(c), None) => c,
-        (None, Some(f)) => {
-            std::fs::read_to_string(&f)
-                .map_err(|e| format!("Failed to read content file {}: {}", f, e))?
-        }
+        (None, Some(f)) => std::fs::read_to_string(&f)
+            .map_err(|e| format!("Failed to read content file {}: {}", f, e))?,
         (Some(_), Some(_)) => {
             return output_error(
                 json_output,
@@ -223,7 +221,9 @@ pub fn run_append_design(
     };
 
     // Convert working_dir to Path if provided
-    let working_path = working_dir.as_ref().map(|s| std::path::Path::new(s.as_str()));
+    let working_path = working_dir
+        .as_ref()
+        .map(|s| std::path::Path::new(s.as_str()));
 
     // Find project root
     let project_root = match find_project_root() {
@@ -297,8 +297,7 @@ fn output_error(
             operation: String::new(),
             success: false,
         };
-        let response: JsonResponse<UpdateData> =
-            JsonResponse::error("beads update", data, issues);
+        let response: JsonResponse<UpdateData> = JsonResponse::error("beads update", data, issues);
         let json = serde_json::to_string_pretty(&response)
             .unwrap_or_else(|_| r#"{"error":"Failed to serialize JSON response"}"#.to_string());
         println!("{}", json);

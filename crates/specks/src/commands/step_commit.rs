@@ -94,6 +94,23 @@ pub fn run_step_commit(
         }
     }
 
+    // Step 3b: Check for orphaned changes (unstaged modifications not in files list)
+    // This prevents silently losing work when the caller's file list is incomplete.
+    let orphaned = find_orphaned_changes(worktree_path)?;
+    if !orphaned.is_empty() {
+        let file_list = orphaned.join("\n  ");
+        return error_response(
+            &format!(
+                "Worktree has unstaged changes not in --files list:\n  {}\n\
+                 These files were modified but would not be committed. \
+                 Add them to --files or revert them.",
+                file_list
+            ),
+            json,
+            quiet,
+        );
+    }
+
     // Step 4: Commit
     let output = Command::new("git")
         .arg("-C")
@@ -213,7 +230,7 @@ fn close_bead_in_worktree(
     let beads = BeadsCli::new(bd_path);
 
     // Check if beads CLI is installed
-    if !beads.is_installed() {
+    if !beads.is_installed(None) {
         return Ok((
             false,
             vec!["beads CLI not installed or not found".to_string()],
@@ -294,4 +311,56 @@ fn error_response(message: &str, json: bool, quiet: bool) -> Result<i32, String>
     }
 
     Err(message.to_string())
+}
+
+/// Check for modified/untracked files in the worktree that aren't staged.
+/// Returns file paths that would be lost if we commit only the staged set.
+fn find_orphaned_changes(worktree_path: &Path) -> Result<Vec<String>, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(worktree_path)
+        .arg("status")
+        .arg("--porcelain")
+        .output()
+        .map_err(|e| format!("Failed to run git status: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git status failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut orphaned = Vec::new();
+
+    for line in stdout.lines() {
+        if line.len() < 4 {
+            continue;
+        }
+        let index_status = line.as_bytes()[0];
+        let worktree_status = line.as_bytes()[1];
+        let file_path = line[3..].to_string();
+
+        // Skip .specks/ infrastructure files — these are managed separately
+        if file_path.starts_with(".specks/") {
+            continue;
+        }
+
+        // A file is "orphaned" if it has worktree modifications that aren't staged:
+        // - ' M' = modified but not staged
+        // - ' D' = deleted but not staged
+        // - '??' = untracked
+        // - 'MM' = staged AND has additional unstaged modifications
+        let is_orphaned = match (index_status, worktree_status) {
+            (b' ', b'M') | (b' ', b'D') => true, // unstaged modification/deletion
+            (b'?', b'?') => true,                // untracked file
+            (_, b'M') | (_, b'D') => true,       // staged but also has unstaged changes
+            _ => false,
+        };
+
+        if is_orphaned {
+            orphaned.push(file_path);
+        }
+    }
+
+    Ok(orphaned)
 }
