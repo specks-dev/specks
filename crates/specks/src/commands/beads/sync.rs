@@ -221,7 +221,7 @@ struct SyncContext<'a> {
 /// Sync a speck to beads
 #[allow(clippy::type_complexity)] // Return tuple includes enrichment errors
 fn sync_speck_to_beads(
-    path: &Path,
+    _path: &Path,
     speck: &Speck,
     content: &str,
     ctx: &SyncContext<'_>,
@@ -235,7 +235,6 @@ fn sync_speck_to_beads(
         .phase_title
         .clone()
         .unwrap_or_else(|| "Untitled Speck".to_string());
-    let speck_path = path.to_string_lossy();
 
     // Phase 1: Collect all known bead IDs from speck for batch existence check
     let mut known_ids: Vec<String> = Vec::new();
@@ -263,49 +262,56 @@ fn sync_speck_to_beads(
     };
 
     // Step 1: Ensure root bead exists
-    let root_id = ensure_root_bead(
+    let (root_id, root_created) = ensure_root_bead(
         speck,
         &phase_title,
-        &speck_path,
         ctx,
         &existing_ids,
         &mut updated_content,
     )?;
+
+    // Track newly created beads to avoid double-updates during enrichment
+    let mut created_beads: HashSet<String> = HashSet::new();
+    if root_created {
+        created_beads.insert(root_id.clone());
+    }
 
     // Build a map of step anchors to bead IDs (existing)
     let mut anchor_to_bead: HashMap<String, String> = HashMap::new();
 
     // Step 2: Process each step
     for step in &speck.steps {
-        let step_bead_id = ensure_step_bead(
+        let (step_bead_id, step_created) = ensure_step_bead(
             step,
             &root_id,
-            &speck_path,
-            ctx.beads,
-            ctx.dry_run,
-            ctx.quiet,
+            speck,
+            ctx,
             &existing_ids,
             &mut updated_content,
         )?;
 
         anchor_to_bead.insert(step.anchor.clone(), step_bead_id.clone());
+        if step_created {
+            created_beads.insert(step_bead_id.clone());
+        }
         steps_synced += 1;
 
         // Handle substeps if mode is "children"
         if ctx.substeps_mode == "children" {
             for substep in &step.substeps {
-                let substep_bead_id = ensure_substep_bead(
+                let (substep_bead_id, substep_created) = ensure_substep_bead(
                     substep,
                     &step_bead_id,
-                    &speck_path,
-                    ctx.beads,
-                    ctx.dry_run,
-                    ctx.quiet,
+                    speck,
+                    ctx,
                     &existing_ids,
                     &mut updated_content,
                 )?;
 
-                anchor_to_bead.insert(substep.anchor.clone(), substep_bead_id);
+                anchor_to_bead.insert(substep.anchor.clone(), substep_bead_id.clone());
+                if substep_created {
+                    created_beads.insert(substep_bead_id);
+                }
                 steps_synced += 1;
             }
         }
@@ -368,40 +374,48 @@ fn sync_speck_to_beads(
     // Phase 4: Enrich beads with rich content if requested
     let mut enrich_errors = Vec::new();
     if ctx.enrich {
-        // Enrich root bead
-        let root_errors = enrich_root_bead(speck, &root_id, ctx);
-        enrich_errors.extend(root_errors);
+        // Enrich root bead (skip if just created - already enriched)
+        if !created_beads.contains(&root_id) {
+            let root_errors = enrich_root_bead(speck, &root_id, ctx);
+            enrich_errors.extend(root_errors);
+        }
 
         // Enrich step beads
         for step in &speck.steps {
             if let Some(bead_id) = anchor_to_bead.get(&step.anchor) {
-                let step_errors = enrich_step_bead(step, bead_id, speck, ctx);
-                enrich_errors.extend(step_errors);
+                // Skip if just created - already enriched
+                if !created_beads.contains(bead_id) {
+                    let step_errors = enrich_step_bead(step, bead_id, speck, ctx);
+                    enrich_errors.extend(step_errors);
+                }
             }
 
             // Enrich substep beads if using children mode
             if ctx.substeps_mode == "children" {
                 for substep in &step.substeps {
                     if let Some(bead_id) = anchor_to_bead.get(&substep.anchor) {
-                        // Convert Substep to Step for enrichment (substeps have same fields)
-                        let substep_as_step = specks_core::Step {
-                            number: substep.number.clone(),
-                            title: substep.title.clone(),
-                            anchor: substep.anchor.clone(),
-                            line: substep.line,
-                            depends_on: substep.depends_on.clone(),
-                            bead_id: substep.bead_id.clone(),
-                            beads_hints: substep.beads_hints.clone(),
-                            commit_message: substep.commit_message.clone(),
-                            references: substep.references.clone(),
-                            tasks: substep.tasks.clone(),
-                            tests: substep.tests.clone(),
-                            checkpoints: substep.checkpoints.clone(),
-                            artifacts: substep.artifacts.clone(),
-                            substeps: vec![],
-                        };
-                        let substep_errors = enrich_step_bead(&substep_as_step, bead_id, speck, ctx);
-                        enrich_errors.extend(substep_errors);
+                        // Skip if just created - already enriched
+                        if !created_beads.contains(bead_id) {
+                            // Convert Substep to Step for enrichment (substeps have same fields)
+                            let substep_as_step = specks_core::Step {
+                                number: substep.number.clone(),
+                                title: substep.title.clone(),
+                                anchor: substep.anchor.clone(),
+                                line: substep.line,
+                                depends_on: substep.depends_on.clone(),
+                                bead_id: substep.bead_id.clone(),
+                                beads_hints: substep.beads_hints.clone(),
+                                commit_message: substep.commit_message.clone(),
+                                references: substep.references.clone(),
+                                tasks: substep.tasks.clone(),
+                                tests: substep.tests.clone(),
+                                checkpoints: substep.checkpoints.clone(),
+                                artifacts: substep.artifacts.clone(),
+                                substeps: vec![],
+                            };
+                            let substep_errors = enrich_step_bead(&substep_as_step, bead_id, speck, ctx);
+                            enrich_errors.extend(substep_errors);
+                        }
                     }
                 }
             }
@@ -422,20 +436,19 @@ fn sync_speck_to_beads(
     ))
 }
 
-/// Ensure root bead exists and return its ID
+/// Ensure root bead exists and return its ID and whether it was newly created
 fn ensure_root_bead(
     speck: &Speck,
     phase_title: &str,
-    speck_path: &str,
     ctx: &SyncContext<'_>,
     existing_ids: &HashSet<String>,
     content: &mut String,
-) -> Result<String, SpecksError> {
+) -> Result<(String, bool), SpecksError> {
     // Check if we already have a root ID
     if let Some(ref root_id) = speck.metadata.beads_root_id {
         // Use pre-fetched existence check (no subprocess call)
         if existing_ids.contains(root_id) {
-            return Ok(root_id.clone());
+            return Ok((root_id.clone(), false));
         }
         // Root bead was deleted, need to recreate
         if !ctx.quiet {
@@ -443,15 +456,17 @@ fn ensure_root_bead(
         }
     }
 
-    // Create root bead
-    let description = format!("Specks: {}", speck_path);
+    // Render rich content for new bead
+    let description = speck.render_root_description();
+    let design = speck.render_root_design();
+    let acceptance = speck.render_root_acceptance();
     let issue_type = &ctx.config.specks.beads.root_issue_type;
 
     if ctx.dry_run {
         // Generate a fake ID for dry run
         let fake_id = "bd-dryrun-root".to_string();
         write_beads_root_to_content(content, &fake_id);
-        return Ok(fake_id);
+        return Ok((fake_id, true));
     }
 
     let issue = ctx.beads.create(
@@ -460,114 +475,134 @@ fn ensure_root_bead(
         None,
         Some(issue_type),
         None,
-        None,
-        None,
+        if !design.is_empty() { Some(&design) } else { None },
+        if !acceptance.is_empty() { Some(&acceptance) } else { None },
         None,
     )?;
 
     // Write Beads Root to content
     write_beads_root_to_content(content, &issue.id);
 
-    Ok(issue.id)
+    Ok((issue.id, true))
 }
 
-/// Ensure step bead exists and return its ID
-#[allow(clippy::too_many_arguments)]
+/// Ensure step bead exists and return its ID and whether it was newly created
 fn ensure_step_bead(
     step: &specks_core::Step,
     root_id: &str,
-    speck_path: &str,
-    beads: &BeadsCli,
-    dry_run: bool,
-    quiet: bool,
+    speck: &Speck,
+    ctx: &SyncContext<'_>,
     existing_ids: &HashSet<String>,
     content: &mut String,
-) -> Result<String, SpecksError> {
+) -> Result<(String, bool), SpecksError> {
     // Check if step already has a bead ID
     if let Some(ref bead_id) = step.bead_id {
         // Use pre-fetched existence check (no subprocess call)
         if existing_ids.contains(bead_id) {
-            return Ok(bead_id.clone());
+            return Ok((bead_id.clone(), false));
         }
         // Bead was deleted, need to recreate
-        if !quiet {
+        if !ctx.quiet {
             eprintln!("warning: step bead {} not found, recreating", bead_id);
         }
     }
 
-    // Create step bead
+    // Render rich content for new bead
     let title = format!("Step {}: {}", step.number, step.title);
-    let mut desc_parts = vec![format!("Specks: {}#{}", speck_path, step.anchor)];
-    if let Some(ref commit) = step.commit_message {
-        desc_parts.push(format!("Commit: {}", commit));
-    }
-    if !step.depends_on.is_empty() {
-        desc_parts.push(format!("Depends on: {}", step.depends_on.join(", ")));
-    }
-    let description = desc_parts.join("\n");
+    let description = step.render_description();
+    let acceptance = step.render_acceptance_criteria();
+    let design = resolve_step_design(step, speck);
 
-    if dry_run {
+    if ctx.dry_run {
         // Generate a fake ID for dry run
         let fake_id = format!("bd-dryrun-{}", step.anchor);
         write_bead_to_step(content, &step.anchor, &fake_id);
-        return Ok(fake_id);
+        return Ok((fake_id, true));
     }
 
-    let issue = beads.create(&title, Some(&description), Some(root_id), None, None, None, None, None)?;
+    let issue = ctx.beads.create(
+        &title,
+        Some(&description),
+        Some(root_id),
+        None,
+        None,
+        if !design.is_empty() { Some(&design) } else { None },
+        if !acceptance.is_empty() { Some(&acceptance) } else { None },
+        None,
+    )?;
 
     // Write Bead ID to step in content
     write_bead_to_step(content, &step.anchor, &issue.id);
 
-    Ok(issue.id)
+    Ok((issue.id, true))
 }
 
-/// Ensure substep bead exists and return its ID
-#[allow(clippy::too_many_arguments)]
+/// Ensure substep bead exists and return its ID and whether it was newly created
 fn ensure_substep_bead(
     substep: &specks_core::Substep,
     parent_bead_id: &str,
-    speck_path: &str,
-    beads: &BeadsCli,
-    dry_run: bool,
-    quiet: bool,
+    speck: &Speck,
+    ctx: &SyncContext<'_>,
     existing_ids: &HashSet<String>,
     content: &mut String,
-) -> Result<String, SpecksError> {
+) -> Result<(String, bool), SpecksError> {
     // Check if substep already has a bead ID
     if let Some(ref bead_id) = substep.bead_id {
         // Use pre-fetched existence check (no subprocess call)
         if existing_ids.contains(bead_id) {
-            return Ok(bead_id.clone());
+            return Ok((bead_id.clone(), false));
         }
         // Bead was deleted, need to recreate
-        if !quiet {
+        if !ctx.quiet {
             eprintln!("warning: substep bead {} not found, recreating", bead_id);
         }
     }
 
-    // Create substep bead
-    let title = format!("Step {}: {}", substep.number, substep.title);
-    let mut desc_parts = vec![format!("Specks: {}#{}", speck_path, substep.anchor)];
-    if let Some(ref commit) = substep.commit_message {
-        desc_parts.push(format!("Commit: {}", commit));
-    }
-    if !substep.depends_on.is_empty() {
-        desc_parts.push(format!("Depends on: {}", substep.depends_on.join(", ")));
-    }
-    let description = desc_parts.join("\n");
+    // Convert Substep to Step for rendering (substeps have same fields)
+    let substep_as_step = specks_core::Step {
+        number: substep.number.clone(),
+        title: substep.title.clone(),
+        anchor: substep.anchor.clone(),
+        line: substep.line,
+        depends_on: substep.depends_on.clone(),
+        bead_id: substep.bead_id.clone(),
+        beads_hints: substep.beads_hints.clone(),
+        commit_message: substep.commit_message.clone(),
+        references: substep.references.clone(),
+        tasks: substep.tasks.clone(),
+        tests: substep.tests.clone(),
+        checkpoints: substep.checkpoints.clone(),
+        artifacts: substep.artifacts.clone(),
+        substeps: vec![],
+    };
 
-    if dry_run {
+    // Render rich content for new bead
+    let title = format!("Step {}: {}", substep.number, substep.title);
+    let description = substep_as_step.render_description();
+    let acceptance = substep_as_step.render_acceptance_criteria();
+    let design = resolve_step_design(&substep_as_step, speck);
+
+    if ctx.dry_run {
         let fake_id = format!("bd-dryrun-{}", substep.anchor);
         write_bead_to_step(content, &substep.anchor, &fake_id);
-        return Ok(fake_id);
+        return Ok((fake_id, true));
     }
 
-    let issue = beads.create(&title, Some(&description), Some(parent_bead_id), None, None, None, None, None)?;
+    let issue = ctx.beads.create(
+        &title,
+        Some(&description),
+        Some(parent_bead_id),
+        None,
+        None,
+        if !design.is_empty() { Some(&design) } else { None },
+        if !acceptance.is_empty() { Some(&acceptance) } else { None },
+        None,
+    )?;
 
     // Write Bead ID to substep in content
     write_bead_to_step(content, &substep.anchor, &issue.id);
 
-    Ok(issue.id)
+    Ok((issue.id, true))
 }
 
 /// Sync dependencies for a bead

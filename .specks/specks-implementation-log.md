@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-3
+date: 2025-02-12T00:28:25Z
+bead: specks-0kf.4
+---
+
+## #step-3: Refactored ensure_step_bead/ensure_substep_bead to take &SyncContext, added speck param, changed return to (String, bool), enriched new beads at creation, tracked created_beads to skip double-enrichment
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-12T00:20:24Z
 bead: specks-0kf.3
