@@ -196,7 +196,9 @@ Exception: Skip `specks-skeleton.md` when counting.
 When `critic_feedback` is present:
 
 1. Read the existing speck at `speck_path`
-2. Address each issue in `critic_feedback.issues`
+2. Address each issue in `critic_feedback.issues`:
+   - For `completeness`, `implementability`, or `sequencing` issues: fix the speck text directly
+   - For `source_verification` issues: **read the source files referenced in the issue first** to understand the problem (type cascades, missing fields, unscoped callers), then add or move tasks between steps to ensure each step compiles independently
 3. Focus on the areas that caused `REVISE` or `REJECT` recommendation
 4. Return with updated `sections_written` reflecting what changed
 

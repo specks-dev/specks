@@ -62,7 +62,7 @@ Output these as text immediately after parsing the agent's JSON result:
 **specks:critic-agent**(Complete)
   Recommendation: {recommendation}
   Skeleton: {skeleton_compliant ? "compliant" : "non-compliant"}
-  Quality: completeness {areas.completeness} | implementability {areas.implementability} | sequencing {areas.sequencing}
+  Quality: completeness {areas.completeness} | implementability {areas.implementability} | sequencing {areas.sequencing} | source verification {areas.source_verification}
   Issues: {issues.length} ({count by priority: N P0, N HIGH, N MEDIUM, N LOW — omit zeros})
 ```
 
