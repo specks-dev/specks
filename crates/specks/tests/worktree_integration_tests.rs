@@ -562,3 +562,344 @@ fn test_worktree_cleanup_dry_run() {
         "worktree should still exist after dry-run"
     );
 }
+
+// =============================================================================
+// Validation Gate Tests
+// =============================================================================
+
+#[test]
+#[serial_test::serial]
+#[ignore = "requires beads service (beads sync is always-on)"]
+fn test_worktree_create_with_valid_speck_succeeds() {
+    let temp = setup_test_git_repo();
+    create_test_speck(&temp, "valid", MINIMAL_SPECK);
+
+    let output = Command::new(specks_binary())
+        .args(["worktree", "create", ".specks/specks-valid.md"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run worktree create");
+
+    assert!(
+        output.status.success(),
+        "worktree create should succeed with valid speck: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify worktree was created
+    let worktree_dirs: Vec<_> = fs::read_dir(temp.path().join(".specks-worktrees"))
+        .expect("worktrees dir should exist")
+        .filter_map(|e| e.ok())
+        .collect();
+
+    assert!(!worktree_dirs.is_empty(), "worktree should be created");
+}
+
+#[test]
+#[serial_test::serial]
+fn test_worktree_create_blocks_speck_with_validation_errors() {
+    let temp = setup_test_git_repo();
+
+    // Create speck with broken reference (E010)
+    let invalid_speck = r#"## Phase 1.0: Test Feature {#phase-1}
+
+**Purpose:** Test speck with broken reference.
+
+---
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Target branch | main |
+| Tracking issue/PR | N/A |
+| Last updated | 2026-02-08 |
+
+---
+
+### Phase Overview {#phase-overview}
+
+Brief phase summary.
+
+---
+
+### Design Decisions {#design-decisions}
+
+#### [D01] Test Decision (DECIDED) {#d01-test}
+
+Test decision.
+
+---
+
+### Execution Steps {#execution-steps}
+
+#### Step 0: Test step {#step-0}
+
+**Commit:** Test commit
+
+**References:** [D99] Non-existent decision
+
+**Tasks:**
+- [ ] Test task
+
+**Checkpoint:** Test checkpoint
+"#;
+
+    create_test_speck(&temp, "invalid", invalid_speck);
+
+    let output = Command::new(specks_binary())
+        .args(["worktree", "create", ".specks/specks-invalid.md"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run worktree create");
+
+    // Should fail with exit code 8
+    assert_eq!(
+        output.status.code(),
+        Some(8),
+        "worktree create should fail with code 8 for validation errors"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Validation failed") || stderr.contains("error"),
+        "stderr should mention validation failure: {}",
+        stderr
+    );
+
+    // Verify worktree was NOT created
+    let worktree_path = temp.path().join(".specks-worktrees");
+    if worktree_path.exists() {
+        let worktree_dirs: Vec<_> = fs::read_dir(&worktree_path)
+            .expect("should be able to read worktrees dir")
+            .filter_map(|e| e.ok())
+            .collect();
+
+        assert!(
+            worktree_dirs.is_empty(),
+            "worktree should NOT be created for invalid speck"
+        );
+    }
+}
+
+#[test]
+#[serial_test::serial]
+fn test_worktree_create_blocks_speck_with_diagnostics() {
+    let temp = setup_test_git_repo();
+
+    // Create speck with P001 near-miss (lowercase "step" in header)
+    // Use MINIMAL_SPECK as base but modify Step 0 header to trigger P001
+    let speck_with_diagnostics = r#"## Phase 1.0: Test Feature {#phase-1}
+
+**Purpose:** Test speck with diagnostics.
+
+---
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Target branch | main |
+| Tracking issue/PR | N/A |
+| Last updated | 2026-02-08 |
+
+---
+
+### Phase Overview {#phase-overview}
+
+#### Context {#context}
+
+Test context paragraph.
+
+---
+
+### 1.0.0 Design Decisions {#design-decisions}
+
+#### [D01] Test Decision (DECIDED) {#d01-test}
+
+**Decision:** This is a test decision.
+
+**Rationale:**
+- Because testing
+
+**Implications:**
+- Tests work
+
+---
+
+### 1.0.5 Execution Steps {#execution-steps}
+
+#### step 0: Setup {#step-0}
+
+**Commit:** `feat: setup`
+
+**References:** [D01] Test Decision, (#context)
+
+**Tasks:**
+- [x] Create project
+- [ ] Add tests
+
+**Tests:**
+- [ ] Unit test
+
+**Checkpoint:**
+- [x] Build passes
+
+---
+
+### 1.0.6 Deliverables and Checkpoints {#deliverables}
+
+**Deliverable:** Working test feature.
+
+#### Phase Exit Criteria {#exit-criteria}
+
+- [ ] All tests pass
+"#;
+
+    create_test_speck(&temp, "diag", speck_with_diagnostics);
+
+    let output = Command::new(specks_binary())
+        .args(["worktree", "create", ".specks/specks-diag.md"])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run worktree create");
+
+    // Should fail with exit code 8
+    assert_eq!(
+        output.status.code(),
+        Some(8),
+        "worktree create should fail with code 8 for diagnostics"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Validation failed") || stderr.contains("warning[P001]"),
+        "stderr should mention validation failure or P001: {}",
+        stderr
+    );
+
+    // Verify worktree was NOT created
+    let worktree_path = temp.path().join(".specks-worktrees");
+    if worktree_path.exists() {
+        let worktree_dirs: Vec<_> = fs::read_dir(&worktree_path)
+            .expect("should be able to read worktrees dir")
+            .filter_map(|e| e.ok())
+            .collect();
+
+        assert!(
+            worktree_dirs.is_empty(),
+            "worktree should NOT be created for speck with diagnostics"
+        );
+    }
+}
+
+#[test]
+#[serial_test::serial]
+#[ignore = "requires beads service (beads sync is always-on)"]
+fn test_worktree_create_skip_validation_bypasses_check() {
+    let temp = setup_test_git_repo();
+
+    // Create speck with P001 near-miss (lowercase "step")
+    let speck_with_diagnostics = r#"## Phase 1.0: Test Feature {#phase-1}
+
+**Purpose:** Test speck with diagnostics.
+
+---
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Target branch | main |
+| Tracking issue/PR | N/A |
+| Last updated | 2026-02-08 |
+
+---
+
+### Phase Overview {#phase-overview}
+
+#### Context {#context}
+
+Test context paragraph.
+
+---
+
+### 1.0.0 Design Decisions {#design-decisions}
+
+#### [D01] Test Decision (DECIDED) {#d01-test}
+
+**Decision:** This is a test decision.
+
+**Rationale:**
+- Because testing
+
+**Implications:**
+- Tests work
+
+---
+
+### 1.0.5 Execution Steps {#execution-steps}
+
+#### step 0: Setup {#step-0}
+
+**Commit:** `feat: setup`
+
+**References:** [D01] Test Decision, (#context)
+
+**Tasks:**
+- [x] Create project
+- [ ] Add tests
+
+**Tests:**
+- [ ] Unit test
+
+**Checkpoint:**
+- [x] Build passes
+
+---
+
+### 1.0.6 Deliverables and Checkpoints {#deliverables}
+
+**Deliverable:** Working test feature.
+
+#### Phase Exit Criteria {#exit-criteria}
+
+- [ ] All tests pass
+"#;
+
+    create_test_speck(&temp, "skip", speck_with_diagnostics);
+
+    let output = Command::new(specks_binary())
+        .args([
+            "worktree",
+            "create",
+            ".specks/specks-skip.md",
+            "--skip-validation",
+        ])
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run worktree create");
+
+    assert!(
+        output.status.success(),
+        "worktree create with --skip-validation should succeed despite diagnostics: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify worktree was created
+    let worktree_dirs: Vec<_> = fs::read_dir(temp.path().join(".specks-worktrees"))
+        .expect("worktrees dir should exist")
+        .filter_map(|e| e.ok())
+        .collect();
+
+    assert!(
+        !worktree_dirs.is_empty(),
+        "worktree should be created with --skip-validation"
+    );
+}

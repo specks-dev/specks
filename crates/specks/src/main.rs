@@ -101,8 +101,8 @@ fn main() -> ExitCode {
             ),
         },
         Some(Commands::Worktree(worktree_cmd)) => match worktree_cmd {
-            WorktreeCommands::Create { speck, base } => {
-                commands::run_worktree_create(speck, base, cli.json, cli.quiet)
+            WorktreeCommands::Create { speck, base, skip_validation } => {
+                commands::run_worktree_create(speck, base, skip_validation, cli.json, cli.quiet)
             }
             WorktreeCommands::List => commands::run_worktree_list(cli.json, cli.quiet),
             WorktreeCommands::Cleanup {
