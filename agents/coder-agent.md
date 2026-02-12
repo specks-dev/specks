@@ -52,15 +52,8 @@ If resumed with reviewer feedback, fix the identified issues. You retain full co
   "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-N.md",
   "step_anchor": "#step-0",
-  "strategy": {
-    "approach": "...",
-    "expected_touch_set": ["file1.rs", "file2.rs"],
-    "implementation_steps": [...],
-    "test_plan": "...",
-    "risks": [...]
-  },
-  "session_id": "auth-20260208-143022",
-  "artifact_dir": "/abs/repo/.specks-worktrees/.artifacts/auth-20260208-143022/step-0"
+  "bead_id": "bd-abc123.0",
+  "session_id": "auth-20260208-143022"
 }
 ```
 
@@ -69,20 +62,19 @@ If resumed with reviewer feedback, fix the identified issues. You retain full co
 | `worktree_path` | Absolute path to the worktree directory |
 | `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the step being implemented |
-| `strategy` | Strategy from the architect agent |
+| `bead_id` | Bead ID for this step (e.g., "bd-abc123.0") |
 | `session_id` | Session ID for the implementation session |
-| `artifact_dir` | Absolute path to the step's artifact directory — **you MUST write your output here** |
 
 ### Resume (Next Step)
 
 ```
-Implement step #step-1. Strategy: <architect's strategy JSON>. Artifact dir: <path>.
+Implement step #step-1. Bead ID: bd-abc123.1.
 ```
 
 ### Resume (Revision Feedback)
 
 ```
-Reviewer found issues. Fix these: <failed tasks> <issues array>. Then return updated output. Artifact dir: <path>.
+Reviewer found issues. Fix these: <failed tasks> <issues array>. Bead ID: bd-abc123.N. Then return updated output.
 ```
 
 **IMPORTANT: File Path Handling**
@@ -152,6 +144,61 @@ Return structured JSON:
 | `build_and_test_report.lint` | Lint command, exit code, and tail of output (null if no linter configured) |
 | `build_and_test_report.checkpoints` | Array of checkpoint results from the speck step |
 | `drift_assessment` | **REQUIRED**: Drift analysis (see below) |
+
+---
+
+## Bead-Mediated Communication
+
+### Self-Fetch Behavior
+
+**As your FIRST action**, fetch the bead data for this step:
+
+```bash
+cd {worktree_path} && specks beads inspect {bead_id} --working-dir {worktree_path} --json
+```
+
+This retrieves:
+- **description**: The step's task description and implementation requirements
+- **design**: The architect's strategy — look for the strategy after the last `---` separator
+
+The architect's strategy in the design field contains your implementation plan.
+
+### Field Ownership (What You Read)
+
+Per Table T01, you READ:
+- **description**: Step task and requirements (from speck sync)
+- **design**: Architect's strategy (after last `---` separator)
+
+### Field Ownership (What You Write)
+
+Per Table T02, you WRITE to:
+- **notes**: Implementation results (build/test output, completion status)
+
+After completing implementation and running tests, write results to the bead:
+
+```bash
+cd {worktree_path} && specks beads update-notes {bead_id} \
+  --working-dir {worktree_path} \
+  --content "## Implementation Results
+
+Build: ✅ Success
+Tests: ✅ All 305 tests passed
+
+Files created:
+- src/new_module.rs
+
+Files modified:
+- src/main.rs
+- src/lib.rs
+
+Drift: None (all changes in expected_touch_set)"
+```
+
+**Note**: Use `update-notes` (not `append-notes`) because coder writes first. Reviewer will append their review afterward.
+
+### Artifact Files
+
+**Note**: Artifact files are managed by the orchestrator. Your implementation results persist in the bead's `notes` field, which is the authoritative source for downstream agents.
 
 ---
 
@@ -267,9 +314,7 @@ Record each checkpoint in `build_and_test_report.checkpoints` with command, pass
 
 10. **Use relative paths in output**: `files_created` and `files_modified` use relative paths (e.g., `src/api/client.rs`), not absolute paths.
 
-11. **Write your output artifact**: After completing implementation (or on error/halt), write your full JSON output to `{artifact_dir}/coder-output.json` using the Write tool. The orchestrator cannot write files — you are responsible for persisting your own output.
-
-12. **Never return partial work**: You MUST complete all files in the architect's `expected_touch_set` before returning. If the step is large, trust auto-compaction to manage your context — keep working. Do NOT return early with a summary of "remaining work" or a recommendation to "split the step." If you return, the work must be done: every file in the expected touch set addressed, `cargo build` passing, tests passing. A partial return forces the orchestrator to spawn a fresh agent that lacks your context, which leads to missed files and broken builds.
+11. **Never return partial work**: You MUST complete all files in the architect's `expected_touch_set` before returning. If the step is large, trust auto-compaction to manage your context — keep working. Do NOT return early with a summary of "remaining work" or a recommendation to "split the step." If you return, the work must be done: every file in the expected touch set addressed, `cargo build` passing, tests passing. A partial return forces the orchestrator to spawn a fresh agent that lacks your context, which leads to missed files and broken builds.
 
 ---
 

@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-2
+date: 2025-02-12T15:23:24Z
+bead: specks-bvq.3
+---
+
+## #step-2: Update agent definitions for bead-mediated communication
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
 step: #step-1
 date: 2025-02-12T15:09:04Z
 bead: specks-bvq.2
