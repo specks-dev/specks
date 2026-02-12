@@ -727,9 +727,7 @@ pub fn run_worktree_list_with_root(
     match list_worktrees(&repo_root) {
         Ok(worktrees) => {
             if json_output {
-                let data = ListData {
-                    worktrees,
-                };
+                let data = ListData { worktrees };
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?
@@ -955,10 +953,7 @@ pub fn run_worktree_remove_with_root(
         } else if !quiet {
             eprintln!("Error: Multiple worktrees found for {}\n", target);
             for wt in &matching_worktrees {
-                eprintln!(
-                    "  {}  {}",
-                    wt.branch, wt.path.display()
-                );
+                eprintln!("  {}  {}", wt.branch, wt.path.display());
             }
             eprintln!("\nUse branch name or worktree path to disambiguate:");
             if let Some(first) = matching_worktrees.first() {
@@ -988,7 +983,12 @@ pub fn run_worktree_remove_with_root(
     // Check if worktree has uncommitted changes (unless --force)
     if !force {
         let status_output = Command::new("git")
-            .args(["-C", &worktree.path.to_string_lossy(), "status", "--porcelain"])
+            .args([
+                "-C",
+                &worktree.path.to_string_lossy(),
+                "status",
+                "--porcelain",
+            ])
             .output()
             .map_err(|e| format!("failed to check git status: {}", e))?;
 
@@ -1094,8 +1094,6 @@ pub fn run_worktree_remove_with_root(
     Ok(0)
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1200,8 +1198,6 @@ mod tests {
     }
 }
 
-
-
 #[cfg(test)]
 mod integration_tests {
     use super::*;
@@ -1304,5 +1300,4 @@ mod integration_tests {
         // Verify worktree directory exists
         assert!(worktree_path.exists(), "worktree directory should exist");
     }
-
 }

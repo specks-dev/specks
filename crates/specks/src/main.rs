@@ -169,14 +169,7 @@ fn main() -> ExitCode {
             speck,
             repo,
         }) => commands::run_step_publish(
-            worktree,
-            branch,
-            base,
-            title,
-            speck,
-            repo,
-            cli.json,
-            cli.quiet,
+            worktree, branch, base, title, speck, repo, cli.json, cli.quiet,
         ),
         None => {
             // No subcommand - show splash screen

@@ -166,7 +166,9 @@ pub fn generate_branch_name(slug: &str) -> Result<String, SpecksError> {
 /// (extracted from the directory name).
 ///
 /// Returns None if no matching worktree is found.
-fn find_existing_worktree(config: &WorktreeConfig) -> Result<Option<DiscoveredWorktree>, SpecksError> {
+fn find_existing_worktree(
+    config: &WorktreeConfig,
+) -> Result<Option<DiscoveredWorktree>, SpecksError> {
     let all_worktrees = list_worktrees(&config.repo_root)?;
 
     // Derive expected slug from config speck_path
@@ -574,11 +576,7 @@ pub fn create_worktree(config: &WorktreeConfig) -> Result<(PathBuf, String, Stri
     // Check for existing worktrees for this speck and reuse if found
     if let Some(existing) = find_existing_worktree(config)? {
         // Reuse path: return infrastructure tuple from existing worktree
-        return Ok((
-            existing.path,
-            existing.branch,
-            existing.speck_slug,
-        ));
+        return Ok((existing.path, existing.branch, existing.speck_slug));
     }
     // No existing worktree found, proceed to create new one
 
@@ -935,15 +933,13 @@ pub(crate) fn cleanup_stale_branches_with_pr_checker(
             if let Some(wt_path) = git.worktree_path_for_branch(&branch) {
                 // Remove the worktree first, then delete the branch
                 match git.worktree_force_remove(&wt_path) {
-                    Ok(()) => {
-                        match git.delete_branch(&branch) {
-                            Ok(()) => removed.push(branch.clone()),
-                            Err(e) => skipped.push((
-                                branch.clone(),
-                                format!("Removed worktree but branch delete failed: {}", e),
-                            )),
-                        }
-                    }
+                    Ok(()) => match git.delete_branch(&branch) {
+                        Ok(()) => removed.push(branch.clone()),
+                        Err(e) => skipped.push((
+                            branch.clone(),
+                            format!("Removed worktree but branch delete failed: {}", e),
+                        )),
+                    },
                     Err(e) => {
                         skipped.push((branch.clone(), format!("Cannot remove worktree: {}", e)))
                     }
@@ -1118,10 +1114,9 @@ pub(crate) fn cleanup_worktrees_with_pr_checker(
                         match git.worktree_force_remove(worktree_path) {
                             Ok(()) => true,
                             Err(e) => {
-                                result.skipped.push((
-                                    wt.branch.clone(),
-                                    format!("Removal failed: {}", e),
-                                ));
+                                result
+                                    .skipped
+                                    .push((wt.branch.clone(), format!("Removal failed: {}", e)));
                                 category.pop();
                                 false
                             }
@@ -1259,10 +1254,7 @@ mod tests {
     #[test]
     fn test_slug_from_branch() {
         // Basic case
-        assert_eq!(
-            slug_from_branch("specks/auth-20260208-143022"),
-            "auth"
-        );
+        assert_eq!(slug_from_branch("specks/auth-20260208-143022"), "auth");
 
         // Multi-hyphen slug
         assert_eq!(
@@ -1271,10 +1263,7 @@ mod tests {
         );
 
         // Single digit slug
-        assert_eq!(
-            slug_from_branch("specks/1-20260208-143022"),
-            "1"
-        );
+        assert_eq!(slug_from_branch("specks/1-20260208-143022"), "1");
 
         // Long slug
         assert_eq!(
@@ -1565,7 +1554,6 @@ mod tests {
         assert_eq!(removed.len(), 1);
         assert_eq!(removed[0], "specks/orphan-20260208-120000");
     }
-
 
     #[test]
     fn test_cleanup_stale_safe_delete_fallback() {
