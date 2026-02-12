@@ -141,12 +141,13 @@ You verify:
 Per Table T02, you WRITE to:
 - **notes**: Append your review findings below coder's results
 
-After completing your review, append your findings to the bead:
+After completing your review, append your findings to the bead using a heredoc:
 
 ```bash
 cd {worktree_path} && specks beads append-notes {bead_id} \
   --working-dir {worktree_path} \
-  --content "## Review
+  --content "$(cat <<'NOTES_EOF'
+## Review
 
 Recommendation: APPROVE
 
@@ -154,8 +155,12 @@ Plan conformance: ✅ All tasks verified
 Tests: ✅ Match test plan
 Code quality: ✅ PASS
 
-Issues: None"
+Issues: None
+NOTES_EOF
+)"
 ```
+
+**IMPORTANT:** Pass content inline via the heredoc. Do NOT write temp files to `/tmp` or anywhere outside the worktree.
 
 **Note**: Use `append-notes` (not `update-notes`) because reviewer appends to coder's existing notes. The `---` separator is automatically added.
 

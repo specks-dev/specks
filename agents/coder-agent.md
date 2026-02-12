@@ -174,12 +174,13 @@ Per Table T01, you READ:
 Per Table T02, you WRITE to:
 - **notes**: Implementation results (build/test output, completion status)
 
-After completing implementation and running tests, write results to the bead:
+After completing implementation and running tests, write results to the bead using a heredoc:
 
 ```bash
 cd {worktree_path} && specks beads update-notes {bead_id} \
   --working-dir {worktree_path} \
-  --content "## Implementation Results
+  --content "$(cat <<'NOTES_EOF'
+## Implementation Results
 
 Build: ✅ Success
 Tests: ✅ All 305 tests passed
@@ -191,8 +192,12 @@ Files modified:
 - src/main.rs
 - src/lib.rs
 
-Drift: None (all changes in expected_touch_set)"
+Drift: None (all changes in expected_touch_set)
+NOTES_EOF
+)"
 ```
+
+**IMPORTANT:** Pass content inline via the heredoc. Do NOT write temp files to `/tmp` or anywhere outside the worktree.
 
 **Note**: Use `update-notes` (not `append-notes`) because coder writes first. Reviewer will append their review afterward.
 
