@@ -9,6 +9,32 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-3
+date: 2025-02-12T21:24:40Z
+bead: specks-t9v.4
+---
+
+## #step-3: Rewrite list_worktrees() and all callers to use git-native discovery instead of session files
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
+step: #step-3
+date: 2025-02-12T21:24:30Z
+bead: specks-t9v.4
+---
+
+## #step-3: Rewrite list_worktrees() and all callers to use git-native discovery instead of session files
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-12T20:44:54Z
 bead: specks-t9v.3

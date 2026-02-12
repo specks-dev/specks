@@ -379,7 +379,7 @@ fn check_stale_branches() -> HealthCheck {
 
     // Build set of branches with worktrees
     let active_branches: std::collections::HashSet<_> =
-        worktrees.iter().map(|s| s.branch_name.clone()).collect();
+        worktrees.iter().map(|s| s.branch.clone()).collect();
 
     // Find branches without worktrees
     let stale: Vec<_> = branches
@@ -442,10 +442,10 @@ fn check_orphaned_worktrees() -> HealthCheck {
 
     // Find worktrees that have no PR
     let mut orphaned = Vec::new();
-    for session in &worktrees {
-        let pr_state = get_pr_state(&session.branch_name);
+    for wt in &worktrees {
+        let pr_state = get_pr_state(&wt.branch);
         if pr_state == PrState::NotFound {
-            orphaned.push(session.branch_name.clone());
+            orphaned.push(wt.branch.clone());
         }
     }
 
@@ -542,7 +542,7 @@ fn check_sessionless_worktrees() -> HealthCheck {
 
     // Build set of worktree paths with valid sessions
     let session_paths: std::collections::HashSet<_> =
-        sessions.iter().map(|s| s.worktree_path.clone()).collect();
+        sessions.iter().map(|s| s.path.display().to_string()).collect();
 
     // Find git worktrees without sessions
     let sessionless: Vec<_> = git_worktrees
@@ -595,10 +595,10 @@ fn check_closed_pr_worktrees() -> HealthCheck {
 
     // Find worktrees with closed PRs
     let mut closed_pr_worktrees = Vec::new();
-    for session in &worktrees {
-        let pr_state = get_pr_state(&session.branch_name);
+    for wt in &worktrees {
+        let pr_state = get_pr_state(&wt.branch);
         if pr_state == PrState::Closed {
-            closed_pr_worktrees.push(session.branch_name.clone());
+            closed_pr_worktrees.push(wt.branch.clone());
         }
     }
 
