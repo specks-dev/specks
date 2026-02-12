@@ -86,27 +86,22 @@ fn test_dep_result_json_parsing() {
     assert_eq!(result.depends_on_id, "bd-fake-0");
 }
 
+/// Helper: create a BeadsCli pointing at bd-fake with an isolated state dir
+fn make_test_beads(state_dir: &std::path::Path) -> specks_core::beads::BeadsCli {
+    let mut bd_fake_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    bd_fake_path.pop(); // crates/
+    bd_fake_path.pop(); // workspace root
+    bd_fake_path.push("tests/bin/bd-fake");
+
+    let mut beads = specks_core::beads::BeadsCli::new(bd_fake_path.to_string_lossy().to_string());
+    beads.set_env("SPECKS_BD_STATE", state_dir.to_string_lossy());
+    beads
+}
+
 #[test]
 fn test_bd_fake_create_with_rich_fields() {
-    use specks_core::beads::BeadsCli;
-    use std::env;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
-
-    let temp_dir = TempDir::new().unwrap();
-    unsafe {
-        env::set_var("SPECKS_BD_STATE", temp_dir.path());
-    }
-
-    // Navigate from specks-core/tests to workspace root tests/bin/bd-fake
-    let mut bd_fake_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    bd_fake_path.pop(); // Go up to crates/
-    bd_fake_path.pop(); // Go up to workspace root
-    bd_fake_path.push("tests");
-    bd_fake_path.push("bin");
-    bd_fake_path.push("bd-fake");
-
-    let beads = BeadsCli::new(bd_fake_path.to_string_lossy().to_string());
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let beads = make_test_beads(temp_dir.path());
 
     // Create an issue with rich fields
     let issue = beads
@@ -136,25 +131,8 @@ fn test_bd_fake_create_with_rich_fields() {
 
 #[test]
 fn test_bd_fake_update_rich_fields() {
-    use specks_core::beads::BeadsCli;
-    use std::env;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
-
-    let temp_dir = TempDir::new().unwrap();
-    unsafe {
-        env::set_var("SPECKS_BD_STATE", temp_dir.path());
-    }
-
-    // Navigate from specks-core/tests to workspace root tests/bin/bd-fake
-    let mut bd_fake_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    bd_fake_path.pop(); // Go up to crates/
-    bd_fake_path.pop(); // Go up to workspace root
-    bd_fake_path.push("tests");
-    bd_fake_path.push("bin");
-    bd_fake_path.push("bd-fake");
-
-    let beads = BeadsCli::new(bd_fake_path.to_string_lossy().to_string());
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let beads = make_test_beads(temp_dir.path());
 
     // Create an issue without rich fields
     let issue = beads

@@ -4,6 +4,7 @@
 //! conforming to the Beads JSON Contract.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
@@ -109,12 +110,15 @@ impl std::fmt::Display for BeadStatus {
 pub struct BeadsCli {
     /// Path to the bd binary
     pub bd_path: String,
+    /// Extra environment variables set on every spawned Command
+    env_vars: HashMap<String, String>,
 }
 
 impl Default for BeadsCli {
     fn default() -> Self {
         Self {
             bd_path: "bd".to_string(),
+            env_vars: HashMap::new(),
         }
     }
 }
@@ -122,12 +126,29 @@ impl Default for BeadsCli {
 impl BeadsCli {
     /// Create a new BeadsCli with the specified path
     pub fn new(bd_path: String) -> Self {
-        Self { bd_path }
+        Self {
+            bd_path,
+            env_vars: HashMap::new(),
+        }
+    }
+
+    /// Set an environment variable that will be passed to every bd command
+    pub fn set_env(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.env_vars.insert(key.into(), value.into());
+    }
+
+    /// Build a Command with the bd path and any configured env vars applied
+    fn cmd(&self) -> Command {
+        let mut cmd = Command::new(&self.bd_path);
+        for (k, v) in &self.env_vars {
+            cmd.env(k, v);
+        }
+        cmd
     }
 
     /// Check if beads CLI is installed
     pub fn is_installed(&self) -> bool {
-        Command::new(&self.bd_path)
+        self.cmd()
             .arg("--version")
             .output()
             .map(|o| o.status.success())
@@ -152,7 +173,7 @@ impl BeadsCli {
         acceptance: Option<&str>,
         notes: Option<&str>,
     ) -> Result<Issue, SpecksError> {
-        let mut cmd = Command::new(&self.bd_path);
+        let mut cmd = self.cmd();
         cmd.arg("create").arg("--json").arg(title);
 
         if let Some(desc) = description {
@@ -202,7 +223,8 @@ impl BeadsCli {
     /// Show a bead by ID
     /// Returns IssueDetails, handling both array and object responses
     pub fn show(&self, id: &str) -> Result<IssueDetails, SpecksError> {
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .arg("show")
             .arg(id)
             .arg("--json")
@@ -246,7 +268,8 @@ impl BeadsCli {
 
     /// Update the description field of a bead
     pub fn update_description(&self, id: &str, content: &str) -> Result<(), SpecksError> {
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .arg("update")
             .arg(id)
             .arg("--description")
@@ -273,7 +296,8 @@ impl BeadsCli {
 
     /// Update the design field of a bead
     pub fn update_design(&self, id: &str, content: &str) -> Result<(), SpecksError> {
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .arg("update")
             .arg(id)
             .arg("--design")
@@ -300,7 +324,8 @@ impl BeadsCli {
 
     /// Update the acceptance_criteria field of a bead
     pub fn update_acceptance(&self, id: &str, content: &str) -> Result<(), SpecksError> {
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .arg("update")
             .arg(id)
             .arg("--acceptance")
@@ -327,7 +352,8 @@ impl BeadsCli {
 
     /// Add a dependency edge
     pub fn dep_add(&self, from_id: &str, to_id: &str) -> Result<DepResult, SpecksError> {
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .arg("dep")
             .arg("add")
             .arg(from_id)
@@ -358,7 +384,8 @@ impl BeadsCli {
 
     /// Remove a dependency edge
     pub fn dep_remove(&self, from_id: &str, to_id: &str) -> Result<DepResult, SpecksError> {
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .arg("dep")
             .arg("remove")
             .arg(from_id)
@@ -389,7 +416,8 @@ impl BeadsCli {
 
     /// List dependencies for a bead
     pub fn dep_list(&self, id: &str) -> Result<Vec<IssueWithDependencyMetadata>, SpecksError> {
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .arg("dep")
             .arg("list")
             .arg(id)
@@ -419,7 +447,7 @@ impl BeadsCli {
 
     /// Close a bead
     pub fn close(&self, id: &str, reason: Option<&str>) -> Result<(), SpecksError> {
-        let mut cmd = Command::new(&self.bd_path);
+        let mut cmd = self.cmd();
         cmd.arg("close").arg(id);
 
         if let Some(r) = reason {
@@ -447,16 +475,13 @@ impl BeadsCli {
 
     /// Sync beads state
     pub fn sync(&self) -> Result<(), SpecksError> {
-        let output = Command::new(&self.bd_path)
-            .arg("sync")
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    SpecksError::BeadsNotInstalled
-                } else {
-                    SpecksError::BeadsCommand(format!("failed to run bd sync: {}", e))
-                }
-            })?;
+        let output = self.cmd().arg("sync").output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::BeadsNotInstalled
+            } else {
+                SpecksError::BeadsCommand(format!("failed to run bd sync: {}", e))
+            }
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -483,7 +508,8 @@ impl BeadsCli {
         }
 
         let ids_arg = ids.join(",");
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .args(["list", "--id", &ids_arg, "--json", "--limit", "0", "--all"])
             .output()
             .map_err(|e| {
@@ -525,7 +551,7 @@ impl BeadsCli {
         acceptance: Option<&str>,
         notes: Option<&str>,
     ) -> Result<Issue, SpecksError> {
-        let mut cmd = Command::new(&self.bd_path);
+        let mut cmd = self.cmd();
         cmd.arg("create").arg("--json").arg(title);
 
         if let Some(desc) = description {
@@ -578,7 +604,8 @@ impl BeadsCli {
     /// Get all children of a parent bead in a single subprocess call.
     /// Uses: `bd children <id> --json`
     pub fn children(&self, parent_id: &str) -> Result<Vec<Issue>, SpecksError> {
-        let output = Command::new(&self.bd_path)
+        let output = self
+            .cmd()
             .args(["children", parent_id, "--json"])
             .output()
             .map_err(|e| {
@@ -606,7 +633,7 @@ impl BeadsCli {
     /// Get all ready beads (open beads with all dependencies complete).
     /// Uses: `bd ready --json` (all ready beads) or `bd ready <parent_id> --json` (ready children of parent).
     pub fn ready(&self, parent_id: Option<&str>) -> Result<Vec<Issue>, SpecksError> {
-        let mut cmd = Command::new(&self.bd_path);
+        let mut cmd = self.cmd();
         cmd.arg("ready");
 
         if let Some(parent) = parent_id {
