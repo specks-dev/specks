@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-1
+date: 2025-02-12T15:09:04Z
+bead: specks-bvq.2
+---
+
+## #step-1: Move artifact directory into worktree for automatic cleanup
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
 step: #step-0
 date: 2025-02-12T15:01:43Z
 bead: specks-bvq.1

@@ -321,17 +321,16 @@ pub fn sessions_dir(repo_root: &Path) -> std::path::PathBuf {
     repo_root.join(".specks-worktrees").join(".sessions")
 }
 
-/// Get the artifacts directory path for a session
+/// Get the artifacts directory path inside a worktree
 ///
-/// Returns the path to the artifacts directory for a given session ID:
-/// `<repo_root>/.specks-worktrees/.artifacts/<session-id>/`
+/// Returns the path to the artifacts directory inside the worktree:
+/// `<worktree_path>/.specks/artifacts/`
 ///
-/// This directory stores session-specific artifacts like log files and strategy JSONs.
-pub fn artifacts_dir(repo_root: &Path, session_id: &str) -> std::path::PathBuf {
-    repo_root
-        .join(".specks-worktrees")
-        .join(".artifacts")
-        .join(session_id)
+/// This directory stores step-specific artifacts like log files and strategy JSONs.
+/// Artifacts are now stored inside the worktree so they're automatically cleaned up
+/// when the worktree is removed.
+pub fn artifacts_dir(worktree_path: &Path) -> std::path::PathBuf {
+    worktree_path.join(".specks/artifacts")
 }
 
 /// Get the full path to a session file in external storage
@@ -342,12 +341,14 @@ pub fn session_file_path(repo_root: &Path, session_id: &str) -> std::path::PathB
     sessions_dir(repo_root).join(format!("{}.json", session_id))
 }
 
-/// Delete session and artifacts for a given session ID
+/// Delete session file for a given session ID
 ///
-/// Removes both the session file at `.specks-worktrees/.sessions/<session-id>.json`
-/// and the entire artifacts directory at `.specks-worktrees/.artifacts/<session-id>/`.
+/// Removes the session file at `.specks-worktrees/.sessions/<session-id>.json`.
 ///
-/// This function gracefully handles missing files and directories - if they don't exist,
+/// Note: This function no longer removes artifacts since they're now stored inside the worktree
+/// at `<worktree>/.specks/artifacts/` and are automatically cleaned up when the worktree is removed.
+///
+/// This function gracefully handles missing files - if the session file doesn't exist,
 /// the operation succeeds without error. This is intentional since the goal is to ensure
 /// the session data is removed, whether it existed or not.
 ///
@@ -358,7 +359,7 @@ pub fn session_file_path(repo_root: &Path, session_id: &str) -> std::path::PathB
 ///
 /// # Returns
 ///
-/// * `Ok(())` if deletion succeeds or files don't exist
+/// * `Ok(())` if deletion succeeds or file doesn't exist
 /// * `Err(SpecksError)` if deletion fails due to permission or I/O errors
 ///
 /// # Examples
@@ -377,11 +378,8 @@ pub fn delete_session(session_id: &str, repo_root: &Path) -> Result<(), SpecksEr
         fs::remove_file(&session_path)?;
     }
 
-    // Delete artifacts directory (recursively)
-    let artifacts_path = artifacts_dir(repo_root, session_id);
-    if artifacts_path.exists() {
-        fs::remove_dir_all(&artifacts_path)?;
-    }
+    // Note: Artifacts are no longer deleted here since they live inside the worktree
+    // at {worktree}/.specks/artifacts/ and are removed when the worktree is removed.
 
     Ok(())
 }
