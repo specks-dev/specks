@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-0
+date: 2025-02-12T23:54:05Z
+bead: specks-hfq.1
+---
+
+## #step-0: Add batch detailed children API and close_reason parser
+
+**Files changed:**
+- .specks/specks-10.md
+
+---
+
+---
 step: #step-3-summary
 date: 2025-02-12T23:06:52Z
 bead: specks-99w.5
