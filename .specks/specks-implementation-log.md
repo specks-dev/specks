@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-6
+date: 2025-02-12T21:43:32Z
+bead: specks-t9v.7
+---
+
+## #step-6: Replace sessionless worktrees doctor check with orphaned sessions check
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
 step: #step-5
 date: 2025-02-12T21:38:54Z
 bead: specks-t9v.6

@@ -96,7 +96,7 @@ pub fn run_doctor(json_output: bool, quiet: bool) -> Result<i32, String> {
         check_worktrees(),
         check_stale_branches(),
         check_orphaned_worktrees(),
-        check_sessionless_worktrees(),
+        check_orphaned_sessions(),
         check_closed_pr_worktrees(),
         check_broken_refs(),
     ];
@@ -485,93 +485,63 @@ fn check_orphaned_worktrees() -> HealthCheck {
 }
 
 /// Check for sessionless worktrees (directories in git worktree list without parseable sessions)
-fn check_sessionless_worktrees() -> HealthCheck {
-    let repo_root = Path::new(".");
+/// Check for orphaned .sessions/ directory
+///
+/// After session elimination, the `.specks-worktrees/.sessions/` directory
+/// should not exist. If it does, it's orphaned and should be manually removed.
+fn check_orphaned_sessions() -> HealthCheck {
+    let sessions_dir = Path::new(".specks-worktrees/.sessions");
 
-    // Run git worktree list --porcelain to get all worktrees
-    let output = match Command::new("git")
-        .args(["worktree", "list", "--porcelain"])
-        .current_dir(repo_root)
-        .output()
-    {
-        Ok(o) => o,
-        Err(e) => {
-            return HealthCheck {
-                name: "sessionless_worktrees".to_string(),
-                status: "fail".to_string(),
-                message: format!("Failed to run git worktree list: {}", e),
-                details: None,
-            };
-        }
-    };
-
-    if !output.status.success() {
+    if !sessions_dir.exists() {
         return HealthCheck {
-            name: "sessionless_worktrees".to_string(),
-            status: "fail".to_string(),
-            message: "git worktree list command failed".to_string(),
+            name: "orphaned_sessions".to_string(),
+            status: "pass".to_string(),
+            message: "No orphaned session directory found".to_string(),
             details: None,
         };
     }
 
-    // Parse git worktree list output
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut git_worktrees = Vec::new();
-    for line in stdout.lines() {
-        if line.starts_with("worktree ") {
-            let path = line.strip_prefix("worktree ").unwrap_or("");
-            // Only include paths in .specks-worktrees/
-            if path.contains(".specks-worktrees/") {
-                git_worktrees.push(path.to_string());
-            }
-        }
-    }
-
-    // Get list of worktrees with parseable sessions
-    let sessions = match specks_core::list_worktrees(repo_root) {
-        Ok(s) => s,
+    // Directory exists - check if it has files
+    let entries: Vec<_> = match std::fs::read_dir(sessions_dir) {
+        Ok(e) => e.filter_map(|entry| entry.ok()).collect(),
         Err(e) => {
             return HealthCheck {
-                name: "sessionless_worktrees".to_string(),
+                name: "orphaned_sessions".to_string(),
                 status: "fail".to_string(),
-                message: format!("Failed to list worktree sessions: {}", e),
+                message: format!("Failed to read .sessions directory: {}", e),
                 details: None,
             };
         }
     };
 
-    // Build set of worktree paths with valid sessions
-    let session_paths: std::collections::HashSet<_> =
-        sessions.iter().map(|s| s.path.display().to_string()).collect();
-
-    // Find git worktrees without sessions
-    let sessionless: Vec<_> = git_worktrees
-        .iter()
-        .filter(|path| !session_paths.contains(*path))
-        .cloned()
-        .collect();
-
-    let sessionless_count = sessionless.len();
-
-    if sessionless_count == 0 {
+    if entries.is_empty() {
+        // Empty directory - warn with cleanup suggestion
         HealthCheck {
-            name: "sessionless_worktrees".to_string(),
-            status: "pass".to_string(),
-            message: "All worktrees have parseable sessions".to_string(),
-            details: None,
+            name: "orphaned_sessions".to_string(),
+            status: "warn".to_string(),
+            message: "Orphaned .sessions/ directory found (empty)".to_string(),
+            details: Some(serde_json::json!({
+                "recommendation": "Remove empty directory: rm -rf .specks-worktrees/.sessions"
+            })),
         }
     } else {
-        let details = serde_json::json!({
-            "sessionless_worktrees": sessionless
-        });
+        // Contains files - warn with file list
+        let session_files: Vec<String> = entries
+            .iter()
+            .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
+            .collect();
+
         HealthCheck {
-            name: "sessionless_worktrees".to_string(),
-            status: "fail".to_string(),
+            name: "orphaned_sessions".to_string(),
+            status: "warn".to_string(),
             message: format!(
-                "{} worktree(s) found without parseable sessions",
-                sessionless_count
+                "Orphaned .sessions/ directory found with {} file(s)",
+                session_files.len()
             ),
-            details: Some(details),
+            details: Some(serde_json::json!({
+                "session_files": session_files,
+                "recommendation": "Session files are no longer used. Review and remove: rm -rf .specks-worktrees/.sessions"
+            })),
         }
     }
 }
