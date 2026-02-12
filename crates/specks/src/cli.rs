@@ -173,9 +173,9 @@ pub enum Commands {
 
     /// Commit a single implementation step
     ///
-    /// Atomically performs log rotation, prepend, git commit, bead close, and session update.
+    /// Atomically performs log rotation, prepend, git commit, and bead close.
     #[command(
-        long_about = "Commit a single implementation step.\n\nAtomic sequence:\n  1. Rotate log if over threshold\n  2. Prepend log entry\n  3. Stage files\n  4. Git commit\n  5. Close bead\n  6. Update session\n\nAll file paths are relative to worktree root.\nSession path must be absolute.\n\nPartial success: If commit succeeds but bead close fails, exits 0 with bead_close_failed=true."
+        long_about = "Commit a single implementation step.\n\nAtomic sequence:\n  1. Rotate log if over threshold\n  2. Prepend log entry\n  3. Stage files\n  4. Git commit\n  5. Close bead\n\nAll file paths are relative to worktree root.\n\nPartial success: If commit succeeds but bead close fails, exits 0 with bead_close_failed=true."
     )]
     StepCommit {
         /// Absolute path to the worktree directory
@@ -205,10 +205,6 @@ pub enum Commands {
         /// One-line summary for log entry
         #[arg(long, value_name = "TEXT")]
         summary: String,
-
-        /// Absolute path to session JSON file
-        #[arg(long, value_name = "PATH")]
-        session: String,
 
         /// Reason for closing the bead (optional)
         #[arg(long, value_name = "TEXT")]
@@ -782,8 +778,6 @@ mod tests {
             "bd-123",
             "--summary",
             "Completed step 0",
-            "--session",
-            "/path/to/session.json",
         ])
         .unwrap();
 
@@ -796,7 +790,6 @@ mod tests {
                 files,
                 bead,
                 summary,
-                session,
                 close_reason,
             }) => {
                 assert_eq!(worktree, "/path/to/worktree");
@@ -806,7 +799,6 @@ mod tests {
                 assert_eq!(files, vec!["src/a.rs", "src/b.rs"]);
                 assert_eq!(bead, "bd-123");
                 assert_eq!(summary, "Completed step 0");
-                assert_eq!(session, "/path/to/session.json");
                 assert!(close_reason.is_none());
             }
             _ => panic!("Expected StepCommit command"),
@@ -832,8 +824,6 @@ mod tests {
             "bd-456",
             "--summary",
             "Done",
-            "--session",
-            "/path/session.json",
             "--close-reason",
             "Step completed successfully",
         ])

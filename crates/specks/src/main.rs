@@ -151,7 +151,6 @@ fn main() -> ExitCode {
             files,
             bead,
             summary,
-            session,
             close_reason,
         }) => commands::run_step_commit(
             worktree,
@@ -161,7 +160,6 @@ fn main() -> ExitCode {
             files,
             bead,
             summary,
-            session,
             close_reason,
             cli.json,
             cli.quiet,
