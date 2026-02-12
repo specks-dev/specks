@@ -671,8 +671,8 @@ This triggers P003.
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Parse JSON
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
 
     // Should have diagnostics array in data
     assert!(
@@ -759,14 +759,76 @@ This triggers P001.
         .expect("failed to run specks validate --level lenient");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
 
     // Diagnostics should be empty in lenient mode
     let diagnostics = json["data"]["diagnostics"].as_array().unwrap();
     assert!(
         diagnostics.is_empty(),
         "Lenient mode should suppress diagnostics. JSON:\n{}",
+        serde_json::to_string_pretty(&json).unwrap()
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn test_validate_invalid_level_rejected() {
+    let temp = setup_test_project();
+
+    // Run with an invalid --level value
+    let output = Command::new(specks_binary())
+        .arg("validate")
+        .arg("--level")
+        .arg("bogus")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks validate --level bogus");
+
+    // Should fail with exit code 2
+    assert!(
+        !output.status.success(),
+        "Invalid --level value should cause failure"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid validation level") || stderr.contains("bogus"),
+        "Error should mention the invalid level. stderr:\n{}",
+        stderr
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn test_validate_invalid_level_rejected_json() {
+    let temp = setup_test_project();
+
+    // Run with an invalid --level value in JSON mode
+    let output = Command::new(specks_binary())
+        .arg("validate")
+        .arg("--level")
+        .arg("foo")
+        .arg("--json")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks validate --level foo --json");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
+
+    assert_eq!(
+        json["status"].as_str().unwrap(),
+        "error",
+        "JSON response should have error status"
+    );
+    assert!(
+        json["issues"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid validation level"),
+        "JSON error should mention invalid level. JSON:\n{}",
         serde_json::to_string_pretty(&json).unwrap()
     );
 }

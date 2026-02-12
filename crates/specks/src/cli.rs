@@ -353,7 +353,11 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "validate"]).unwrap();
 
         match cli.command {
-            Some(Commands::Validate { file, strict, level }) => {
+            Some(Commands::Validate {
+                file,
+                strict,
+                level,
+            }) => {
                 assert!(file.is_none());
                 assert!(!strict);
                 assert!(level.is_none());
@@ -367,7 +371,11 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "validate", "specks-1.md"]).unwrap();
 
         match cli.command {
-            Some(Commands::Validate { file, strict, level }) => {
+            Some(Commands::Validate {
+                file,
+                strict,
+                level,
+            }) => {
                 assert_eq!(file, Some("specks-1.md".to_string()));
                 assert!(!strict);
                 assert!(level.is_none());
@@ -381,7 +389,11 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "validate", "--level", "strict"]).unwrap();
 
         match cli.command {
-            Some(Commands::Validate { file, strict, level }) => {
+            Some(Commands::Validate {
+                file,
+                strict,
+                level,
+            }) => {
                 assert!(file.is_none());
                 assert!(!strict);
                 assert_eq!(level, Some("strict".to_string()));
@@ -395,7 +407,11 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "validate", "--level", "lenient"]).unwrap();
 
         match cli.command {
-            Some(Commands::Validate { file, strict, level }) => {
+            Some(Commands::Validate {
+                file,
+                strict,
+                level,
+            }) => {
                 assert!(file.is_none());
                 assert!(!strict);
                 assert_eq!(level, Some("lenient".to_string()));
@@ -409,7 +425,11 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "validate", "--strict"]).unwrap();
 
         match cli.command {
-            Some(Commands::Validate { file, strict, level }) => {
+            Some(Commands::Validate {
+                file,
+                strict,
+                level,
+            }) => {
                 assert!(file.is_none());
                 assert!(strict);
                 assert!(level.is_none());

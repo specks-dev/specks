@@ -32,8 +32,14 @@ pub fn run_validate(
                     line: None,
                     anchor: None,
                 }];
-                let response: JsonResponse<ValidateData> =
-                    JsonResponse::error("validate", ValidateData { files: vec![], ..Default::default() }, issues);
+                let response: JsonResponse<ValidateData> = JsonResponse::error(
+                    "validate",
+                    ValidateData {
+                        files: vec![],
+                        ..Default::default()
+                    },
+                    issues,
+                );
                 println!("{}", serde_json::to_string_pretty(&response).unwrap());
             } else {
                 eprintln!("error: {}", message);
@@ -46,8 +52,33 @@ pub fn run_validate(
     let config = Config::load_from_project(&project_root).unwrap_or_default();
 
     // Determine validation level with precedence: --level > --strict > config > default
-    let level = if let Some(level_str) = level_arg {
-        ValidationLevel::parse(&level_str)
+    let level = if let Some(ref level_str) = level_arg {
+        match level_str.to_lowercase().as_str() {
+            "lenient" | "normal" | "strict" => {}
+            _ => {
+                let message = format!(
+                    "invalid validation level '{}': must be lenient, normal, or strict",
+                    level_str
+                );
+                if json_output {
+                    let issues = vec![JsonIssue {
+                        code: "E002".to_string(),
+                        severity: "error".to_string(),
+                        message: message.clone(),
+                        file: None,
+                        line: None,
+                        anchor: None,
+                    }];
+                    let response: JsonResponse<ValidateData> =
+                        JsonResponse::error("validate", ValidateData::default(), issues);
+                    println!("{}", serde_json::to_string_pretty(&response).unwrap());
+                } else {
+                    eprintln!("error: {}", message);
+                }
+                return Ok(2);
+            }
+        }
+        ValidationLevel::parse(level_str)
     } else if strict {
         ValidationLevel::Strict
     } else {
@@ -75,8 +106,14 @@ pub fn run_validate(
                         line: None,
                         anchor: None,
                     }];
-                    let response: JsonResponse<ValidateData> =
-                        JsonResponse::error("validate", ValidateData { files: vec![], ..Default::default() }, issues);
+                    let response: JsonResponse<ValidateData> = JsonResponse::error(
+                        "validate",
+                        ValidateData {
+                            files: vec![],
+                            ..Default::default()
+                        },
+                        issues,
+                    );
                     println!("{}", serde_json::to_string_pretty(&response).unwrap());
                 } else {
                     eprintln!("error: {}", message);
@@ -100,8 +137,14 @@ pub fn run_validate(
                             line: None,
                             anchor: None,
                         }];
-                        let response: JsonResponse<ValidateData> =
-                            JsonResponse::error("validate", ValidateData { files: vec![], ..Default::default() }, issues);
+                        let response: JsonResponse<ValidateData> = JsonResponse::error(
+                            "validate",
+                            ValidateData {
+                                files: vec![],
+                                ..Default::default()
+                            },
+                            issues,
+                        );
                         println!("{}", serde_json::to_string_pretty(&response).unwrap());
                     } else {
                         eprintln!("error: {}", message);
@@ -114,7 +157,13 @@ pub fn run_validate(
 
     if files_to_validate.is_empty() {
         if json_output {
-            let response = JsonResponse::ok("validate", ValidateData { files: vec![], ..Default::default() });
+            let response = JsonResponse::ok(
+                "validate",
+                ValidateData {
+                    files: vec![],
+                    ..Default::default()
+                },
+            );
             println!("{}", serde_json::to_string_pretty(&response).unwrap());
         } else if !quiet {
             println!("No speck files found to validate");
@@ -229,9 +278,23 @@ fn output_json(project_root: &Path, results: &[(PathBuf, ValidationResult)], has
     }
 
     let response = if has_errors {
-        JsonResponse::error("validate", ValidateData { files, diagnostics: all_diagnostics }, all_issues)
+        JsonResponse::error(
+            "validate",
+            ValidateData {
+                files,
+                diagnostics: all_diagnostics,
+            },
+            all_issues,
+        )
     } else {
-        JsonResponse::ok_with_issues("validate", ValidateData { files, diagnostics: all_diagnostics }, all_issues)
+        JsonResponse::ok_with_issues(
+            "validate",
+            ValidateData {
+                files,
+                diagnostics: all_diagnostics,
+            },
+            all_issues,
+        )
     };
 
     println!("{}", serde_json::to_string_pretty(&response).unwrap());
@@ -245,18 +308,41 @@ fn output_text(project_root: &Path, results: &[(PathBuf, ValidationResult)]) {
 
         let error_count = result.error_count();
         let warning_count = result.warning_count();
+        let diagnostic_count = result.diagnostic_count();
 
-        if result.valid && warning_count == 0 {
+        if result.valid && warning_count == 0 && diagnostic_count == 0 {
             println!("{}: valid", name);
-        } else {
+        } else if diagnostic_count > 0 && error_count == 0 && warning_count == 0 {
             println!(
-                "{}: {} error{}, {} warning{}",
+                "{}: {} diagnostic{}",
                 name,
-                error_count,
-                if error_count == 1 { "" } else { "s" },
-                warning_count,
-                if warning_count == 1 { "" } else { "s" }
+                diagnostic_count,
+                if diagnostic_count == 1 { "" } else { "s" }
             );
+        } else {
+            let mut parts = Vec::new();
+            if error_count > 0 {
+                parts.push(format!(
+                    "{} error{}",
+                    error_count,
+                    if error_count == 1 { "" } else { "s" }
+                ));
+            }
+            if warning_count > 0 {
+                parts.push(format!(
+                    "{} warning{}",
+                    warning_count,
+                    if warning_count == 1 { "" } else { "s" }
+                ));
+            }
+            if diagnostic_count > 0 {
+                parts.push(format!(
+                    "{} diagnostic{}",
+                    diagnostic_count,
+                    if diagnostic_count == 1 { "" } else { "s" }
+                ));
+            }
+            println!("{}: {}", name, parts.join(", "));
         }
 
         // Group issues by severity

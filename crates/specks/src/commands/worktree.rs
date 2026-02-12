@@ -360,7 +360,7 @@ pub fn run_worktree_create_with_root(
     // Check if speck file exists
     if !repo_root.join(&speck_path).exists() {
         if json_output {
-            eprintln!(
+            println!(
                 r#"{{"error": "Speck file not found: {}"}}"#,
                 speck_path.display()
             );
@@ -381,10 +381,12 @@ pub fn run_worktree_create_with_root(
             Ok(s) => s,
             Err(e) => {
                 if json_output {
-                    eprintln!(r#"{{"error": "Parse error: {}"}}"#, e);
+                    println!(r#"{{"error": "Parse error: {}"}}"#, e);
                 } else if !quiet {
                     eprintln!("error: Parse error: {}", e);
-                    eprintln!("\nSpeck failed to parse. Fix the parse errors before creating worktree.");
+                    eprintln!(
+                        "\nSpeck failed to parse. Fix the parse errors before creating worktree."
+                    );
                 }
                 return Ok(8); // Exit code 8: Validation failed
             }
@@ -396,7 +398,8 @@ pub fn run_worktree_create_with_root(
             beads_enabled: false,
             validate_bead_ids: false,
         };
-        let validation_result = specks_core::validate_speck_with_config(&parsed_speck, &validation_config);
+        let validation_result =
+            specks_core::validate_speck_with_config(&parsed_speck, &validation_config);
 
         // Check for validation errors or diagnostics
         if !validation_result.valid || !validation_result.diagnostics.is_empty() {
@@ -404,11 +407,15 @@ pub fn run_worktree_create_with_root(
                 // Format JSON error response with validation details
                 use crate::output::{JsonDiagnostic, JsonIssue};
 
-                let issues: Vec<JsonIssue> = validation_result.issues.iter()
+                let issues: Vec<JsonIssue> = validation_result
+                    .issues
+                    .iter()
                     .map(|i| JsonIssue::from(i).with_file(&speck))
                     .collect();
 
-                let diagnostics: Vec<JsonDiagnostic> = validation_result.diagnostics.iter()
+                let diagnostics: Vec<JsonDiagnostic> = validation_result
+                    .diagnostics
+                    .iter()
                     .map(|d| JsonDiagnostic::from(d).with_file(&speck))
                     .collect();
 
@@ -417,7 +424,7 @@ pub fn run_worktree_create_with_root(
                     "issues": issues,
                     "diagnostics": diagnostics
                 });
-                eprintln!("{}", serde_json::to_string_pretty(&error_data).unwrap());
+                println!("{}", serde_json::to_string_pretty(&error_data).unwrap());
             } else if !quiet {
                 eprintln!("error: Speck failed validation");
                 eprintln!("\nValidation issues:");

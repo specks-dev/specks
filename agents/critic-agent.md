@@ -77,11 +77,9 @@ Before returning your response, you MUST validate that your JSON output conforms
 {
   "skeleton_compliant": false,
   "skeleton_check": {
-    "has_required_sections": false,
-    "has_explicit_anchors": false,
-    "steps_properly_formatted": false,
-    "references_valid": false,
-    "decisions_formatted": false,
+    "validation_passed": false,
+    "error_count": 0,
+    "diagnostic_count": 0,
     "violations": ["JSON validation failed: <specific error>"]
   },
   "areas": {
@@ -108,11 +106,9 @@ Return structured JSON:
 {
   "skeleton_compliant": true,
   "skeleton_check": {
-    "has_required_sections": true,
-    "has_explicit_anchors": true,
-    "steps_properly_formatted": true,
-    "references_valid": true,
-    "decisions_formatted": true,
+    "validation_passed": true,
+    "error_count": 0,
+    "diagnostic_count": 0,
     "violations": []
   },
   "areas": {
@@ -133,10 +129,12 @@ Return structured JSON:
 
 | Field | Description |
 |-------|-------------|
-| `skeleton_compliant` | True only if ALL skeleton checks pass |
-| `skeleton_check` | Detailed skeleton compliance results |
-| `skeleton_check.violations` | List of specific skeleton violations |
-| `areas` | Assessment of each quality area |
+| `skeleton_compliant` | True only if `specks validate --level strict` reports no errors and no diagnostics |
+| `skeleton_check.validation_passed` | True if `specks validate` returned `valid: true` with empty diagnostics |
+| `skeleton_check.error_count` | Number of validation errors from `specks validate` |
+| `skeleton_check.diagnostic_count` | Number of P-code diagnostics from `specks validate` |
+| `skeleton_check.violations` | List of specific error/diagnostic messages from validation output |
+| `areas` | Assessment of each quality area (only evaluated if skeleton passes) |
 | `issues` | All issues found, sorted by priority |
 | `recommendation` | Final recommendation |
 
@@ -226,11 +224,9 @@ else:
 {
   "skeleton_compliant": true,
   "skeleton_check": {
-    "has_required_sections": true,
-    "has_explicit_anchors": true,
-    "steps_properly_formatted": true,
-    "references_valid": true,
-    "decisions_formatted": true,
+    "validation_passed": true,
+    "error_count": 0,
+    "diagnostic_count": 0,
     "violations": []
   },
   "areas": {
@@ -254,14 +250,12 @@ else:
 {
   "skeleton_compliant": false,
   "skeleton_check": {
-    "has_required_sections": true,
-    "has_explicit_anchors": false,
-    "steps_properly_formatted": true,
-    "references_valid": false,
-    "decisions_formatted": true,
+    "validation_passed": false,
+    "error_count": 1,
+    "diagnostic_count": 1,
     "violations": [
-      "Step 1 heading missing explicit anchor",
-      "Step 2 References line cites [D03] which does not exist"
+      "error[W012]: Decision [D03] cited in step references but not defined",
+      "warning[P005]: line 15: Invalid anchor format: {#Step-1}"
     ]
   },
   "areas": {
@@ -273,12 +267,7 @@ else:
     {
       "priority": "P0",
       "category": "skeleton",
-      "description": "Missing explicit anchors on step headings"
-    },
-    {
-      "priority": "P0",
-      "category": "skeleton",
-      "description": "Invalid reference to non-existent decision [D03]"
+      "description": "specks validate --level strict reported 1 error, 1 diagnostic"
     }
   ],
   "recommendation": "REJECT"
@@ -293,11 +282,9 @@ If speck or skeleton cannot be read:
 {
   "skeleton_compliant": false,
   "skeleton_check": {
-    "has_required_sections": false,
-    "has_explicit_anchors": false,
-    "steps_properly_formatted": false,
-    "references_valid": false,
-    "decisions_formatted": false,
+    "validation_passed": false,
+    "error_count": 0,
+    "diagnostic_count": 0,
     "violations": ["Unable to read speck: <reason>"]
   },
   "areas": {

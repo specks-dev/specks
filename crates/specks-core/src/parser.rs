@@ -171,7 +171,10 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                         pattern_name
                     ),
                     line: line_number,
-                    suggestion: Some("Move this content outside the code block or escape it as an example".to_string()),
+                    suggestion: Some(
+                        "Move this content outside the code block or escape it as an example"
+                            .to_string(),
+                    ),
                 });
             }
 
@@ -197,6 +200,31 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                 speck.anchors.push(Anchor {
                     name: anchor_name,
                     line: line_number,
+                });
+            }
+        }
+
+        // P005: Invalid anchor format (runs unconditionally before strict pattern matching,
+        // because strict matches use `continue` and would skip this check. Invalid anchors
+        // on step/decision/phase headers need to be flagged since the ANCHOR regex above
+        // won't collect them and no other diagnostic would explain why.)
+        for cap in patterns::INVALID_ANCHOR.captures_iter(line) {
+            let anchor_content = cap.get(1).unwrap().as_str();
+            if !patterns::VALID_ANCHOR.is_match(anchor_content) {
+                let suggestion_anchor = anchor_content
+                    .to_lowercase()
+                    .replace(['_', ' '], "-")
+                    .trim_start_matches('-')
+                    .to_string();
+
+                speck.diagnostics.push(crate::types::ParseDiagnostic {
+                    code: "P005".to_string(),
+                    message: format!("Invalid anchor format: {{#{}}}", anchor_content),
+                    line: line_number,
+                    suggestion: Some(format!(
+                        "Use kebab-case: {{#{}}} (lowercase, hyphens only, must start with letter or digit)",
+                        suggestion_anchor
+                    )),
                 });
             }
         }
@@ -246,9 +274,9 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                         code: "P004".to_string(),
                         message: format!("Unrecognized metadata field: {}", field),
                         line: line_number,
-                        suggestion: Some(format!(
-                            "Known fields: Owner, Status, Target branch, Tracking issue/PR, Last updated, Beads Root"
-                        )),
+                        suggestion: Some(
+                            "Known fields: Owner, Status, Target branch, Tracking issue/PR, Last updated, Beads Root".to_string()
+                        ),
                     });
                 }
 
@@ -571,32 +599,11 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                     code: "P007".to_string(),
                     message: "Commit line does not match strict format".to_string(),
                     line: line_number,
-                    suggestion: Some("Use format: **Commit:** `message` (bold, backtick-wrapped message)".to_string()),
+                    suggestion: Some(
+                        "Use format: **Commit:** `message` (bold, backtick-wrapped message)"
+                            .to_string(),
+                    ),
                 });
-            }
-
-            // P005: Invalid anchor format
-            for cap in patterns::INVALID_ANCHOR.captures_iter(line) {
-                let anchor_content = cap.get(1).unwrap().as_str();
-                if !patterns::VALID_ANCHOR.is_match(anchor_content) {
-                    // Generate kebab-case suggestion
-                    let suggestion_anchor = anchor_content
-                        .to_lowercase()
-                        .replace('_', "-")
-                        .replace(' ', "-")
-                        .trim_start_matches('-')
-                        .to_string();
-
-                    speck.diagnostics.push(crate::types::ParseDiagnostic {
-                        code: "P005".to_string(),
-                        message: format!("Invalid anchor format: {{#{}}}", anchor_content),
-                        line: line_number,
-                        suggestion: Some(format!(
-                            "Use kebab-case: {{#{}}} (lowercase, hyphens only, must start with letter or digit)",
-                            suggestion_anchor
-                        )),
-                    });
-                }
             }
         }
 
@@ -1217,10 +1224,7 @@ Example step header:
         assert_eq!(speck.diagnostics.len(), 1);
         assert_eq!(speck.diagnostics[0].code, "P006");
         assert_eq!(speck.diagnostics[0].line, 14);
-        assert!(speck
-            .diagnostics[0]
-            .message
-            .contains("step header"));
+        assert!(speck.diagnostics[0].message.contains("step header"));
     }
 
     #[test]
@@ -1494,11 +1498,13 @@ This is content.
         assert_eq!(speck.diagnostics.len(), 1);
         assert_eq!(speck.diagnostics[0].code, "P004");
         assert!(speck.diagnostics[0].message.contains("Author"));
-        assert!(speck.diagnostics[0]
-            .suggestion
-            .as_ref()
-            .unwrap()
-            .contains("Owner"));
+        assert!(
+            speck.diagnostics[0]
+                .suggestion
+                .as_ref()
+                .unwrap()
+                .contains("Owner")
+        );
     }
 
     #[test]
@@ -1521,11 +1527,13 @@ This is content.
         assert_eq!(speck.diagnostics.len(), 1);
         assert_eq!(speck.diagnostics[0].code, "P005");
         assert!(speck.diagnostics[0].message.contains("MyAnchor"));
-        assert!(speck.diagnostics[0]
-            .suggestion
-            .as_ref()
-            .unwrap()
-            .contains("myanchor"));
+        assert!(
+            speck.diagnostics[0]
+                .suggestion
+                .as_ref()
+                .unwrap()
+                .contains("myanchor")
+        );
     }
 
     #[test]
@@ -1548,11 +1556,13 @@ This is content.
         assert_eq!(speck.diagnostics.len(), 1);
         assert_eq!(speck.diagnostics[0].code, "P005");
         assert!(speck.diagnostics[0].message.contains("my_anchor"));
-        assert!(speck.diagnostics[0]
-            .suggestion
-            .as_ref()
-            .unwrap()
-            .contains("my-anchor"));
+        assert!(
+            speck.diagnostics[0]
+                .suggestion
+                .as_ref()
+                .unwrap()
+                .contains("my-anchor")
+        );
     }
 
     #[test]
@@ -1597,11 +1607,13 @@ This is content.
         assert_eq!(speck.diagnostics.len(), 1);
         assert_eq!(speck.diagnostics[0].code, "P005");
         assert!(speck.diagnostics[0].message.contains("-leading-hyphen"));
-        assert!(speck.diagnostics[0]
-            .suggestion
-            .as_ref()
-            .unwrap()
-            .contains("leading-hyphen"));
+        assert!(
+            speck.diagnostics[0]
+                .suggestion
+                .as_ref()
+                .unwrap()
+                .contains("leading-hyphen")
+        );
     }
 
     #[test]
@@ -1757,5 +1769,76 @@ Example:
 
         assert!(p006_count > 0);
         assert_eq!(non_p006_count, 0);
+    }
+
+    #[test]
+    fn test_p005_fires_on_matched_step_header_with_bad_anchor() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test Step {#Step-0}
+
+**Commit:** `feat: test`
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Step should be parsed (strict STEP_HEADER matches)
+        assert_eq!(speck.steps.len(), 1);
+
+        // P005 should fire for the uppercase anchor even though the line matched a strict pattern
+        let p005: Vec<_> = speck
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "P005")
+            .collect();
+        assert_eq!(
+            p005.len(),
+            1,
+            "P005 should fire for invalid anchor on matched step header"
+        );
+        assert!(p005[0].message.contains("Step-0"));
+        assert!(p005[0].suggestion.as_ref().unwrap().contains("step-0"));
+    }
+
+    #[test]
+    fn test_p005_does_not_fire_on_valid_anchor_of_matched_line() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test Step {#step-0}
+
+**Commit:** `feat: test`
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // No P005 should fire for valid anchors
+        let p005_count = speck
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "P005")
+            .count();
+        assert_eq!(p005_count, 0, "P005 should not fire for valid anchors");
     }
 }
