@@ -70,6 +70,10 @@ The session file has become maintenance burden without adding value. It requires
 15. Remove deprecated `session` CLI subcommand (`commands/session.rs`, `SessionCommands`, match arm in `main.rs`)
 16. Update `agents/coder-agent.md` to remove `session_id` references
 17. Remove `session_id_from_worktree`/`delete_session` calls from `run_worktree_remove`
+18. Update `cleanup_worktrees_with_pr_checker` and `cleanup_stale_branches_with_pr_checker` to use `DiscoveredWorktree` instead of `Session`
+19. Update `remove_worktree()` to remove `delete_session`/`session_id_from_worktree` calls
+20. Remove `cleanup_orphaned_sessions()` from `worktree.rs` (replaced by doctor check)
+21. Update doctor checks (`check_stale_branches`, `check_orphaned_worktrees`, `check_closed_pr_worktrees`) to use `DiscoveredWorktree` fields
 
 #### Non-goals (Explicitly out of scope) {#non-goals}
 
@@ -157,10 +161,26 @@ The session file has become maintenance burden without adding value. It requires
 - Git worktree list is authoritative — session files can be stale or corrupt
 
 **Implications:**
-- `list_worktrees()` return type changes from `Vec<Session>` to `Vec<DiscoveredWorktree>` (or a new listing struct)
+- `list_worktrees()` return type changes from `Vec<Session>` to `Vec<DiscoveredWorktree>` -- this is a type cascade affecting ALL callers: `commands/worktree.rs` (3 call sites), `doctor.rs` (4 call sites: `check_stale_branches`, `check_orphaned_worktrees`, `check_sessionless_worktrees`, `check_closed_pr_worktrees`), and `cleanup_worktrees_with_pr_checker` + `cleanup_stale_branches_with_pr_checker` in `worktree.rs`
 - `worktree list` command output changes (no longer shows session metadata like `total_steps` or `step_summaries`)
 - `find_existing_worktree()` (used by create) must also be rewritten to not depend on sessions
 - Doctor `check_sessionless_worktrees` is replaced by `check_orphaned_sessions`
+- `remove_worktree()` and `cleanup_orphaned_sessions()` in `worktree.rs` call `delete_session`/`session_id_from_worktree` -- must be updated before session.rs is gutted
+
+#### [D06] Extend DiscoveredWorktree with base_branch field (DECIDED) {#d06-discovered-worktree-base-branch}
+
+**Decision:** Add a `base_branch: String` field to `DiscoveredWorktree`, defaulting to `"main"` when not determinable from git metadata. This field is required by `cleanup_worktrees_with_pr_checker()` for `is_ancestor` checks.
+
+**Rationale:**
+- `cleanup_worktrees_with_pr_checker()` at `worktree.rs:1119` calls `git.is_ancestor(&session.branch_name, &session.base_branch)` -- this requires knowing the base branch
+- Session stored `base_branch` explicitly, but git-native discovery has no direct equivalent
+- The base branch is almost always `main` in this project; defaulting is safe and avoids requiring branch metadata outside git
+- If the project later needs multi-base support, this field can be populated from a config or convention
+
+**Implications:**
+- `DiscoveredWorktree` grows to 4 fields: `path`, `branch`, `speck_slug`, `base_branch`
+- `cleanup_worktrees_with_pr_checker()` and `cleanup_stale_branches_with_pr_checker()` parameter types change from `&[Session]` to `&[DiscoveredWorktree]`
+- Default value of `"main"` matches the single-base-branch convention used throughout this project
 
 #### [D05] Add doctor check for orphaned .sessions/ directories (DECIDED) {#d05-orphaned-sessions-doctor}
 
@@ -174,6 +194,38 @@ The session file has become maintenance burden without adding value. It requires
 **Implications:**
 - `check_sessionless_worktrees()` is replaced by `check_orphaned_sessions()`
 - Doctor output changes: new check name, new message format
+
+---
+
+### Open Questions {#open-questions}
+
+#### [Q01] Slug derivation from branch name is lossy (DECIDED) {#q01-slug-derivation-lossy}
+
+**Question:** The slug extraction from branch format `specks/<slug>-<timestamp>` is ambiguous if the slug itself contains hyphens followed by digits resembling a timestamp. For example, slug `auth` produces branch `specks/auth-20260208-143022`, but could slug `auth-v2` produce `specks/auth-v2-20260208-143022` and be misparsed?
+
+**Why it matters:** If `speck_path` is derived from slug as `.specks/specks-<slug>.md`, a misparsed slug produces a wrong path, causing worktree-to-speck matching to fail silently.
+
+**Options (if known):**
+- Parse from the right: timestamp is always `YYYYMMDD-HHMMSS` (exactly 15 chars with hyphen), so strip that fixed suffix
+- Use `derive_speck_slug()` which already handles this parsing in `worktree.rs`
+
+**Resolution:** DECIDED -- Use `derive_speck_slug()` pattern. The timestamp format is fixed at 15 characters (`YYYYMMDD-HHMMSS`). Parse from the right: strip `specks/` prefix, then strip the last 16 characters (hyphen + timestamp). The `generate_branch_name()` function at `worktree.rs` always produces this exact format, so the parse is reliable. Document this invariant in the `DiscoveredWorktree` struct doc comment.
+
+---
+
+### Risks and Mitigations {#risks}
+
+| Risk | Impact | Likelihood | Mitigation | Trigger to revisit |
+|------|--------|------------|------------|--------------------|
+| Type cascade from `list_worktrees()` return type change | high | high | Update ALL callers in same step (Step 3) | Compile failure in any step |
+| Slug derivation mismatch | med | low | Reuse existing `derive_speck_slug()` parsing | Worktree-speck matching fails |
+| `base_branch` default ("main") incorrect | low | low | Matches project convention; configurable later | Multi-base-branch workflow adopted |
+
+**Risk R01: Type cascade from list_worktrees() return type change** {#r01-type-cascade}
+
+- **Risk:** Changing `list_worktrees()` from `Vec<Session>` to `Vec<DiscoveredWorktree>` breaks every caller. If any caller is missed, the step will not compile.
+- **Mitigation:** Step 3 explicitly enumerates every caller: `worktree.rs` (4 internal sites), `commands/worktree.rs` (3 sites), `doctor.rs` (4 sites). Checkpoint grep verifies zero `Session` references remain.
+- **Residual risk:** Future callers added between planning and execution would also need updating.
 
 ---
 
@@ -203,6 +255,7 @@ The session file has become maintenance burden without adding value. It requires
 | `session_file` | field | `CreateData` | Worktree create output |
 | `artifacts_base` | field | `CreateData` | Worktree create output |
 | `check_sessionless_worktrees()` | fn | `doctor.rs` | Replaced by orphaned check |
+| `cleanup_orphaned_sessions()` | fn | `worktree.rs` | Replaced by doctor orphaned check; calls `delete_session`/`sessions_dir` |
 
 #### 3.0.1.2 Symbols to add {#symbols-add}
 
@@ -211,6 +264,7 @@ The session file has become maintenance burden without adding value. It requires
 | Symbol | Kind | Location | Notes |
 |--------|------|----------|-------|
 | `check_orphaned_sessions()` | fn | `doctor.rs` | Warn about `.sessions/` dirs |
+| `slug_from_branch()` | fn | `worktree.rs` | Extract speck slug from branch name by stripping `specks/` prefix and timestamp suffix |
 
 #### 3.0.1.3 Symbols to modify {#symbols-modify}
 
@@ -224,8 +278,15 @@ The session file has become maintenance burden without adding value. It requires
 | `StepCommit` | enum variant | `cli.rs` | Remove `--session` field |
 | `StepPublish` | enum variant | `cli.rs` | Remove `--session` and `--step-summaries` fields |
 | `Commands` | enum | `cli.rs` | Remove `Session(SessionCommands)` variant |
-| `list_worktrees()` | fn | `worktree.rs` | Rewrite to use git-native discovery |
+| `DiscoveredWorktree` | struct | `worktree.rs` | Add `Serialize` derive, add `speck_slug`, `base_branch` fields |
+| `list_worktrees()` | fn | `worktree.rs` | Rewrite to use git-native discovery, return `Vec<DiscoveredWorktree>` |
 | `find_existing_worktree()` | fn | `worktree.rs` | Rewrite to use git-native discovery |
+| `cleanup_worktrees_with_pr_checker()` | fn | `worktree.rs` | Change `sessions: &[Session]` to `&[DiscoveredWorktree]`, adapt field accesses |
+| `cleanup_stale_branches_with_pr_checker()` | fn | `worktree.rs` | Change `sessions: &[Session]` to `&[DiscoveredWorktree]`, adapt field accesses |
+| `remove_worktree()` | fn | `worktree.rs` | Remove `delete_session`/`session_id_from_worktree` calls |
+| `check_stale_branches()` | fn | `doctor.rs` | Change `s.branch_name` to `s.branch` for `DiscoveredWorktree` field |
+| `check_orphaned_worktrees()` | fn | `doctor.rs` | Change `session.branch_name` to `wt.branch` for `DiscoveredWorktree` field |
+| `check_closed_pr_worktrees()` | fn | `doctor.rs` | Change `session.branch_name` to `wt.branch` for `DiscoveredWorktree` field |
 | `run_worktree_create()` | fn | `commands/worktree.rs` | Remove session creation and output fields |
 | `run_worktree_remove()` | fn | `commands/worktree.rs` | Remove `session_id_from_worktree`/`delete_session` calls |
 | `CreateData` | struct | `commands/worktree.rs` | Remove `session_id`, `session_file`, `artifacts_base` |
@@ -265,6 +326,8 @@ The session file has become maintenance burden without adding value. It requires
 - [ ] Remove `use specks_core::session::{Session, StepSummary, now_iso8601, save_session_atomic}` import — remove all session imports from this file
 - [ ] Update the `StepCommit` match arm in `main.rs` to not pass `session`
 - [ ] Update the module doc comment at `step_commit.rs` line 2 (`//! Atomically performs log rotation, prepend, git commit, bead close, and session update.`) to remove the "and session update" phrase -- this doc comment contains the word "session" and will be caught by the checkpoint grep
+- [ ] Update the `close_bead_in_worktree` doc comment at `step_commit.rs` line ~217 -- if it contains the word "session" it will be caught by the checkpoint grep. Check and remove any session references in this helper's doc comment.
+- [ ] Update the `StepCommit` variant doc comment in `cli.rs` (lines ~174-178): remove "and session update" from the short doc (`/// Atomically performs log rotation, prepend, git commit, bead close, and session update.`) and remove "6. Update session" from the `long_about` attribute
 - [ ] Update CLI tests `test_step_commit_command` and `test_step_commit_with_close_reason` to not include `--session`
 
 **Tests:**
@@ -307,6 +370,7 @@ The session file has become maintenance burden without adding value. It requires
 - [ ] Rewrite `generate_pr_body()` to accept `worktree_path: &Path` and `base: &str` parameters and run `git log --oneline <base>..HEAD` to get commit messages
 - [ ] Update `generate_pr_body()` call site to pass worktree path and base branch
 - [ ] Remove all session imports from this file
+- [ ] Update the `StepPublish` variant doc comment in `cli.rs` (lines ~218-222): remove "and updates session status" from the short doc and remove "6. Update session to Completed" from the `long_about` attribute. Also update "3. Generate PR body from step summaries" to "3. Generate PR body from git log" in the `long_about`.
 - [ ] Update the `StepPublish` match arm in `main.rs`
 - [ ] Update CLI tests `test_step_publish_command` and `test_step_publish_with_repo` to not include `--session` or `--step-summaries`
 - [ ] Update `test_generate_pr_body` test to match new function signature (takes worktree path and base branch, not string vec). **Coder note:** the new function runs `git log`, so the test must set up a temp git repo with real commits (init repo, make commits, then call `generate_pr_body`). The existing test at `step_publish.rs:330` just constructs `Vec<String>` -- that approach no longer works.
@@ -371,7 +435,7 @@ The session file has become maintenance burden without adding value. It requires
 
 ---
 
-#### Step 3: Rewrite list_worktrees and find_existing_worktree to use git-native discovery {#step-3}
+#### Step 3: Rewrite list_worktrees, all callers, and cleanup functions to use git-native discovery {#step-3}
 
 **Depends on:** #step-0
 
@@ -379,32 +443,71 @@ The session file has become maintenance burden without adding value. It requires
 
 **Commit:** `refactor: replace session-based worktree listing with git-native discovery`
 
-**References:** [D04] Replace list_worktrees with git-native discovery, Table T03, (#d04-git-native-list, #symbols-modify)
+**References:** [D04] Replace list_worktrees with git-native discovery, [D06] Extend DiscoveredWorktree with base_branch field, [Q01] Slug derivation from branch name, Risk R01, Table T01, Table T02, Table T03, (#d04-git-native-list, #d06-discovered-worktree-base-branch, #q01-slug-derivation-lossy, #r01-type-cascade, #symbols-remove, #symbols-add, #symbols-modify)
 
 **Artifacts:**
-- Modified: `crates/specks-core/src/worktree.rs` (rewrite `list_worktrees`, `find_existing_worktree`, update `create_worktree` destructuring)
+- Modified: `crates/specks-core/src/worktree.rs` (rewrite `list_worktrees`, `find_existing_worktree`, update `create_worktree`, update `cleanup_worktrees_with_pr_checker`, update `cleanup_stale_branches_with_pr_checker`, update `remove_worktree`, remove `cleanup_orphaned_sessions`)
 - Modified: `crates/specks/src/commands/worktree.rs` (update `ListData`, list command output, update `run_worktree_remove` type annotations)
+- Modified: `crates/specks/src/commands/doctor.rs` (update `check_stale_branches`, `check_orphaned_worktrees`, `check_closed_pr_worktrees` to use `DiscoveredWorktree` fields)
 
 **Tasks:**
-- [ ] Rewrite `list_worktrees()` to use `git worktree list --porcelain` pattern from `find_worktree_by_speck()`, returning `Vec<DiscoveredWorktree>` instead of `Vec<Session>`
-- [ ] Rewrite `find_existing_worktree()` to use git-native discovery instead of loading sessions -- match on speck slug derived from branch name
-- [ ] Update `create_worktree()` in `crates/specks-core/src/worktree.rs` (line ~613) to destructure `DiscoveredWorktree` fields (path, branch) instead of `Session` fields (`existing_session.worktree_path`, `existing_session.branch_name`, `existing_session.speck_slug`) -- this function calls `find_existing_worktree()` and must compile after the type change
-- [ ] Update `run_worktree_remove()` in `commands/worktree.rs` (line ~991) to use `Vec<&DiscoveredWorktree>` instead of `Vec<&Session>` for `matching_sessions` (line ~1001) and adapt all field accesses -- `list_worktrees()` return type changes in this step, so callers must be updated to compile
-- [ ] Update `ListData` struct to use `Vec<DiscoveredWorktree>` (or a new `WorktreeInfo` struct with path, branch, speck_slug) instead of `Vec<Session>`
-- [ ] Update `run_worktree_list` to display new listing format (branch, path -- no session metadata like `total_steps` or `step_summaries`)
+
+*DiscoveredWorktree struct changes:*
+- [ ] Add `Serialize` to the `#[derive(...)]` on `DiscoveredWorktree` (currently only `Debug, Clone`). This is required because `ListData` has `#[derive(Serialize)]` and will contain `Vec<DiscoveredWorktree>` after this step -- without `Serialize` on `DiscoveredWorktree`, the build will fail. Add `use serde::Serialize;` import if not already present in scope.
+- [ ] Add a `speck_slug: String` field to `DiscoveredWorktree` in `crates/specks-core/src/worktree.rs`. Populate it by parsing the branch name: given format `specks/<slug>-<timestamp>`, the timestamp is always exactly 15 characters (`YYYYMMDD-HHMMSS`), so strip the `specks/` prefix and the last 16 characters (hyphen + timestamp) to get the slug. Add a `slug_from_branch()` helper function for this. Document the parsing invariant in the struct doc comment. (See [Q01] resolution.)
+- [ ] Add a `base_branch: String` field to `DiscoveredWorktree`, defaulting to `"main"`. Git-native discovery does not provide the base branch, so this uses the project convention. (See [D06].)
+
+*Core list/find rewrites:*
+- [ ] Rewrite `list_worktrees()` to use `git worktree list --porcelain` pattern from `find_worktree_by_speck()`, returning `Vec<DiscoveredWorktree>` instead of `Vec<Session>`. Populate `speck_slug` via `slug_from_branch()` and `base_branch` as `"main"`.
+- [ ] Rewrite `find_existing_worktree()` to use git-native discovery instead of loading sessions -- match on `speck_slug` derived from branch name
+- [ ] Update `create_worktree()` in `crates/specks-core/src/worktree.rs` (line ~613) to destructure `DiscoveredWorktree` fields instead of `Session` fields. Specifically: replace `existing_session.worktree_path` with `existing.path`, `existing_session.branch_name` with `existing.branch`, and `existing_session.speck_slug` with `existing.speck_slug`.
+
+*Cleanup function updates (same step to maintain compilation):*
+- [ ] Update `cleanup_worktrees_with_pr_checker()` in `worktree.rs` (line ~1091): change parameter from implicit `list_worktrees()` returning `Vec<Session>` (line ~1098) to `Vec<DiscoveredWorktree>`. Adapt all field accesses: `session.branch_name` (lines 1110, 1157) becomes `wt.branch`, `session.base_branch` (line 1119) becomes `wt.base_branch`, `session.worktree_path` (line 1160) becomes `wt.path.to_string_lossy()` (or `wt.path.display()`).
+- [ ] Update `cleanup_stale_branches_with_pr_checker()` in `worktree.rs` (line ~862): change `sessions: &[Session]` parameter to `worktrees: &[DiscoveredWorktree]`. Adapt `s.branch_name` (line 873) to `wt.branch`. Also remove the inline `crate::session::session_id_from_worktree()` and `crate::session::delete_session()` calls at lines 934-936 in the stale-branch-with-worktree removal path -- these calls clean up session files for force-removed worktrees, but sessions no longer exist. Remove the entire `if let Some(session_id)` block (lines 934-937) and keep only the worktree force-remove and branch delete logic.
+- [ ] Update `remove_worktree()` in `worktree.rs` (line ~997): remove the `use crate::session::{delete_session, session_id_from_worktree}` import (line 998) and the `session_id_from_worktree()`/`delete_session()` call block (lines 1000-1004). Keep the legacy internal session file cleanup (lines 1006-1010) and artifacts cleanup.
+- [ ] Remove `cleanup_orphaned_sessions()` function in `worktree.rs` (line ~1038) entirely -- it calls `delete_session()` and `sessions_dir()` from session.rs. The doctor orphaned check (Step 6) replaces this functionality. Also remove the `cleanup_orphaned_sessions(repo_root, dry_run)` call at line ~1203 in `cleanup_worktrees_with_pr_checker()`.
+
+*Doctor callers (must update in same step as list_worktrees return type change):*
+- [ ] Update `check_stale_branches()` in `doctor.rs` (line ~368): `list_worktrees()` now returns `Vec<DiscoveredWorktree>`. Change `s.branch_name.clone()` (line 382) to `s.branch.clone()`.
+- [ ] Update `check_orphaned_worktrees()` in `doctor.rs` (line ~431): change `session.branch_name` (lines 446, 448) to `wt.branch`. Update loop variable name from `session` to `wt`.
+- [ ] Update `check_closed_pr_worktrees()` in `doctor.rs` (line ~584): change `session.branch_name` (lines 599, 601) to `wt.branch`. Update loop variable name from `session` to `wt`.
+- [ ] In `check_sessionless_worktrees()` in `doctor.rs` (line ~531): this function also calls `list_worktrees()` and accesses `s.worktree_path` (line 545). Change to `s.path.to_string_lossy().to_string()` (or `s.path.display().to_string()`). Note: this function is replaced entirely in Step 6, but must compile in this step.
+
+*Commands/worktree.rs callers:*
+- [ ] Update `run_worktree_remove()` in `commands/worktree.rs` (line ~991) to use `Vec<&DiscoveredWorktree>` instead of `Vec<&Session>` for `matching_sessions` (line ~1001). Adapt field accesses as follows:
+  - `session.speck_path` (line ~1013, used for matching): derive at call site as `.specks/specks-<speck_slug>.md` using the `speck_slug` field on `DiscoveredWorktree`
+  - `session.created_at` (line ~1036, used in disambiguation display): simplify disambiguation display to show `branch` and `path` instead (both are directly available on `DiscoveredWorktree`; `created_at` is not worth deriving for a disambiguation message)
+  - `session.branch_name` (line ~1041): replace with `wt.branch`
+  - `session.worktree_path` (line ~1101, in force-remove path): replace with `wt.path.display()` or `wt.path.to_string_lossy()`
+- [ ] In `run_worktree_remove()`: remove the direct `session_id_from_worktree()`/`delete_session()` calls at lines 1117-1118 in the force-remove branch -- these are separate from the `remove_worktree()` call at line 1122 (which is updated in core). Both paths must be cleaned up in this step to compile with the new `DiscoveredWorktree` type.
+- [ ] Update `ListData` struct to use `Vec<DiscoveredWorktree>` instead of `Vec<Session>` -- the struct now has `path`, `branch`, `speck_slug`, `base_branch`
+- [ ] Update `run_worktree_list` to display new listing format (branch, path, speck_slug -- no session metadata like `total_steps` or `step_summaries`)
+
+*Import and doc comment cleanup:*
 - [ ] Remove `use crate::session::{Session, load_session, now_iso8601}` import from `crates/specks-core/src/worktree.rs` -- keep only `now_iso8601` import
-- [ ] Rewrite integration tests that construct `Session` objects for `list_worktrees` and `find_existing_worktree`: tests at lines 1399-1420, 1444-1465, 1497-1518, 1571-1592, 1654-1677, 1901-1917 in `commands/worktree.rs` must be updated to use git-native worktree setup instead of `Session` + `save_session()` patterns (at minimum 7 tests need substantial rewriting)
+- [ ] Remove `use crate::session::save_session` from `worktree.rs` test module (line ~1216)
+- [ ] Update doc comment on `create_worktree()` at worktree.rs line ~575: change "Session creation is now handled by CLI layer" to remove the word "Session" (e.g., "Worktree metadata is returned as an infrastructure tuple").
+- [ ] Update doc comment on `create_worktree()` return at worktree.rs line ~642: change "Return infrastructure tuple (CLI layer creates Session)" to remove the word "Session" (e.g., "Return infrastructure tuple").
+- [ ] Update comment in `cleanup_worktrees_with_pr_checker()` at worktree.rs line ~1108: change "Note: Session status removed in v2. Protection now relies on PR state and user confirmation." to remove the word "Session" (e.g., "Note: Protection relies on PR state and user confirmation.").
+
+*Test updates:*
+- [ ] Rewrite integration tests that construct `Session` objects for `list_worktrees` and `find_existing_worktree`. There are approximately 35 `Session`/`save_session`/`load_session` references across the test module (lines 1213-3400+). Key test clusters requiring substantial rewriting: lines 1399-1420, 1444-1465, 1497-1518, 1571-1592, 1654-1677, 1901-1917 in `commands/worktree.rs`. All tests that construct `Session` objects or call `save_session()` must be rewritten to use git-native worktree setup (e.g., `git worktree add` directly). Expect the full scope to be significantly larger than 7 tests.
 - [ ] Update `create_worktree_with_session()` test helper (line 1654) -- replace with a git-native helper that creates worktrees via `git worktree add` directly
 
 **Tests:**
-- [ ] Integration test: `list_worktrees()` returns worktrees found by git
+- [ ] Integration test: `list_worktrees()` returns worktrees found by git with correct `speck_slug` and `base_branch` fields
 - [ ] Integration test: `find_existing_worktree()` matches by speck slug derived from branch name
+- [ ] Unit test: `slug_from_branch("specks/auth-20260208-143022")` returns `"auth"`
+- [ ] Unit test: `slug_from_branch("specks/auth-v2-20260208-143022")` returns `"auth-v2"` (multi-hyphen slug)
 - [ ] All rewritten worktree tests pass
+- [ ] All doctor tests pass (field access changes compile correctly)
 
 **Checkpoint:**
-- [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` -- all worktree tests pass
-- [ ] `grep -c "Session\|load_session\|save_session" crates/specks-core/src/worktree.rs` returns 0
+- [ ] `cargo build` succeeds (critical: verifies ALL callers compile with new return type)
+- [ ] `cargo nextest run` -- all worktree AND doctor tests pass
+- [ ] `grep -c "Session\|load_session\|save_session\|delete_session\|session_id_from_worktree" crates/specks-core/src/worktree.rs` returns 0 (covers code references AND doc comments -- doc comments mentioning "Session" are explicitly updated in this step's tasks)
+- [ ] `grep -c "\.branch_name\|\.worktree_path\|\.speck_path" crates/specks/src/commands/doctor.rs` returns 0 (dot-prefixed to match field accesses, avoiding false positives from function names like `is_valid_worktree_path`)
 
 **Rollback:**
 - Revert commit
@@ -413,18 +516,18 @@ The session file has become maintenance burden without adding value. It requires
 
 ---
 
-#### Step 4: Remove session creation from worktree create and remove commands {#step-4}
+#### Step 4: Remove session creation from worktree create command {#step-4}
 
 **Depends on:** #step-1, #step-2, #step-3
 
 **Bead:** `specks-t9v.5`
 
-**Commit:** `refactor: stop creating session files in worktree create, remove session from worktree remove`
+**Commit:** `refactor: stop creating session files in worktree create, remove remaining session imports`
 
 **References:** [D01] Remove --session parameter entirely, [D02] Gut session.rs, Table T01, Table T03, (#d01-remove-session-param, #d02-gut-session-module, #symbols-remove, #symbols-modify)
 
 **Artifacts:**
-- Modified: `crates/specks/src/commands/worktree.rs` (remove session creation, output fields, and remove-command session cleanup)
+- Modified: `crates/specks/src/commands/worktree.rs` (remove session creation, output fields, remaining session imports)
 
 **Tasks:**
 - [ ] Remove `session_id`, `session_file`, `artifacts_base` fields from `CreateData` struct
@@ -433,22 +536,19 @@ The session file has become maintenance burden without adding value. It requires
 - [ ] Remove `session_id`, `session_file`, `artifacts_base` from all `CreateData` construction sites (including the 3+ error-path instantiations)
 - [ ] Remove the `existing_session` reuse check that calls `load_session()` -- reuse detection is now handled by `find_existing_worktree()` in core
 - [ ] Remove `session_id` derivation from branch name -- keep `speck_slug` which is still needed
-- [ ] In `run_worktree_remove()`: remove the `session_id_from_worktree()` and `delete_session()` calls (lines 1117-1118) -- session files no longer exist to clean up (note: type annotations were already updated from `Vec<&Session>` to `Vec<&DiscoveredWorktree>` in Step 3)
-- [ ] Remove `use specks_core::session::{Session, delete_session, session_id_from_worktree}` import from `commands/worktree.rs`
+- [ ] Remove `use specks_core::session::{Session, delete_session, session_id_from_worktree, save_session, ...}` imports from `commands/worktree.rs` -- all session usage from this file should now be gone (note: `run_worktree_remove` session cleanup was already removed in Step 3 when adapting field accesses for the type change)
 - [ ] Keep artifacts directory creation inside worktree (`.specks/artifacts/`) -- this is useful independent of sessions
 - [ ] Rewrite worktree create integration tests that assert on `session_id`, `session_file`, or `artifacts_base` fields in `CreateData` output -- these fields no longer exist
-- [ ] Rewrite worktree remove tests that expect `delete_session` to be called or verify session file cleanup
 
 **Tests:**
 - [ ] Integration test: `run_worktree_create` succeeds without creating `.sessions/` directory
 - [ ] JSON output test: `CreateData` does not contain `session_id`, `session_file`, or `artifacts_base`
-- [ ] Integration test: `run_worktree_remove` succeeds without session cleanup calls
 
 **Checkpoint:**
 - [ ] `cargo build` succeeds
-- [ ] `cargo nextest run` -- all worktree create and remove tests pass
+- [ ] `cargo nextest run` -- all worktree create tests pass
 - [ ] No `.sessions/` directory is created during worktree creation
-- [ ] `grep -c "delete_session\|session_id_from_worktree\|save_session\|Session" crates/specks/src/commands/worktree.rs` returns 0
+- [ ] `grep -c "delete_session\|session_id_from_worktree\|save_session\|load_session\|Session" crates/specks/src/commands/worktree.rs` returns 0
 
 **Rollback:**
 - Revert commit
@@ -491,6 +591,7 @@ The session file has become maintenance burden without adding value. It requires
 - [ ] In `skills/implementer/SKILL.md`: update "session end message" references
 - [ ] In `skills/implementer/SKILL.md`: update agent persistence table (committer row mentions "session file format")
 - [ ] In `skills/implementer/SKILL.md`: update description of `specks step-commit` and `specks step-publish` to not mention session update
+- [ ] In `skills/implementer/SKILL.md`: update the workflow diagram at line ~209 from `create PR with step_summaries` to `create PR (body from git log)` -- this diagram line describes the publish mode and must reflect that PR body is now generated from git log, not step_summaries
 - [ ] In `skills/implementer/SKILL.md`: remove `step_summaries = []` initialization (line ~269) -- this collection variable is dead logic after `step-publish` no longer accepts `--step-summaries`
 - [ ] In `skills/implementer/SKILL.md`: remove the per-step `step_summaries` collection logic (line ~497, "Extract commit summary and add to step_summaries") -- summaries are now derived from git log
 - [ ] In `skills/implementer/SKILL.md`: remove `step_summaries` from the publish prompt JSON (line ~518) -- the `--step-summaries` CLI parameter no longer exists
@@ -513,7 +614,7 @@ The session file has become maintenance burden without adding value. It requires
 
 #### Step 6: Replace sessionless worktrees doctor check with orphaned sessions check {#step-6}
 
-**Depends on:** #step-4
+**Depends on:** #step-3, #step-4
 
 **Bead:** `specks-t9v.7`
 
