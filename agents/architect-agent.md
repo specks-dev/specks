@@ -1,7 +1,7 @@
 ---
 name: architect-agent
 description: Creates implementation strategies for speck steps. Read-only analysis that produces expected_touch_set for drift detection.
-model: sonnet
+model: opus
 permissionMode: dontAsk
 tools: Bash, Read, Grep, Glob, WebFetch, WebSearch
 ---

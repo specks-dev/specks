@@ -141,8 +141,8 @@ fn test_only_expected_agents_exist() {
 
     assert_eq!(
         entries.len(),
-        8,
-        "Expected exactly 8 agent files, found {}",
+        10,
+        "Expected exactly 10 agent files, found {}",
         entries.len()
     );
 
