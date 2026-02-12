@@ -32,6 +32,12 @@ static PROSE_DEPENDENCY: LazyLock<Regex> =
 /// Also valid: "Spec S01", "Table T01", "(#anchor)"
 static DECISION_CITATION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[D\d{2}\]").unwrap());
 
+/// Regex for extracting decision IDs from References lines (with capture group)
+/// Pattern: \[(D\d{2,})\] - allows 2+ digits for forward compatibility
+/// Note: distinct from DECISION_CITATION which is presence-only (no capture group)
+static DECISION_ID_CAPTURE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[(D\d{2,})\]").unwrap());
+
 /// Regex for anchor citations in References (must be in parentheses with # prefix)
 static ANCHOR_CITATION: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\(#[a-z0-9-]+(,\s*#[a-z0-9-]+)*\)").unwrap());
@@ -264,8 +270,8 @@ pub fn validate_speck_with_config(speck: &Speck, config: &ValidationConfig) -> V
         // W004: Steps without test items
         check_step_tests(speck, &mut result);
 
-        // W005: References citing non-existent anchors
-        check_reference_anchors(speck, &anchor_map, &mut result);
+        // W005: References citing non-existent anchors (superseded by W013)
+        // check_reference_anchors(speck, &anchor_map, &mut result);
 
         // W006: Metadata fields with unfilled placeholders
         check_metadata_placeholders(speck, &mut result);
@@ -277,6 +283,21 @@ pub fn validate_speck_with_config(speck: &Speck, config: &ValidationConfig) -> V
         if !config.beads_enabled {
             check_bead_without_integration(speck, &mut result);
         }
+
+        // W009: Step missing Commit line
+        check_commit_lines(speck, &mut result);
+
+        // W010: Step missing Tasks
+        check_step_tasks(speck, &mut result);
+
+        // W011: Decision defined but never cited
+        check_uncited_decisions(speck, &mut result);
+
+        // W012: Decision cited but not defined
+        check_undefined_cited_decisions(speck, &mut result);
+
+        // W013: Anchor referenced but not defined (replaces W005)
+        check_undefined_referenced_anchors(speck, &anchor_map, &mut result);
     }
 
     // === INFO CHECKS ===
@@ -824,6 +845,10 @@ fn check_step_tests(speck: &Speck, result: &mut ValidationResult) {
 }
 
 /// W005: References citing non-existent anchors
+/// W005: References citing non-existent anchors (superseded by W013 check_undefined_referenced_anchors)
+/// This function is kept for backwards compatibility but is no longer called.
+/// W013 expands W005 to cover substeps which were previously missed.
+#[allow(dead_code)]
 fn check_reference_anchors(
     speck: &Speck,
     anchor_map: &HashMap<String, usize>,
@@ -932,6 +957,219 @@ fn check_bead_without_integration(speck: &Speck, result: &mut ValidationResult) 
                     .at_line(substep.line)
                     .with_anchor(&substep.anchor),
                 );
+            }
+        }
+    }
+}
+
+/// W009: Step missing Commit line
+fn check_commit_lines(speck: &Speck, result: &mut ValidationResult) {
+    for step in &speck.steps {
+        if step.commit_message.is_none() {
+            result.add_issue(
+                ValidationIssue::new(
+                    "W009",
+                    Severity::Warning,
+                    format!("Step {} missing **Commit:** line", step.number),
+                )
+                .at_line(step.line)
+                .with_anchor(&step.anchor),
+            );
+        }
+
+        for substep in &step.substeps {
+            if substep.commit_message.is_none() {
+                result.add_issue(
+                    ValidationIssue::new(
+                        "W009",
+                        Severity::Warning,
+                        format!("Step {} missing **Commit:** line", substep.number),
+                    )
+                    .at_line(substep.line)
+                    .with_anchor(&substep.anchor),
+                );
+            }
+        }
+    }
+}
+
+/// W010: Step missing Tasks
+fn check_step_tasks(speck: &Speck, result: &mut ValidationResult) {
+    for step in &speck.steps {
+        if step.tasks.is_empty() {
+            result.add_issue(
+                ValidationIssue::new(
+                    "W010",
+                    Severity::Warning,
+                    format!("Step {} has no task items", step.number),
+                )
+                .at_line(step.line)
+                .with_anchor(&step.anchor),
+            );
+        }
+
+        for substep in &step.substeps {
+            if substep.tasks.is_empty() {
+                result.add_issue(
+                    ValidationIssue::new(
+                        "W010",
+                        Severity::Warning,
+                        format!("Step {} has no task items", substep.number),
+                    )
+                    .at_line(substep.line)
+                    .with_anchor(&substep.anchor),
+                );
+            }
+        }
+    }
+}
+
+/// W011: Decision defined but never cited
+fn check_uncited_decisions(speck: &Speck, result: &mut ValidationResult) {
+    // Collect all DECIDED decisions (ignore OPEN/DEFERRED)
+    let decided_decisions: Vec<&crate::types::Decision> = speck
+        .decisions
+        .iter()
+        .filter(|d| {
+            d.status
+                .as_ref()
+                .map(|s| s != "OPEN" && s != "DEFERRED")
+                .unwrap_or(true) // No status means it should be cited
+        })
+        .collect();
+
+    // Collect all cited decision IDs from References lines
+    let mut cited_ids = HashSet::new();
+    for step in &speck.steps {
+        if let Some(refs) = &step.references {
+            for cap in DECISION_ID_CAPTURE.captures_iter(refs) {
+                cited_ids.insert(cap.get(1).unwrap().as_str().to_string());
+            }
+        }
+
+        for substep in &step.substeps {
+            if let Some(refs) = &substep.references {
+                for cap in DECISION_ID_CAPTURE.captures_iter(refs) {
+                    cited_ids.insert(cap.get(1).unwrap().as_str().to_string());
+                }
+            }
+        }
+    }
+
+    // Emit W011 for decisions never cited
+    for decision in decided_decisions {
+        if !cited_ids.contains(&decision.id) {
+            result.add_issue(
+                ValidationIssue::new(
+                    "W011",
+                    Severity::Warning,
+                    format!(
+                        "Decision [{}] ({}) is never cited in any step References",
+                        decision.id, decision.title
+                    ),
+                )
+                .at_line(decision.line)
+                .with_anchor(decision.anchor.as_deref().unwrap_or("")),
+            );
+        }
+    }
+}
+
+/// W012: Decision cited but not defined
+fn check_undefined_cited_decisions(speck: &Speck, result: &mut ValidationResult) {
+    // Build set of all defined decision IDs
+    let defined_ids: HashSet<String> = speck.decisions.iter().map(|d| d.id.clone()).collect();
+
+    // Check all cited decision IDs
+    for step in &speck.steps {
+        if let Some(refs) = &step.references {
+            for cap in DECISION_ID_CAPTURE.captures_iter(refs) {
+                let cited_id = cap.get(1).unwrap().as_str();
+                if !defined_ids.contains(cited_id) {
+                    result.add_issue(
+                        ValidationIssue::new(
+                            "W012",
+                            Severity::Warning,
+                            format!(
+                                "Step {} references decision [{}] which is not defined",
+                                step.number, cited_id
+                            ),
+                        )
+                        .at_line(step.line)
+                        .with_anchor(&step.anchor),
+                    );
+                }
+            }
+        }
+
+        for substep in &step.substeps {
+            if let Some(refs) = &substep.references {
+                for cap in DECISION_ID_CAPTURE.captures_iter(refs) {
+                    let cited_id = cap.get(1).unwrap().as_str();
+                    if !defined_ids.contains(cited_id) {
+                        result.add_issue(
+                            ValidationIssue::new(
+                                "W012",
+                                Severity::Warning,
+                                format!(
+                                    "Step {} references decision [{}] which is not defined",
+                                    substep.number, cited_id
+                                ),
+                            )
+                            .at_line(substep.line)
+                            .with_anchor(&substep.anchor),
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// W013: Anchor referenced but not defined (replaces W005)
+/// Checks References lines only (not Depends on - those are E010)
+fn check_undefined_referenced_anchors(
+    speck: &Speck,
+    anchor_map: &HashMap<String, usize>,
+    result: &mut ValidationResult,
+) {
+    let anchor_ref_pattern = Regex::new(r"#([a-z0-9-]+)").unwrap();
+
+    for step in &speck.steps {
+        if let Some(refs) = &step.references {
+            for cap in anchor_ref_pattern.captures_iter(refs) {
+                let ref_anchor = cap.get(1).unwrap().as_str();
+                if !anchor_map.contains_key(ref_anchor) {
+                    result.add_issue(
+                        ValidationIssue::new(
+                            "W013",
+                            Severity::Warning,
+                            format!("Reference to non-existent anchor: #{}", ref_anchor),
+                        )
+                        .at_line(step.line)
+                        .with_anchor(&step.anchor),
+                    );
+                }
+            }
+        }
+
+        // Check substeps (this was missing in W005)
+        for substep in &step.substeps {
+            if let Some(refs) = &substep.references {
+                for cap in anchor_ref_pattern.captures_iter(refs) {
+                    let ref_anchor = cap.get(1).unwrap().as_str();
+                    if !anchor_map.contains_key(ref_anchor) {
+                        result.add_issue(
+                            ValidationIssue::new(
+                                "W013",
+                                Severity::Warning,
+                                format!("Reference to non-existent anchor: #{}", ref_anchor),
+                            )
+                            .at_line(substep.line)
+                            .with_anchor(&substep.anchor),
+                        );
+                    }
+                }
             }
         }
     }
@@ -1643,5 +1881,472 @@ Decision text.
         assert!(ANCHOR_CITATION.is_match("(#step-0, #step-1, #step-2)"));
         assert!(!ANCHOR_CITATION.is_match("#context")); // Missing parens
         assert!(!ANCHOR_CITATION.is_match("(context)")); // Missing #
+    }
+
+    // W009 tests
+    #[test]
+    fn test_w009_missing_commit() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w009_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W009").collect();
+        assert_eq!(w009_issues.len(), 1);
+        assert!(w009_issues[0].message.contains("Step 0"));
+    }
+
+    #[test]
+    fn test_w009_with_commit_no_warning() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w009_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W009").collect();
+        assert_eq!(w009_issues.len(), 0);
+    }
+
+    // W010 tests
+    #[test]
+    fn test_w010_missing_tasks() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w010_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W010").collect();
+        assert_eq!(w010_issues.len(), 1);
+        assert!(w010_issues[0].message.contains("Step 0"));
+    }
+
+    #[test]
+    fn test_w010_with_tasks_no_warning() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w010_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W010").collect();
+        assert_eq!(w010_issues.len(), 0);
+    }
+
+    // W011 tests
+    #[test]
+    fn test_w011_uncited_decided_decision() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Design Decisions {#design-decisions}
+
+#### [D01] Decision One (DECIDED) {#d01-one}
+
+This is decided but never cited.
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**References:** (#context)
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w011_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W011").collect();
+        assert_eq!(w011_issues.len(), 1);
+        assert!(w011_issues[0].message.contains("[D01]"));
+    }
+
+    #[test]
+    fn test_w011_open_decision_no_warning() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Design Decisions {#design-decisions}
+
+#### [D01] Decision One (OPEN) {#d01-one}
+
+This is open, so not required to be cited.
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**References:** (#context)
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w011_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W011").collect();
+        assert_eq!(w011_issues.len(), 0);
+    }
+
+    #[test]
+    fn test_w011_deferred_decision_no_warning() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Design Decisions {#design-decisions}
+
+#### [D01] Decision One (DEFERRED) {#d01-one}
+
+This is deferred, so not required to be cited.
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**References:** (#context)
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w011_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W011").collect();
+        assert_eq!(w011_issues.len(), 0);
+    }
+
+    // W012 tests
+    #[test]
+    fn test_w012_undefined_cited_decision() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**References:** [D03] Nonexistent decision
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w012_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W012").collect();
+        assert_eq!(w012_issues.len(), 1);
+        assert!(w012_issues[0].message.contains("[D03]"));
+    }
+
+    #[test]
+    fn test_w012_defined_decision_no_warning() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Design Decisions {#design-decisions}
+
+#### [D01] Decision One (DECIDED) {#d01-one}
+
+This decision exists.
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**References:** [D01] Decision One
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w012_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W012").collect();
+        assert_eq!(w012_issues.len(), 0);
+    }
+
+    // W013 tests
+    #[test]
+    fn test_w013_undefined_anchor_in_references() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**References:** (#nonexistent-anchor)
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w013_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W013").collect();
+        assert_eq!(w013_issues.len(), 1);
+        assert!(w013_issues[0].message.contains("nonexistent-anchor"));
+    }
+
+    #[test]
+    fn test_w013_substep_references() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 2: Main Step {#step-2}
+
+**Commit:** `feat: add parent`
+
+**References:** (#plan-metadata)
+
+**Tasks:**
+- [ ] Parent task
+
+##### Step 2.1: Substep {#step-2-1}
+
+**Commit:** `feat: add substep`
+
+**References:** (#undefined-in-substep)
+
+**Tasks:**
+- [ ] Substep task
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w013_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W013").collect();
+        assert_eq!(w013_issues.len(), 1);
+        assert!(w013_issues[0].message.contains("undefined-in-substep"));
+    }
+
+    #[test]
+    fn test_w013_depends_on_not_checked() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: First {#step-0}
+
+**Commit:** `feat: add first`
+
+**References:** (#plan-metadata)
+
+**Tasks:**
+- [ ] Task one
+
+#### Step 1: Second {#step-1}
+
+**Depends on:** #nonexistent-dependency
+
+**Commit:** `feat: add second`
+
+**References:** (#plan-metadata)
+
+**Tasks:**
+- [ ] Task two
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        // Depends on broken references should be E010, not W013
+        let w013_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W013").collect();
+        assert_eq!(w013_issues.len(), 0);
+
+        let e010_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "E010").collect();
+        assert_eq!(e010_issues.len(), 1);
+    }
+
+    #[test]
+    fn test_w013_defined_anchor_no_warning() {
+        use crate::parser::parse_speck;
+
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Context {#context}
+
+Some context here.
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**References:** (#context, #plan-metadata)
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+        let result = validate_speck(&speck);
+
+        let w013_issues: Vec<&ValidationIssue> =
+            result.issues.iter().filter(|i| i.code == "W013").collect();
+        assert_eq!(w013_issues.len(), 0);
     }
 }
