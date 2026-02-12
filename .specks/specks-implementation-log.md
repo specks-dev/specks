@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-0
+date: 2025-02-12T17:35:53Z
+bead: specks-70x.1
+---
+
+## #step-0: Added ParseDiagnostic type and code block awareness to parser
+
+**Files changed:**
+- .specks/specks-7.md
+
+---
+
+---
 step: #step-5
 date: 2025-02-12T15:48:36Z
 bead: specks-bvq.7

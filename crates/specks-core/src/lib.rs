@@ -43,8 +43,8 @@ pub use session::{
     session_file_path, session_id_from_worktree, sessions_dir,
 };
 pub use types::{
-    Anchor, BeadsHints, Checkpoint, CheckpointKind, Decision, Question, Speck, SpeckMetadata,
-    SpeckStatus, Step, Substep,
+    Anchor, BeadsHints, Checkpoint, CheckpointKind, Decision, ParseDiagnostic, Question, Speck,
+    SpeckMetadata, SpeckStatus, Step, Substep,
 };
 pub use validator::{
     Severity, ValidationConfig, ValidationIssue, ValidationLevel, ValidationResult, validate_speck,

@@ -88,9 +88,49 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
     let mut in_substep: Option<usize> = None; // Index into current step's substeps
     let mut current_section = CurrentSection::None;
     let mut anchor_locations: HashMap<String, usize> = HashMap::new();
+    let mut in_code_block = false;
 
     for (line_num, line) in lines.iter().enumerate() {
         let line_number = line_num + 1; // 1-indexed
+
+        // CRITICAL PLACEMENT: Code block toggle MUST be first, before anchor extraction
+        // Toggle code block state when encountering fence markers
+        if line.trim().starts_with("```") {
+            in_code_block = !in_code_block;
+            continue;
+        }
+
+        // Skip structural matching inside code blocks, emit P006 for structural content
+        if in_code_block {
+            // Test focused subset of 3 high-value structural patterns
+            let mut found_structural = false;
+            let mut pattern_name = "";
+
+            if patterns::STEP_HEADER.is_match(line) {
+                found_structural = true;
+                pattern_name = "step header";
+            } else if patterns::DECISION_HEADER.is_match(line) {
+                found_structural = true;
+                pattern_name = "decision header";
+            } else if patterns::PHASE_HEADER.is_match(line) {
+                found_structural = true;
+                pattern_name = "phase header";
+            }
+
+            if found_structural {
+                speck.diagnostics.push(crate::types::ParseDiagnostic {
+                    code: "P006".to_string(),
+                    message: format!(
+                        "Structural content ({}) found inside code block",
+                        pattern_name
+                    ),
+                    line: line_number,
+                    suggestion: Some("Move this content outside the code block or escape it as an example".to_string()),
+                });
+            }
+
+            continue; // Skip all structural matching for lines inside code blocks
+        }
 
         // Extract anchors from any line
         for cap in patterns::ANCHOR.captures_iter(line) {
@@ -972,5 +1012,212 @@ mod tests {
         assert_eq!(step.artifacts.len(), 2);
         assert_eq!(step.artifacts[0], "New file: src/main.rs");
         assert_eq!(step.artifacts[1], "Modified: Cargo.toml");
+    }
+
+    #[test]
+    fn test_code_block_step_header_not_parsed() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+Here's an example:
+
+```
+#### Step 0: Example {#step-0}
+```
+
+#### Step 1: Real Step {#step-1}
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Only Step 1 should be parsed, not Step 0 inside code block
+        assert_eq!(speck.steps.len(), 1);
+        assert_eq!(speck.steps[0].number, "1");
+        assert_eq!(speck.steps[0].title, "Real Step");
+    }
+
+    #[test]
+    fn test_code_block_step_header_emits_p006() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+Example step header:
+
+```
+#### Step 0: Example {#step-0}
+```
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Should emit P006 diagnostic
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P006");
+        assert_eq!(speck.diagnostics[0].line, 14);
+        assert!(speck
+            .diagnostics[0]
+            .message
+            .contains("step header"));
+    }
+
+    #[test]
+    fn test_code_block_decision_header_not_parsed() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+Example decision:
+
+```
+#### [D01] Example Decision (DECIDED) {#d01-example}
+```
+
+#### [D02] Real Decision (DECIDED) {#d02-real}
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Only D02 should be parsed
+        assert_eq!(speck.decisions.len(), 1);
+        assert_eq!(speck.decisions[0].id, "D02");
+        assert_eq!(speck.decisions[0].title, "Real Decision");
+    }
+
+    #[test]
+    fn test_code_block_anchor_not_collected() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+Example with anchor:
+
+```
+### Section {#code-block-anchor}
+```
+
+### Real Section {#real-anchor}
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Should have phase-1, plan-metadata, and real-anchor, but NOT code-block-anchor
+        let anchor_names: Vec<&str> = speck.anchors.iter().map(|a| a.name.as_str()).collect();
+        assert!(anchor_names.contains(&"phase-1"));
+        assert!(anchor_names.contains(&"plan-metadata"));
+        assert!(anchor_names.contains(&"real-anchor"));
+        assert!(!anchor_names.contains(&"code-block-anchor"));
+    }
+
+    #[test]
+    fn test_code_block_no_diagnostics_without_structural_content() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+Example code:
+
+```
+fn main() {
+    println!("Hello");
+}
+```
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // No diagnostics should be emitted
+        assert_eq!(speck.diagnostics.len(), 0);
+    }
+
+    #[test]
+    fn test_content_after_code_block_parsed_normally() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+Example:
+
+```
+#### Step 0: Inside block {#step-0}
+```
+
+#### Step 1: After block {#step-1}
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Step 1 should be parsed normally
+        assert_eq!(speck.steps.len(), 1);
+        assert_eq!(speck.steps[0].number, "1");
+        assert_eq!(speck.steps[0].title, "After block");
+        assert_eq!(speck.steps[0].tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_empty_diagnostics_by_default() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Simple {#step-0}
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Diagnostics should be empty vec
+        assert_eq!(speck.diagnostics.len(), 0);
     }
 }
