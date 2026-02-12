@@ -60,7 +60,7 @@ If the implementer needs clarification (e.g., step selection), you are resumed w
   "session": {
     "session_id": "auth-20260208-143022",
     "session_file": "/abs/repo/.specks-worktrees/.sessions/auth-20260208-143022.json",
-    "artifacts_base": "/abs/repo/.specks-worktrees/.artifacts/auth-20260208-143022"
+    "artifacts_base": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022/.specks/artifacts"
   },
   "clarification_needed": null,
   "error": null
@@ -77,9 +77,11 @@ If the implementer needs clarification (e.g., step selection), you are resumed w
 specks worktree create <speck_path> --json
 ```
 
-This single command creates/reuses worktree, runs `specks init`, syncs beads, commits annotations, parses speck for `all_steps` and `bead_mapping`, queries `bd ready` for `ready_steps`, creates session and artifact directories, and returns enriched JSON.
+This single command creates/reuses worktree, runs `specks init`, syncs beads, commits annotations, parses speck for `all_steps` and `bead_mapping`, queries `bd ready` for `ready_steps`, creates session and artifact directories inside the worktree at `.specks/artifacts/`, and returns enriched JSON.
 
 Parse the JSON response for: `worktree_path`, `branch_name`, `base_branch`, `all_steps`, `ready_steps`, `bead_mapping`, `root_bead_id`, `session_id`, `session_file`, `artifacts_base`, `reused`.
+
+**Note:** The agent does NOT create directories — the `specks worktree create` CLI handles all infrastructure setup including creating `.specks/artifacts/` inside the worktree. The `artifacts_base` path returned by the CLI is worktree-local (e.g., `{worktree_path}/.specks/artifacts`).
 
 **State derivation:**
 - `completed_steps` = `all_steps` minus `ready_steps`

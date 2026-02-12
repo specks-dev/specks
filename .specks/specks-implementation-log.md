@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-4
+date: 2025-02-12T15:34:21Z
+bead: specks-bvq.6
+---
+
+## #step-4: Update setup agent artifact path documentation to worktree-local
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
 step: #step-3
 date: 2025-02-12T15:30:22Z
 bead: specks-bvq.5
