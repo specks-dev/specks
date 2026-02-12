@@ -6,6 +6,7 @@
 use clap::Subcommand;
 use serde::Serialize;
 use specks_core::{
+    ValidationLevel,
     session::{Session, delete_session, session_id_from_worktree},
     worktree::{
         CleanupMode, WorktreeConfig, cleanup_worktrees, create_worktree, list_worktrees,
@@ -30,6 +31,10 @@ pub enum WorktreeCommands {
         /// Base branch to create worktree from (default: main)
         #[arg(long, default_value = "main")]
         base: String,
+
+        /// Skip validation checks (for migrating legacy specks)
+        #[arg(long)]
+        skip_validation: bool,
     },
 
     /// List active worktrees with progress
@@ -330,16 +335,18 @@ fn rollback_worktree_creation(
 pub fn run_worktree_create(
     speck: String,
     base: String,
+    skip_validation: bool,
     json_output: bool,
     quiet: bool,
 ) -> Result<i32, String> {
-    run_worktree_create_with_root(speck, base, json_output, quiet, None)
+    run_worktree_create_with_root(speck, base, skip_validation, json_output, quiet, None)
 }
 
 /// Inner implementation that accepts an explicit repo root.
 pub fn run_worktree_create_with_root(
     speck: String,
     base: String,
+    skip_validation: bool,
     json_output: bool,
     quiet: bool,
     override_root: Option<&Path>,
@@ -361,6 +368,89 @@ pub fn run_worktree_create_with_root(
             eprintln!("error: Speck file not found: {}", speck_path.display());
         }
         return Ok(7); // Exit code 7: Speck file not found
+    }
+
+    // Pre-flight validation (unless --skip-validation is used)
+    if !skip_validation {
+        // Read speck content
+        let speck_content = std::fs::read_to_string(repo_root.join(&speck_path))
+            .map_err(|e| format!("Failed to read speck: {}", e))?;
+
+        // Parse speck
+        let parsed_speck = match specks_core::parse_speck(&speck_content) {
+            Ok(s) => s,
+            Err(e) => {
+                if json_output {
+                    eprintln!(r#"{{"error": "Parse error: {}"}}"#, e);
+                } else if !quiet {
+                    eprintln!("error: Parse error: {}", e);
+                    eprintln!("\nSpeck failed to parse. Fix the parse errors before creating worktree.");
+                }
+                return Ok(8); // Exit code 8: Validation failed
+            }
+        };
+
+        // Validate with normal level
+        let validation_config = specks_core::validator::ValidationConfig {
+            level: ValidationLevel::Normal,
+            beads_enabled: false,
+            validate_bead_ids: false,
+        };
+        let validation_result = specks_core::validate_speck_with_config(&parsed_speck, &validation_config);
+
+        // Check for validation errors or diagnostics
+        if !validation_result.valid || !validation_result.diagnostics.is_empty() {
+            if json_output {
+                // Format JSON error response with validation details
+                use crate::output::{JsonDiagnostic, JsonIssue};
+
+                let issues: Vec<JsonIssue> = validation_result.issues.iter()
+                    .map(|i| JsonIssue::from(i).with_file(&speck))
+                    .collect();
+
+                let diagnostics: Vec<JsonDiagnostic> = validation_result.diagnostics.iter()
+                    .map(|d| JsonDiagnostic::from(d).with_file(&speck))
+                    .collect();
+
+                let error_data = serde_json::json!({
+                    "error": "Validation failed",
+                    "issues": issues,
+                    "diagnostics": diagnostics
+                });
+                eprintln!("{}", serde_json::to_string_pretty(&error_data).unwrap());
+            } else if !quiet {
+                eprintln!("error: Speck failed validation");
+                eprintln!("\nValidation issues:");
+
+                // Print validation errors
+                for issue in &validation_result.issues {
+                    if let Some(line) = issue.line {
+                        eprintln!("  error[{}]: line {}: {}", issue.code, line, issue.message);
+                    } else {
+                        eprintln!("  error[{}]: {}", issue.code, issue.message);
+                    }
+                }
+
+                // Print parse diagnostics
+                if !validation_result.diagnostics.is_empty() {
+                    eprintln!("\nDiagnostics:");
+                    for diagnostic in &validation_result.diagnostics {
+                        eprintln!(
+                            "  warning[{}]: line {}: {}",
+                            diagnostic.code, diagnostic.line, diagnostic.message
+                        );
+                        if let Some(ref suggestion) = diagnostic.suggestion {
+                            eprintln!("    suggestion: {}", suggestion);
+                        }
+                    }
+                }
+
+                eprintln!("\nFix validation issues before creating worktree.");
+                eprintln!("Run: specks validate {}", speck);
+                eprintln!("Or use --skip-validation to bypass this check.");
+            }
+            return Ok(8); // Exit code 8: Validation failed
+        }
     }
 
     let config = WorktreeConfig {

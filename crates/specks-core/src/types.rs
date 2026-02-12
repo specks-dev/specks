@@ -2,6 +2,19 @@
 
 use serde::{Deserialize, Serialize};
 
+/// A diagnostic emitted during parsing (near-miss, code block content, etc.)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ParseDiagnostic {
+    /// Diagnostic code (e.g., "P001", "P006")
+    pub code: String,
+    /// Human-readable message
+    pub message: String,
+    /// Line number where the diagnostic was triggered
+    pub line: usize,
+    /// Optional suggestion for fixing the issue
+    pub suggestion: Option<String>,
+}
+
 /// A parsed speck document
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Speck {
@@ -25,6 +38,9 @@ pub struct Speck {
     pub steps: Vec<Step>,
     /// Raw content (for line number lookups)
     pub raw_content: String,
+    /// Parse diagnostics (near-miss patterns, code block issues)
+    #[serde(default)]
+    pub diagnostics: Vec<ParseDiagnostic>,
 }
 
 /// Plan metadata section from a speck

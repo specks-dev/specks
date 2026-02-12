@@ -534,3 +534,239 @@ fn test_init_check_force_mutually_exclusive() {
         "init --check --force should fail due to mutually exclusive flags"
     );
 }
+
+#[test]
+#[serial_test::serial]
+fn test_validate_text_output_includes_diagnostics() {
+    let temp = setup_test_project();
+
+    // Create a speck with a near-miss pattern (lowercase step header)
+    let speck_with_diagnostic = r#"## Phase 1.0: Test Feature {#phase-1}
+
+**Purpose:** Test speck with diagnostic.
+
+---
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Target branch | main |
+| Tracking issue/PR | N/A |
+| Last updated | 2026-02-04 |
+
+---
+
+### step 0: lowercase step header
+
+This should trigger P001 diagnostic.
+
+---
+
+### 1.0.5 Execution Steps {#execution-steps}
+
+#### Step 0: Real Step {#step-0}
+
+**Commit:** `feat: setup`
+
+**References:** (#plan-metadata)
+
+**Tasks:**
+- [ ] Task one
+
+**Checkpoint:**
+- [ ] Check one
+"#;
+
+    create_test_speck(&temp, "diagnostic-test", speck_with_diagnostic);
+
+    let output = Command::new(specks_binary())
+        .arg("validate")
+        .arg(".specks/specks-diagnostic-test.md")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks validate");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Should include diagnostics section with P001
+    assert!(
+        stdout.contains("warning[P001]:"),
+        "Text output should contain warning[P001]: format. Output:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("Diagnostics:"),
+        "Text output should contain Diagnostics section. Output:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("line"),
+        "Diagnostic should include line number. Output:\n{}",
+        stdout
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn test_validate_json_output_includes_diagnostics() {
+    let temp = setup_test_project();
+
+    // Create a speck with multiple near-miss patterns
+    let speck_with_diagnostics = r#"## Phase 1.0: Test Feature {#phase-1}
+
+**Purpose:** Test speck with multiple diagnostics.
+
+---
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Target branch | main |
+| Tracking issue/PR | N/A |
+| Last updated | 2026-02-04 |
+
+---
+
+### step 0: lowercase step header
+
+This triggers P001.
+
+### phase 1.0: lowercase phase
+
+This triggers P003.
+
+---
+
+### 1.0.5 Execution Steps {#execution-steps}
+
+#### Step 0: Real Step {#step-0}
+
+**Commit:** `feat: setup`
+
+**References:** (#plan-metadata)
+
+**Tasks:**
+- [ ] Task one
+
+**Checkpoint:**
+- [ ] Check one
+"#;
+
+    create_test_speck(&temp, "json-diagnostic-test", speck_with_diagnostics);
+
+    let output = Command::new(specks_binary())
+        .arg("validate")
+        .arg(".specks/specks-json-diagnostic-test.md")
+        .arg("--json")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks validate --json");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse JSON
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
+
+    // Should have diagnostics array in data
+    assert!(
+        json["data"]["diagnostics"].is_array(),
+        "JSON output should contain diagnostics array in data. JSON:\n{}",
+        serde_json::to_string_pretty(&json).unwrap()
+    );
+
+    let diagnostics = json["data"]["diagnostics"].as_array().unwrap();
+    assert!(
+        !diagnostics.is_empty(),
+        "Diagnostics array should not be empty. JSON:\n{}",
+        serde_json::to_string_pretty(&json).unwrap()
+    );
+
+    // Should have at least one P001 or P003
+    let has_p_code = diagnostics.iter().any(|d| {
+        let code = d["code"].as_str().unwrap_or("");
+        code == "P001" || code == "P003"
+    });
+    assert!(
+        has_p_code,
+        "Diagnostics should contain P001 or P003. Diagnostics:\n{}",
+        serde_json::to_string_pretty(&diagnostics).unwrap()
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn test_validate_level_lenient_suppresses_diagnostics() {
+    let temp = setup_test_project();
+
+    // Create a speck with a diagnostic
+    let speck_with_diagnostic = r#"## Phase 1.0: Test Feature {#phase-1}
+
+**Purpose:** Test speck.
+
+---
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Target branch | main |
+| Tracking issue/PR | N/A |
+| Last updated | 2026-02-04 |
+
+---
+
+### step 0: lowercase
+
+This triggers P001.
+
+---
+
+### 1.0.5 Execution Steps {#execution-steps}
+
+#### Step 0: Real Step {#step-0}
+
+**Commit:** `feat: setup`
+
+**References:** (#plan-metadata)
+
+**Tasks:**
+- [ ] Task one
+
+**Checkpoint:**
+- [ ] Check one
+"#;
+
+    create_test_speck(&temp, "lenient-test", speck_with_diagnostic);
+
+    // Run with --level lenient
+    let output = Command::new(specks_binary())
+        .arg("validate")
+        .arg(".specks/specks-lenient-test.md")
+        .arg("--level")
+        .arg("lenient")
+        .arg("--json")
+        .current_dir(temp.path())
+        .output()
+        .expect("failed to run specks validate --level lenient");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("Failed to parse JSON. Output:\n{}", stdout));
+
+    // Diagnostics should be empty in lenient mode
+    let diagnostics = json["data"]["diagnostics"].as_array().unwrap();
+    assert!(
+        diagnostics.is_empty(),
+        "Lenient mode should suppress diagnostics. JSON:\n{}",
+        serde_json::to_string_pretty(&json).unwrap()
+    );
+}

@@ -68,8 +68,9 @@ const ALL_AGENTS: &[&str] = &[
     "implementer-setup-agent",
 ];
 
-/// Read-only agents (no Write/Edit/Bash)
-const READONLY_AGENTS: &[&str] = &["critic-agent"];
+/// Read-only agents (no Write/Edit, but may have Bash for specific commands like validate)
+/// Note: critic-agent has Bash for running specks validate as a hard gate
+const READONLY_AGENTS: &[&str] = &[];
 
 /// Core agents with full documentation structure (Input/Output contracts, Your Role, etc.)
 /// Setup agents have simpler structure and are excluded.
@@ -339,6 +340,54 @@ fn test_critic_documents_recommendations() {
     assert!(
         content.contains("APPROVE") && content.contains("REVISE") && content.contains("REJECT"),
         "Critic must document APPROVE, REVISE, REJECT recommendations"
+    );
+}
+
+#[test]
+fn test_critic_has_bash_tool_for_validation() {
+    let path = agents_dir().join("critic-agent.md");
+    let content = fs::read_to_string(&path).expect("Failed to read critic-agent");
+
+    let frontmatter = parse_agent_frontmatter(&content).expect("Failed to parse frontmatter");
+    let tools = frontmatter.2;
+
+    // Critic must have Bash tool for running specks validate
+    assert!(
+        tools.contains("Bash"),
+        "Critic must have Bash tool for specks validate"
+    );
+}
+
+#[test]
+fn test_critic_documents_validation_workflow() {
+    let path = agents_dir().join("critic-agent.md");
+    let content = fs::read_to_string(&path).expect("Failed to read critic-agent");
+
+    // Critic must document specks validate as first action
+    assert!(
+        content.contains("specks validate"),
+        "Critic must document specks validate command"
+    );
+
+    // Critic must document immediate REJECT on validation failure
+    assert!(
+        content.contains("REJECT") && content.contains("validate"),
+        "Critic must document REJECT on validation failure"
+    );
+}
+
+#[test]
+fn test_critic_documents_bash_restriction() {
+    let path = agents_dir().join("critic-agent.md");
+    let content = fs::read_to_string(&path).expect("Failed to read critic-agent");
+
+    // Critic must document Bash restriction to only specks validate
+    // Use case-insensitive check for "ONLY" or "only"
+    let lowercase_content = content.to_lowercase();
+    assert!(
+        (lowercase_content.contains("only") || lowercase_content.contains("restriction"))
+            && lowercase_content.contains("specks validate"),
+        "Critic must document Bash tool restriction to specks validate only"
     );
 }
 
