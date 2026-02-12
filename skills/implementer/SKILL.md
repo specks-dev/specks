@@ -123,12 +123,47 @@ If REVISE, append:
   Log: updated{log_rotated ? ", rotated to " + archived_path : ""}
 ```
 
-### committer-agent publish post-call
+### committer-agent fixup post-call
 
 ```
-**specks:committer-agent**(Publish complete)
-  PR: {pr_url}
-  Branch: {branch_name} -> {base_branch}
+**specks:committer-agent**(Fixup complete)
+  Commit: {commit_hash} {commit_message}
+  Files: {files_staged.length} staged and committed
+  Log: updated
+```
+
+### auditor-agent post-call
+
+```
+**specks:auditor-agent**(Complete)
+  Recommendation: {recommendation}
+  Build: {build.exit_code == 0 ? "pass" : "FAIL"} | Tests: {test.exit_code == 0 ? "pass" : "FAIL"} | Clippy: {clippy.exit_code == 0 ? "pass" : "FAIL"} | Fmt: {fmt_check.exit_code == 0 ? "pass" : "FAIL"}
+  Deliverables: {passed_deliverables}/{total_deliverables} passed
+  Issues: {issues.length} ({count by priority: N P0, N P1, N P2, N P3 — omit zeros})
+```
+
+If REVISE, append:
+```
+  Issues requiring fixes:
+    {issue.description} ({issue.priority})
+  Retry: {auditor_attempts}/{max_attempts}
+```
+
+### integrator-agent post-call
+
+```
+**specks:integrator-agent**(Complete)
+  Recommendation: {recommendation}
+  PR: {pr_url} (#{pr_number})
+  CI status: {ci_status}
+  Checks: {passed_checks}/{total_checks} passed ({check details: name=status})
+```
+
+If REVISE, append:
+```
+  Failed checks:
+    {check_name}: {status} ({url})
+  Retry: {integrator_attempts}/{max_attempts}
 ```
 
 ### Failure messages
@@ -203,10 +238,39 @@ For `bead_close_failed` (warn and continue):
        └─────────────────────────────────────────────────────────────────┘
               │
               ▼
-       RESUME committer_id (publish mode)
-              ├─► push branch
-              ├─► create PR (body from git log)
-              └─► return PR URL
+       ┌─────────────────────────────────────────────────────────────────┐
+       │  POST-LOOP: AUDITOR PHASE                                      │
+       │  ┌───────────────────────────────────────────────────────────┐  │
+       │  │  SPAWN auditor-agent → auditor_id                         │  │
+       │  │         │                                                 │  │
+       │  │    PASS? ──► proceed to integrator                        │  │
+       │  │         │                                                 │  │
+       │  │    REVISE? ──► RESUME coder_id (fix issues)               │  │
+       │  │                  ──► RESUME committer_id (fixup)          │  │
+       │  │                  ──► RESUME auditor_id (re-audit)         │  │
+       │  │                  ──► (max 3 rounds, then ESCALATE)        │  │
+       │  │         │                                                 │  │
+       │  │    ESCALATE? ──► AskUserQuestion (continue/abort)         │  │
+       │  └───────────────────────────────────────────────────────────┘  │
+       └─────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+       ┌─────────────────────────────────────────────────────────────────┐
+       │  POST-LOOP: INTEGRATOR PHASE                                   │
+       │  ┌───────────────────────────────────────────────────────────┐  │
+       │  │  SPAWN integrator-agent → integrator_id                   │  │
+       │  │    (push branch, create PR, wait for CI)                  │  │
+       │  │         │                                                 │  │
+       │  │    PASS? ──► implementation complete                      │  │
+       │  │         │                                                 │  │
+       │  │    REVISE? ──► RESUME coder_id (fix CI issues)            │  │
+       │  │                  ──► RESUME committer_id (fixup)          │  │
+       │  │                  ──► RESUME integrator_id (re-push/check) │  │
+       │  │                  ──► (max 3 rounds, then ESCALATE)        │  │
+       │  │         │                                                 │  │
+       │  │    ESCALATE? ──► AskUserQuestion (continue/abort)         │  │
+       │  └───────────────────────────────────────────────────────────┘  │
+       └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Architecture principles:**
@@ -263,8 +327,14 @@ Initialize once (persists across all steps):
 - `coder_id = null`
 - `reviewer_id = null`
 - `committer_id = null`
+- `auditor_id = null`
+- `integrator_id = null`
 
 Initialize per step: `reviewer_attempts = 0`
+
+Initialize for post-loop phases:
+- `auditor_attempts = 0`
+- `integrator_attempts = 0`
 
 Output the step header.
 
@@ -491,43 +561,217 @@ Output the Committer post-call message.
 #### 3g. Next Step
 
 1. If more steps: **GO TO 3a** for next step (all agent IDs are preserved)
-2. If all done: proceed to Implementation Completion
+2. If all done: proceed to Auditor Phase (section 4)
 
-### 4. Implementation Completion
+### 4. Auditor Phase
 
-Resume committer in publish mode to create PR:
+After all steps complete, spawn the auditor agent for holistic quality verification:
+
+```
+Task(
+  subagent_type: "specks:auditor-agent",
+  prompt: '{
+    "worktree_path": "<worktree_path>",
+    "speck_path": "<speck_path>"
+  }',
+  description: "Post-loop quality audit"
+)
+```
+
+**Save the `agentId` as `auditor_id`.**
+
+Parse the auditor's JSON output per Spec S02:
+- `build_results`: Fresh build/test/clippy/fmt results
+- `deliverable_checks`: Verification of exit criteria from #exit-criteria
+- `cross_step_issues`: Integration issues spanning multiple steps
+- `spot_check_findings`: Issues from spot-checking individual steps
+- `issues`: All issues consolidated, graded P0-P3
+- `recommendation`: PASS, REVISE, or ESCALATE
+
+Output the Auditor post-call message.
+
+#### 4a. Handle Auditor Recommendation
+
+| Recommendation | Action |
+|----------------|--------|
+| `PASS` | Proceed to Integrator Phase (section 5) |
+| `REVISE` | Fix issues and re-audit (4a-retry) |
+| `ESCALATE` | AskUserQuestion with issues, get user decision |
+
+**4a-retry (REVISE loop):**
+
+Increment `auditor_attempts`. If `auditor_attempts >= 3`, ESCALATE to user:
+
+```
+AskUserQuestion: "Auditor retry limit reached (3 attempts). Issues: <issues>. Options: (1) Continue anyway, (2) Let me fix manually, (3) Abort."
+```
+
+1. **Resume coder** with auditor issues:
+
+```
+Task(
+  resume: "<coder_id>",
+  prompt: 'Auditor found issues. Fix these: <issues array with P0/P1 priority>. Then return updated output.',
+  description: "Fix auditor issues"
+)
+```
+
+Output the Coder post-call message.
+
+2. **Resume committer** in fixup mode:
 
 ```
 Task(
   resume: "<committer_id>",
   prompt: '{
+    "operation": "fixup",
+    "worktree_path": "<worktree_path>",
+    "speck_path": "<speck_path>",
+    "proposed_message": "fix(audit): <brief description>",
+    "files_to_stage": [<files from coder output>],
+    "log_entry": {
+      "summary": "Audit fix: <description>"
+    }
+  }',
+  description: "Commit audit fixes"
+)
+```
+
+Output the Committer fixup post-call message.
+
+3. **Resume auditor** for re-audit:
+
+```
+Task(
+  resume: "<auditor_id>",
+  prompt: 'Re-audit after coder fixes. Previous issues: <issues_json>.',
+  description: "Re-audit after fixes"
+)
+```
+
+Output the Auditor post-call message.
+
+Go back to 4a to check the new recommendation.
+
+### 5. Integrator Phase
+
+After auditor passes, spawn the integrator agent to push branch, create PR, and verify CI:
+
+```
+Task(
+  subagent_type: "specks:integrator-agent",
+  prompt: '{
     "operation": "publish",
     "worktree_path": "<worktree_path>",
     "branch_name": "<branch_name>",
     "base_branch": "<base_branch>",
-    "speck_title": "<speck title>",
-    "speck_path": "<path>"
+    "speck_title": "<speck title from speck>",
+    "speck_path": "<speck_path>",
+    "repo": null
   }',
-  description: "Push and create PR"
+  description: "Push branch and create PR"
 )
 ```
 
-Parse the committer's publish output. Output the Publish post-call message.
+**Save the `agentId` as `integrator_id`.**
 
-Output the implementation completion message.
+Parse the integrator's JSON output per Spec S04:
+- `pr_url`: The PR URL
+- `pr_number`: The PR number
+- `branch_pushed`: Whether branch was pushed successfully
+- `ci_status`: pass, fail, pending, or timeout
+- `ci_details`: Individual check results
+- `recommendation`: PASS, REVISE, or ESCALATE
+
+Output the Integrator post-call message.
+
+#### 5a. Handle Integrator Recommendation
+
+| Recommendation | Action |
+|----------------|--------|
+| `PASS` | Proceed to Implementation Completion (section 6) |
+| `REVISE` | Fix CI failures and re-check (5a-retry) |
+| `ESCALATE` | AskUserQuestion with CI details, get user decision |
+
+**5a-retry (REVISE loop):**
+
+Increment `integrator_attempts`. If `integrator_attempts >= 3`, ESCALATE to user:
+
+```
+AskUserQuestion: "Integrator retry limit reached (3 attempts). CI status: <ci_status>. CI details: <ci_details>. Options: (1) Continue anyway, (2) Let me investigate manually, (3) Abort."
+```
+
+1. **Resume coder** with CI failure details:
+
+```
+Task(
+  resume: "<coder_id>",
+  prompt: 'CI checks failed. Status: <ci_status>. Details: <ci_details array>. Fix the failures and return updated output.',
+  description: "Fix CI failures"
+)
+```
+
+Output the Coder post-call message.
+
+2. **Resume committer** in fixup mode:
+
+```
+Task(
+  resume: "<committer_id>",
+  prompt: '{
+    "operation": "fixup",
+    "worktree_path": "<worktree_path>",
+    "speck_path": "<speck_path>",
+    "proposed_message": "fix(ci): <brief description>",
+    "files_to_stage": [<files from coder output>],
+    "log_entry": {
+      "summary": "CI fix: <description>"
+    }
+  }',
+  description: "Commit CI fixes"
+)
+```
+
+Output the Committer fixup post-call message.
+
+3. **Resume integrator** for re-push and re-check:
+
+```
+Task(
+  resume: "<integrator_id>",
+  prompt: 'Fixup committed. Re-push and re-check CI. PR: <pr_url>.',
+  description: "Re-push and re-check CI"
+)
+```
+
+Output the Integrator post-call message.
+
+Go back to 5a to check the new recommendation.
+
+### 6. Implementation Completion
+
+Output the implementation completion message with PR URL from integrator:
+
+```
+Implementation complete
+  Speck: {speck_path}
+  PR: {pr_url}
+```
 
 ---
 
 ## Reference: Persistent Agent Pattern
 
-All four implementation agents are **spawned once** during the first step and **resumed** for every subsequent step:
+All six implementation agents are **spawned once** and **resumed** for retries or subsequent phases:
 
 | Agent | Spawned | Resumed For | Accumulated Knowledge |
 |-------|---------|-------------|----------------------|
 | **architect** | Step 0 | Steps 1..N | Codebase structure, speck contents, patterns |
-| **coder** | Step 0 | Steps 1..N + retries | Files created/modified, build system, test suite |
+| **coder** | Step 0 | Steps 1..N + review retries + audit fixes + CI fixes | Files created/modified, build system, test suite |
 | **reviewer** | Step 0 | Steps 1..N + re-reviews | Speck requirements, audit patterns, prior findings |
-| **committer** | Step 0 | Steps 1..N + publish | Worktree layout, session file format, commit history |
+| **committer** | Step 0 | Steps 1..N + audit fixup + CI fixup | Worktree layout, commit history, log format |
+| **auditor** | Post-loop | Audit retries | Deliverables, build state, cross-step issues |
+| **integrator** | Post-loop | CI retries | PR state, CI failures, check patterns |
 
 **Why this matters:**
 - **Faster**: No cold-start exploration on steps 1..N — agents already know the codebase
@@ -536,10 +780,11 @@ All four implementation agents are **spawned once** during the first step and **
 - **Auto-compaction**: Agents compress old context at ~95% capacity, keeping recent work
 
 **Agent ID management:**
-- Store `architect_id`, `coder_id`, `reviewer_id`, `committer_id` after first spawn
+- Store `architect_id`, `coder_id`, `reviewer_id`, `committer_id` after first spawn (step 0)
+- Store `auditor_id`, `integrator_id` after post-loop spawn
 - Pass these IDs to `Task(resume: "<id>")` for all subsequent invocations
 - IDs persist for the entire implementer session
-- Never reset IDs between steps
+- Never reset IDs between steps or phases
 
 ---
 
@@ -574,11 +819,9 @@ From coder output, evaluate `drift_assessment`:
 
 **Close after commit** (handled by committer-agent via `specks step-commit`):
 
-The committer-agent is a thin CLI wrapper that delegates to:
-- `specks step-commit` for commit mode (log rotate, prepend, git commit, bead close, session update)
-- `specks step-publish` for publish mode (push branch, create PR, session update)
+The committer-agent is a thin CLI wrapper that delegates to `specks step-commit` for step commits (log rotate, prepend, git commit, bead close). All git/log/bead operations are performed atomically by this CLI command.
 
-All git/log/bead/session operations are performed atomically by these CLI commands.
+**Fixup commits** (audit and integration fixes) are outside the bead system. They use `specks log prepend` for tracking and direct git commands for commits, but do not close beads. Only step commits close beads.
 
 ---
 
@@ -628,6 +871,30 @@ When you receive an agent response:
   "drift_notes": string or null (required),
   "review_categories": object (required: structure, error_handling, security — each PASS/WARN/FAIL),
   "recommendation": enum (required: APPROVE, REVISE, ESCALATE)
+}
+```
+
+**Auditor validation:**
+```json
+{
+  "build_results": object (required: build, test, clippy, fmt_check — each with command, exit_code, output_tail),
+  "deliverable_checks": array (required — each item has criterion, status, evidence),
+  "cross_step_issues": array (required — each item has description, files, priority),
+  "spot_check_findings": array (required — each item has step_anchor, description, priority),
+  "issues": array (required — each item has description, priority, file),
+  "recommendation": enum (required: PASS, REVISE, ESCALATE)
+}
+```
+
+**Integrator validation:**
+```json
+{
+  "pr_url": string (required),
+  "pr_number": number (required),
+  "branch_pushed": boolean (required),
+  "ci_status": enum (required: pass, fail, pending, timeout),
+  "ci_details": array (required — each item has check_name, status, url),
+  "recommendation": enum (required: PASS, REVISE, ESCALATE)
 }
 ```
 

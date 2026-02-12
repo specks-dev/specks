@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-3
+date: 2025-02-12T23:00:53Z
+bead: specks-99w.4
+---
+
+## #step-3: Updated implementer SKILL.md with complete post-loop quality gates: added auditor_id/integrator_id variables and retry counters, updated orchestration diagram per Diag01, removed old publish mode, added Auditor Phase (section 4) with PASS/REVISE/ESCALATE and max 3 retries, added Integrator Phase (section 5) with PR creation and CI verification, added Implementation Completion (section 6), updated Persistent Agent Pattern table to 6 agents, added progress templates for auditor/integrator/fixup, updated Beads Integration for fixup commits, added JSON validation for Spec S02/S04.
+
+**Files changed:**
+- .specks/specks-9.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-12T22:52:40Z
 bead: specks-99w.3
