@@ -10,18 +10,18 @@
 class Specks < Formula
   desc "From ideas to implementation via multi-agent orchestration"
   homepage "https://github.com/specks-dev/specks"
-  version "0.2.24"
+  version "0.2.25"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/specks-dev/specks/releases/download/v#{version}/specks-#{version}-macos-arm64.tar.gz"
-      # SHA256 ARM64: 4d1a736367ba62ae84a1e26df1a3eaabf0aa631c1b4376e273ddd94785adafab
-      sha256 "4d1a736367ba62ae84a1e26df1a3eaabf0aa631c1b4376e273ddd94785adafab"
+      # SHA256 ARM64: c382fdf86eaa5922e6c5705593fbba67cacc81aea90b6c8756da24155c777e49
+      sha256 "c382fdf86eaa5922e6c5705593fbba67cacc81aea90b6c8756da24155c777e49"
     else
       url "https://github.com/specks-dev/specks/releases/download/v#{version}/specks-#{version}-macos-x86_64.tar.gz"
-      # SHA256 X86_64: fbf10e9a99a0fe7f9a7b924346b2388527d16f3d5ae8525c7bad914c2eeb773b
-      sha256 "fbf10e9a99a0fe7f9a7b924346b2388527d16f3d5ae8525c7bad914c2eeb773b"
+      # SHA256 X86_64: aa1e3ddf1b1b2fbbc96cb976727af03ffe6513477dd78aba23cb2a4b2dbfac0d
+      sha256 "aa1e3ddf1b1b2fbbc96cb976727af03ffe6513477dd78aba23cb2a4b2dbfac0d"
     end
   end
 
