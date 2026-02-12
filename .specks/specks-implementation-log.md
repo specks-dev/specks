@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-1
+date: 2025-02-12T20:39:20Z
+bead: specks-t9v.2
+---
+
+## #step-1: Remove --session and --step-summaries from step-publish, rewrite PR body generation to use git log
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
 step: #step-0
 date: 2025-02-12T20:33:05Z
 bead: specks-t9v.1

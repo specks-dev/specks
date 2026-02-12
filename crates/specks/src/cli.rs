@@ -213,9 +213,9 @@ pub enum Commands {
 
     /// Publish implementation results via push and PR creation
     ///
-    /// Pushes branch to remote, creates PR, and updates session status.
+    /// Pushes branch to remote and creates PR.
     #[command(
-        long_about = "Publish implementation results via push and PR creation.\n\nSequence:\n  1. Check gh auth\n  2. Derive repo from remote (if not provided)\n  3. Generate PR body from step summaries\n  4. Push branch to remote\n  5. Create PR via gh\n  6. Update session to Completed\n\nRequires:\n  - GitHub CLI (gh) installed and authenticated\n  - Remote 'origin' configured"
+        long_about = "Publish implementation results via push and PR creation.\n\nSequence:\n  1. Check gh auth\n  2. Derive repo from remote (if not provided)\n  3. Generate PR body from git log\n  4. Push branch to remote\n  5. Create PR via gh\n\nRequires:\n  - GitHub CLI (gh) installed and authenticated\n  - Remote 'origin' configured"
     )]
     StepPublish {
         /// Absolute path to the worktree directory
@@ -237,14 +237,6 @@ pub enum Commands {
         /// Speck file path relative to repo root
         #[arg(long, value_name = "PATH")]
         speck: String,
-
-        /// Step completion summaries for PR body (repeatable)
-        #[arg(long, value_name = "TEXT", num_args = 1..)]
-        step_summaries: Vec<String>,
-
-        /// Absolute path to session JSON file
-        #[arg(long, value_name = "PATH")]
-        session: String,
 
         /// GitHub repo in owner/repo format (auto-derived if not provided)
         #[arg(long, value_name = "REPO")]
@@ -855,11 +847,6 @@ mod tests {
             "feat: add authentication",
             "--speck",
             ".specks/specks-1.md",
-            "--step-summaries",
-            "Step 0: added models",
-            "Step 1: added handlers",
-            "--session",
-            "/path/to/session.json",
         ])
         .unwrap();
 
@@ -870,8 +857,6 @@ mod tests {
                 base,
                 title,
                 speck,
-                step_summaries,
-                session,
                 repo,
             }) => {
                 assert_eq!(worktree, "/path/to/worktree");
@@ -879,11 +864,6 @@ mod tests {
                 assert_eq!(base, "main");
                 assert_eq!(title, "feat: add authentication");
                 assert_eq!(speck, ".specks/specks-1.md");
-                assert_eq!(
-                    step_summaries,
-                    vec!["Step 0: added models", "Step 1: added handlers"]
-                );
-                assert_eq!(session, "/path/to/session.json");
                 assert!(repo.is_none());
             }
             _ => panic!("Expected StepPublish command"),
@@ -905,10 +885,6 @@ mod tests {
             "title",
             "--speck",
             ".specks/specks-1.md",
-            "--step-summaries",
-            "summary",
-            "--session",
-            "/path/session.json",
             "--repo",
             "owner/repo",
         ])

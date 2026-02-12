@@ -170,8 +170,6 @@ fn main() -> ExitCode {
             base,
             title,
             speck,
-            step_summaries,
-            session,
             repo,
         }) => commands::run_step_publish(
             worktree,
@@ -179,8 +177,6 @@ fn main() -> ExitCode {
             base,
             title,
             speck,
-            step_summaries,
-            session,
             repo,
             cli.json,
             cli.quiet,
