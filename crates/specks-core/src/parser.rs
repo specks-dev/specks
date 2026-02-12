@@ -71,9 +71,43 @@ mod patterns {
     pub static SECTION_HEADER: LazyLock<regex::Regex> = LazyLock::new(|| {
         regex::Regex::new(r"^(#{1,6})\s+(.+?)\s*(?:\{#([a-z0-9-]+)\})?\s*$").unwrap()
     });
+
+    // Near-miss patterns for diagnostics (relaxed versions of strict patterns)
+    pub static NEAR_MISS_STEP: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"(?i)^#{1,6}\s+step\s+\d+").unwrap());
+
+    pub static NEAR_MISS_DECISION: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"(?i)^\s*#{1,6}\s*\[[DQ]\d+\]").unwrap());
+
+    pub static NEAR_MISS_PHASE: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"(?i)^#{1,6}\s+phase\s+[\d.]+:").unwrap());
+
+    pub static NEAR_MISS_COMMIT: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"(?i)^\*?\*?commit\*?\*?:\s*").unwrap());
+
+    // Broad anchor pattern for detecting invalid anchors
+    pub static INVALID_ANCHOR: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\{#([^}]+)\}").unwrap());
+
+    // Valid anchor format for validation
+    pub static VALID_ANCHOR: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"^[a-z0-9][a-z0-9-]*$").unwrap());
 }
 
+/// Known metadata field names (case-insensitive matching)
+const KNOWN_METADATA_FIELDS: &[&str] = &[
+    "owner",
+    "status",
+    "target branch",
+    "tracking issue/pr",
+    "tracking issue",
+    "tracking",
+    "last updated",
+    "beads root",
+];
+
 /// Parse a speck file from its contents
+#[allow(unused_assignments)]
 pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
     let mut speck = Speck {
         raw_content: content.to_string(),
@@ -102,10 +136,11 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
         // Skip structural matching inside code blocks, emit P006 for structural content
         if in_code_block {
-            // Test focused subset of 3 high-value structural patterns
+            // Test focused subset of high-value structural patterns (strict and near-miss)
             let mut found_structural = false;
             let mut pattern_name = "";
 
+            // Check strict patterns first
             if patterns::STEP_HEADER.is_match(line) {
                 found_structural = true;
                 pattern_name = "step header";
@@ -115,6 +150,17 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
             } else if patterns::PHASE_HEADER.is_match(line) {
                 found_structural = true;
                 pattern_name = "phase header";
+            }
+            // Also check near-miss patterns to catch malformed structural content
+            else if patterns::NEAR_MISS_STEP.is_match(line) {
+                found_structural = true;
+                pattern_name = "step-like header";
+            } else if patterns::NEAR_MISS_DECISION.is_match(line) {
+                found_structural = true;
+                pattern_name = "decision-like header";
+            } else if patterns::NEAR_MISS_PHASE.is_match(line) {
+                found_structural = true;
+                pattern_name = "phase-like header";
             }
 
             if found_structural {
@@ -131,6 +177,9 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
             continue; // Skip all structural matching for lines inside code blocks
         }
+
+        // Track whether this line matched any strict pattern (prevents false near-miss diagnostics)
+        let mut matched = false;
 
         // Extract anchors from any line
         for cap in patterns::ANCHOR.captures_iter(line) {
@@ -154,6 +203,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
         // Parse phase header
         if let Some(caps) = patterns::PHASE_HEADER.captures(line) {
+            matched = true;
             speck.phase_title = Some(caps.get(1).unwrap().as_str().to_string());
             if let Some(anchor) = caps.get(2) {
                 speck.phase_anchor = Some(anchor.as_str().to_string());
@@ -163,6 +213,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
         // Parse purpose line
         if let Some(caps) = patterns::PURPOSE_LINE.captures(line) {
+            matched = true;
             speck.purpose = Some(caps.get(1).unwrap().as_str().to_string());
             continue;
         }
@@ -178,6 +229,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
             if line.trim().is_empty() || !line.starts_with('|') {
                 in_metadata_table = false;
             } else if let Some(caps) = patterns::METADATA_ROW.captures(line) {
+                matched = true;
                 let field = caps.get(1).unwrap().as_str().trim();
                 let value = caps.get(2).unwrap().as_str().trim();
 
@@ -186,7 +238,21 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                     continue;
                 }
 
-                match field.to_lowercase().as_str() {
+                let field_lower = field.to_lowercase();
+
+                // P004: Check if field name is recognized
+                if !KNOWN_METADATA_FIELDS.contains(&field_lower.as_str()) {
+                    speck.diagnostics.push(crate::types::ParseDiagnostic {
+                        code: "P004".to_string(),
+                        message: format!("Unrecognized metadata field: {}", field),
+                        line: line_number,
+                        suggestion: Some(format!(
+                            "Known fields: Owner, Status, Target branch, Tracking issue/PR, Last updated, Beads Root"
+                        )),
+                    });
+                }
+
+                match field_lower.as_str() {
                     "owner" => speck.metadata.owner = non_empty_value(value),
                     "status" => speck.metadata.status = non_empty_value(value),
                     "target branch" => speck.metadata.target_branch = non_empty_value(value),
@@ -205,26 +271,8 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
             }
         }
 
-        // Parse section headers to track context
-        if let Some(caps) = patterns::SECTION_HEADER.captures(line) {
-            let header_text = caps.get(2).unwrap().as_str();
-            let header_lower = header_text.to_lowercase();
-
-            if header_lower.contains("tasks:") || header_lower == "tasks" {
-                current_section = CurrentSection::Tasks;
-            } else if header_lower.contains("tests:") || header_lower == "tests" {
-                current_section = CurrentSection::Tests;
-            } else if header_lower.contains("checkpoint")
-                || header_lower.contains("checkpoints:")
-                || header_lower == "checkpoints"
-            {
-                current_section = CurrentSection::Checkpoints;
-            } else if header_lower.contains("artifacts:") || header_lower == "artifacts" {
-                current_section = CurrentSection::Artifacts;
-            } else if header_lower.contains("references") || header_lower.contains("rollback") {
-                current_section = CurrentSection::Other;
-            }
-        }
+        // Note: SECTION_HEADER check moved to after near-miss detection to allow
+        // near-miss patterns to fire on malformed step/decision/phase headers
 
         // Check for **Tasks:**, **Tests:**, **Checkpoint:**, **Artifacts:** bold markers
         if line.starts_with("**Tasks:**") {
@@ -246,6 +294,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
         // Parse decision/question headers
         if let Some(caps) = patterns::DECISION_HEADER.captures(line) {
+            matched = true;
             let id = caps.get(1).unwrap().as_str();
             let title = caps.get(2).unwrap().as_str();
             let status = caps.get(3).map(|m| m.as_str().to_string());
@@ -273,6 +322,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
         // Parse step headers
         if let Some(caps) = patterns::STEP_HEADER.captures(line) {
+            matched = true;
             let number = caps.get(1).unwrap().as_str();
             let title = caps.get(2).unwrap().as_str();
             let anchor = caps
@@ -318,6 +368,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
         if in_step.is_some() {
             // Parse **Depends on:** line
             if let Some(caps) = patterns::DEPENDS_ON.captures(line) {
+                matched = true;
                 let deps_str = caps.get(1).unwrap().as_str();
                 let deps: Vec<String> = patterns::ANCHOR_REF
                     .captures_iter(deps_str)
@@ -336,6 +387,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
             // Parse **Bead:** line
             if let Some(caps) = patterns::BEAD_LINE.captures(line) {
+                matched = true;
                 let bead_id = caps.get(1).unwrap().as_str().to_string();
 
                 if let Some(substep_idx) = in_substep {
@@ -350,6 +402,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
             // Parse **Beads:** hints line
             if let Some(caps) = patterns::BEADS_HINTS.captures(line) {
+                matched = true;
                 let hints_str = caps.get(1).unwrap().as_str();
                 let hints = parse_beads_hints(hints_str);
 
@@ -365,6 +418,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
             // Parse **Commit:** line
             if let Some(caps) = patterns::COMMIT_LINE.captures(line) {
+                matched = true;
                 let commit_msg = caps.get(1).unwrap().as_str().to_string();
 
                 if let Some(substep_idx) = in_substep {
@@ -380,6 +434,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
             // Parse **References:** line
             if let Some(caps) = patterns::REFERENCES_LINE.captures(line) {
+                matched = true;
                 let refs = caps.get(1).unwrap().as_str().to_string();
 
                 if let Some(substep_idx) = in_substep {
@@ -394,6 +449,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
             // Parse checkbox items
             if let Some(caps) = patterns::CHECKBOX.captures(line) {
+                matched = true;
                 let checked = caps.get(1).unwrap().as_str() != " ";
                 let text = caps.get(2).unwrap().as_str().to_string();
 
@@ -463,6 +519,7 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
 
             // Parse plain bullet items in Artifacts section
             if current_section == CurrentSection::Artifacts && line.trim_start().starts_with("- ") {
+                matched = true;
                 let text = line.trim_start().strip_prefix("- ").unwrap().to_string();
                 if let Some(substep_idx) = in_substep {
                     if let Some(step_idx) = in_step {
@@ -473,6 +530,95 @@ pub fn parse_speck(content: &str) -> Result<Speck, SpecksError> {
                 } else if let Some(step_idx) = in_step {
                     speck.steps[step_idx].artifacts.push(text);
                 }
+            }
+        }
+
+        // Near-miss detection section (runs only if no strict pattern matched)
+        if !matched {
+            // P001: Step header near-miss
+            if patterns::NEAR_MISS_STEP.is_match(line) {
+                speck.diagnostics.push(crate::types::ParseDiagnostic {
+                    code: "P001".to_string(),
+                    message: "Step header does not match strict format".to_string(),
+                    line: line_number,
+                    suggestion: Some("Use format: #### Step N: Title {#step-n} (with 3-5 # marks, capital S, optional colon)".to_string()),
+                });
+            }
+
+            // P002: Decision header near-miss
+            if patterns::NEAR_MISS_DECISION.is_match(line) {
+                speck.diagnostics.push(crate::types::ParseDiagnostic {
+                    code: "P002".to_string(),
+                    message: "Decision/Question header does not match strict format".to_string(),
+                    line: line_number,
+                    suggestion: Some("Use format: #### [D01] Title (STATUS) {#d01-slug} (with #### exactly, capital D/Q)".to_string()),
+                });
+            }
+
+            // P003: Phase header near-miss
+            if patterns::NEAR_MISS_PHASE.is_match(line) {
+                speck.diagnostics.push(crate::types::ParseDiagnostic {
+                    code: "P003".to_string(),
+                    message: "Phase header does not match strict format".to_string(),
+                    line: line_number,
+                    suggestion: Some("Use format: ## Phase N.N: Title {#phase-slug} (with ## exactly, capital P)".to_string()),
+                });
+            }
+
+            // P007: Commit line near-miss
+            if patterns::NEAR_MISS_COMMIT.is_match(line) {
+                speck.diagnostics.push(crate::types::ParseDiagnostic {
+                    code: "P007".to_string(),
+                    message: "Commit line does not match strict format".to_string(),
+                    line: line_number,
+                    suggestion: Some("Use format: **Commit:** `message` (bold, backtick-wrapped message)".to_string()),
+                });
+            }
+
+            // P005: Invalid anchor format
+            for cap in patterns::INVALID_ANCHOR.captures_iter(line) {
+                let anchor_content = cap.get(1).unwrap().as_str();
+                if !patterns::VALID_ANCHOR.is_match(anchor_content) {
+                    // Generate kebab-case suggestion
+                    let suggestion_anchor = anchor_content
+                        .to_lowercase()
+                        .replace('_', "-")
+                        .replace(' ', "-")
+                        .trim_start_matches('-')
+                        .to_string();
+
+                    speck.diagnostics.push(crate::types::ParseDiagnostic {
+                        code: "P005".to_string(),
+                        message: format!("Invalid anchor format: {{#{}}}", anchor_content),
+                        line: line_number,
+                        suggestion: Some(format!(
+                            "Use kebab-case: {{#{}}} (lowercase, hyphens only, must start with letter or digit)",
+                            suggestion_anchor
+                        )),
+                    });
+                }
+            }
+        }
+
+        // Parse section headers to track context (checked AFTER near-miss to allow diagnostics)
+        // This is a catch-all for any remaining headers, so it doesn't set matched=true
+        if let Some(caps) = patterns::SECTION_HEADER.captures(line) {
+            let header_text = caps.get(2).unwrap().as_str();
+            let header_lower = header_text.to_lowercase();
+
+            if header_lower.contains("tasks:") || header_lower == "tasks" {
+                current_section = CurrentSection::Tasks;
+            } else if header_lower.contains("tests:") || header_lower == "tests" {
+                current_section = CurrentSection::Tests;
+            } else if header_lower.contains("checkpoint")
+                || header_lower.contains("checkpoints:")
+                || header_lower == "checkpoints"
+            {
+                current_section = CurrentSection::Checkpoints;
+            } else if header_lower.contains("artifacts:") || header_lower == "artifacts" {
+                current_section = CurrentSection::Artifacts;
+            } else if header_lower.contains("references") || header_lower.contains("rollback") {
+                current_section = CurrentSection::Other;
             }
         }
     }
@@ -1219,5 +1365,397 @@ Example:
 
         // Diagnostics should be empty vec
         assert_eq!(speck.diagnostics.len(), 0);
+    }
+
+    // Near-miss detection tests
+    #[test]
+    fn test_p001_step_header_lowercase() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### step 0: lowercase
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P001");
+        assert!(speck.diagnostics[0].message.contains("Step header"));
+    }
+
+    #[test]
+    fn test_p001_step_header_wrong_level() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+## Step 1: Wrong heading level
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P001");
+    }
+
+    #[test]
+    fn test_p002_decision_lowercase() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### [d01] lowercase decision (DECIDED)
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P002");
+        assert!(speck.diagnostics[0].message.contains("Decision"));
+    }
+
+    #[test]
+    fn test_p003_phase_header_lowercase() {
+        let content = r#"## phase 1.0: lowercase
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P003");
+        assert!(speck.diagnostics[0].message.contains("Phase header"));
+    }
+
+    #[test]
+    fn test_p003_not_triggered_by_section_header() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Phase Overview {#phase-overview}
+
+This is content.
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Should NOT trigger P003 because SECTION_HEADER matched and set matched=true
+        assert_eq!(speck.diagnostics.len(), 0);
+    }
+
+    #[test]
+    fn test_p004_unknown_metadata_field() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Author | Test User |
+| Status | active |
+| Last updated | 2026-02-03 |
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P004");
+        assert!(speck.diagnostics[0].message.contains("Author"));
+        assert!(speck.diagnostics[0]
+            .suggestion
+            .as_ref()
+            .unwrap()
+            .contains("Owner"));
+    }
+
+    #[test]
+    fn test_p005_anchor_uppercase() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Section {#MyAnchor}
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P005");
+        assert!(speck.diagnostics[0].message.contains("MyAnchor"));
+        assert!(speck.diagnostics[0]
+            .suggestion
+            .as_ref()
+            .unwrap()
+            .contains("myanchor"));
+    }
+
+    #[test]
+    fn test_p005_anchor_underscore() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Section {#my_anchor}
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P005");
+        assert!(speck.diagnostics[0].message.contains("my_anchor"));
+        assert!(speck.diagnostics[0]
+            .suggestion
+            .as_ref()
+            .unwrap()
+            .contains("my-anchor"));
+    }
+
+    #[test]
+    fn test_p005_anchor_space() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Section {#my anchor}
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P005");
+        assert!(speck.diagnostics[0].message.contains("my anchor"));
+    }
+
+    #[test]
+    fn test_p005_anchor_leading_hyphen() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Section {#-leading-hyphen}
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P005");
+        assert!(speck.diagnostics[0].message.contains("-leading-hyphen"));
+        assert!(speck.diagnostics[0]
+            .suggestion
+            .as_ref()
+            .unwrap()
+            .contains("leading-hyphen"));
+    }
+
+    #[test]
+    fn test_p005_valid_anchor_no_diagnostic() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+### Section {#valid-anchor}
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 0);
+    }
+
+    #[test]
+    fn test_p007_commit_no_backticks() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Commit:** message without backticks
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P007");
+        assert!(speck.diagnostics[0].message.contains("Commit"));
+    }
+
+    #[test]
+    fn test_p007_commit_no_bold() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+Commit: message
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 1);
+        assert_eq!(speck.diagnostics[0].code, "P007");
+    }
+
+    #[test]
+    fn test_correct_step_header_no_p001() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Correct format {#step-0}
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 0);
+    }
+
+    #[test]
+    fn test_correct_commit_no_p007() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+#### Step 0: Test {#step-0}
+
+**Commit:** `feat: add feature`
+
+**Tasks:**
+- [ ] Task one
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        assert_eq!(speck.diagnostics.len(), 0);
+    }
+
+    #[test]
+    fn test_near_miss_in_code_block_only_p006() {
+        let content = r#"## Phase 1.0: Test {#phase-1}
+
+### Plan Metadata {#plan-metadata}
+
+| Field | Value |
+|------|-------|
+| Owner | Test |
+| Status | active |
+| Last updated | 2026-02-03 |
+
+Example:
+
+```
+### step 0: this is in a code block
+#### [d01] also in code block
+**Commit:** not backticked
+{#MyAnchor}
+```
+"#;
+
+        let speck = parse_speck(content).unwrap();
+
+        // Should only get P006 for structural content in code block, not P001/P002/P005/P007
+        let p006_count = speck
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "P006")
+            .count();
+        let non_p006_count = speck
+            .diagnostics
+            .iter()
+            .filter(|d| d.code != "P006")
+            .count();
+
+        assert!(p006_count > 0);
+        assert_eq!(non_p006_count, 0);
     }
 }

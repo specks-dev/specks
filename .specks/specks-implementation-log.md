@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-1
+date: 2025-02-12T17:48:03Z
+bead: specks-70x.2
+---
+
+## #step-1: Added near-miss detection for steps, decisions, phases, commits, and anchors
+
+**Files changed:**
+- .specks/specks-7.md
+
+---
+
+---
 step: #step-0
 date: 2025-02-12T17:35:53Z
 bead: specks-70x.1
