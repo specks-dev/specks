@@ -410,6 +410,121 @@ mod golden_tests {
     }
 }
 
+// Golden tests for content rendering
+mod content_rendering_tests {
+    use super::*;
+
+    fn normalize_newlines(s: &str) -> String {
+        s.replace("\r\n", "\n").trim().to_string()
+    }
+
+    #[test]
+    fn test_golden_step_description() {
+        let content = fs::read_to_string(format!("{}/valid/enrichment-test.md", FIXTURES_DIR))
+            .expect("Failed to read enrichment-test.md fixture");
+
+        let speck = parse_speck(&content).expect("Failed to parse enrichment-test speck");
+        let result = validate_speck(&speck);
+
+        // Speck should be valid
+        assert!(result.valid, "enrichment-test.md should be valid");
+
+        // Render step 0 description
+        let step = speck.steps.first().expect("Should have step 0");
+        let rendered = step.render_description();
+
+        // Load golden output
+        let golden = fs::read_to_string(format!("{}/step-description.md", GOLDEN_DIR))
+            .expect("Failed to read step-description.md golden file");
+
+        assert_eq!(
+            normalize_newlines(&rendered),
+            normalize_newlines(&golden),
+            "Step description should match golden output"
+        );
+    }
+
+    #[test]
+    fn test_golden_step_acceptance() {
+        let content = fs::read_to_string(format!("{}/valid/enrichment-test.md", FIXTURES_DIR))
+            .expect("Failed to read enrichment-test.md fixture");
+
+        let speck = parse_speck(&content).expect("Failed to parse enrichment-test speck");
+
+        // Render step 0 acceptance criteria
+        let step = speck.steps.first().expect("Should have step 0");
+        let rendered = step.render_acceptance_criteria();
+
+        // Load golden output
+        let golden = fs::read_to_string(format!("{}/step-acceptance.md", GOLDEN_DIR))
+            .expect("Failed to read step-acceptance.md golden file");
+
+        assert_eq!(
+            normalize_newlines(&rendered),
+            normalize_newlines(&golden),
+            "Step acceptance criteria should match golden output"
+        );
+    }
+
+    #[test]
+    fn test_golden_root_description() {
+        let content = fs::read_to_string(format!("{}/valid/enrichment-test.md", FIXTURES_DIR))
+            .expect("Failed to read enrichment-test.md fixture");
+
+        let speck = parse_speck(&content).expect("Failed to parse enrichment-test speck");
+
+        // Render root description
+        let rendered = speck.render_root_description();
+
+        // Load golden output
+        let golden = fs::read_to_string(format!("{}/root-description.md", GOLDEN_DIR))
+            .expect("Failed to read root-description.md golden file");
+
+        assert_eq!(
+            normalize_newlines(&rendered),
+            normalize_newlines(&golden),
+            "Root description should match golden output"
+        );
+    }
+
+    #[test]
+    fn test_valid_enrichment_test_fixture() {
+        let content = fs::read_to_string(format!("{}/valid/enrichment-test.md", FIXTURES_DIR))
+            .expect("Failed to read enrichment-test.md fixture");
+
+        let speck = parse_speck(&content).expect("Failed to parse enrichment-test speck");
+        let result = validate_speck(&speck);
+
+        // Check no errors
+        let errors: Vec<_> = result
+            .issues
+            .iter()
+            .filter(|i| i.severity == Severity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "Valid enrichment-test speck should have no errors, got: {:?}",
+            errors
+        );
+
+        // Verify structure was parsed correctly
+        assert_eq!(
+            speck.metadata.owner.as_deref(),
+            Some("Test Owner"),
+            "Should have correct owner"
+        );
+        assert!(!speck.decisions.is_empty(), "Should have decisions");
+        assert!(!speck.steps.is_empty(), "Should have steps");
+
+        // Verify step 0 has all expected sections
+        let step = speck.steps.first().expect("Should have step 0");
+        assert!(!step.tasks.is_empty(), "Step should have tasks");
+        assert!(!step.artifacts.is_empty(), "Step should have artifacts");
+        assert!(!step.tests.is_empty(), "Step should have tests");
+        assert!(!step.checkpoints.is_empty(), "Step should have checkpoints");
+    }
+}
+
 // Full workflow integration test
 #[test]
 fn test_full_validation_workflow() {
@@ -419,6 +534,7 @@ fn test_full_validation_workflow() {
         "complete",
         "with-substeps",
         "agent-output-example",
+        "enrichment-test",
     ];
     let invalid_fixtures = [
         "missing-metadata",

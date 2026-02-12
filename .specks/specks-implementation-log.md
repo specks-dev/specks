@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-4
+date: 2025-02-12T00:37:23Z
+bead: specks-0kf.5
+---
+
+## #step-4: Created enrichment-test.md fixture and golden output files (step-description, step-acceptance, step-design, root-description), added 4 golden tests to integration_tests.rs
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
 step: #step-3
 date: 2025-02-12T00:28:25Z
 bead: specks-0kf.4
