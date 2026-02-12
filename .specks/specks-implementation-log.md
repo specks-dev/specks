@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-3
+date: 2025-02-12T15:30:22Z
+bead: specks-bvq.5
+---
+
+## #step-3: Update implementer skill for bead-mediated orchestration
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-12T15:23:24Z
 bead: specks-bvq.3

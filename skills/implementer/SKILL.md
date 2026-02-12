@@ -255,7 +255,7 @@ Task(
 - If `resolved_steps` is empty: report "All steps already complete." and HALT
 - Otherwise: output the Setup post-call message and proceed to the step loop
 
-Store in memory: `worktree_path`, `branch_name`, `base_branch`, `resolved_steps`, `bead_mapping`, `root_bead`, `session.session_id`, `session.session_file`, `session.artifacts_base`
+Store in memory: `worktree_path`, `branch_name`, `base_branch`, `resolved_steps`, `bead_mapping`, `root_bead`, `session.session_id`, `session.session_file`
 
 **Note:** Session tracking is infrastructure-only (file paths, branch names, commit hashes). For step state (ready/blocked/complete), always use `bd ready` via beads integration. The session object does not track step completion state.
 
@@ -270,8 +270,6 @@ Initialize once (persists across all steps):
 
 Initialize per step: `reviewer_attempts = 0`
 
-Construct `artifact_dir` as `<artifacts_base>/step-N` (e.g., `step-0`, `step-1`).
-
 Output the step header.
 
 #### 3a. Architect: Plan Strategy
@@ -285,8 +283,8 @@ Task(
     "worktree_path": "<worktree_path>",
     "speck_path": "<path>",
     "step_anchor": "#step-0",
-    "all_steps": ["#step-0", "#step-1", ...],
-    "artifact_dir": "<artifacts_base>/step-0"
+    "bead_id": "<bead_id from bead_mapping>",
+    "all_steps": ["#step-0", "#step-1", ...]
   }',
   description: "Plan strategy for step 0"
 )
@@ -299,7 +297,7 @@ Task(
 ```
 Task(
   resume: "<architect_id>",
-  prompt: 'Plan strategy for step #step-N. Previous step accomplished: <step_summary>. Artifact dir: <artifacts_base>/step-N.',
+  prompt: 'Plan strategy for step #step-N. Bead: <bead_id from bead_mapping>. Previous step accomplished: <step_summary>.',
   description: "Plan strategy for step N"
 )
 ```
@@ -319,9 +317,8 @@ Task(
     "worktree_path": "<worktree_path>",
     "speck_path": "<path>",
     "step_anchor": "#step-0",
-    "strategy": <architect output JSON>,
-    "session_id": "<session_id>",
-    "artifact_dir": "<artifacts_base>/step-0"
+    "bead_id": "<bead_id from bead_mapping>",
+    "session_id": "<session_id>"
   }',
   description: "Implement step 0"
 )
@@ -334,15 +331,15 @@ Task(
 ```
 Task(
   resume: "<coder_id>",
-  prompt: 'Implement step #step-N. Strategy: <architect output JSON>. Artifact dir: <artifacts_base>/step-N.',
+  prompt: 'Implement step #step-N. Bead: <bead_id from bead_mapping>.',
   description: "Implement step N"
 )
 ```
 
 Parse the coder's JSON output. If `success == false` and `halted_for_drift == false`, output failure message and HALT.
 
-**Context exhaustion recovery:** If the coder resume fails with "Prompt is too long", the coder's context is full. Spawn a FRESH coder with the architect's complete strategy and an explicit list of files already modified (from the last successful coder output). The fresh coder prompt must include:
-- Full initial spawn JSON (worktree_path, speck_path, step_anchor, strategy, session_id, artifact_dir)
+**Context exhaustion recovery:** If the coder resume fails with "Prompt is too long", the coder's context is full. Spawn a FRESH coder with an explicit list of files already modified (from the last successful coder output). The fresh coder prompt must include:
+- Full initial spawn JSON (worktree_path, speck_path, step_anchor, bead_id, session_id)
 - `"continuation": true`
 - `"files_already_modified": [<files from previous coder output>]`
 - Instruction: "A previous coder modified these files but did not complete the step. Verify ALL files in expected_touch_set are addressed. Do NOT re-modify files that are already correct."
@@ -370,7 +367,7 @@ Evaluate `drift_assessment.drift_severity` from coder output:
 ```
 Task(
   resume: "<coder_id>",
-  prompt: 'Revision needed. Feedback: <drift_assessment details>. Adjust your implementation to stay within expected scope.',
+  prompt: 'Revision needed. Bead: <bead_id>. Feedback: <drift_assessment details>. Adjust your implementation to stay within expected scope.',
   description: "Revise implementation for step N"
 )
 ```
@@ -388,9 +385,7 @@ Task(
     "worktree_path": "<worktree_path>",
     "speck_path": "<path>",
     "step_anchor": "#step-0",
-    "artifact_dir": "<artifacts_base>/step-0",
-    "architect_output": <architect output JSON>,
-    "coder_output": <coder output JSON>
+    "bead_id": "<bead_id from bead_mapping>"
   }',
   description: "Verify step 0 completion"
 )
@@ -403,7 +398,7 @@ Task(
 ```
 Task(
   resume: "<reviewer_id>",
-  prompt: 'Review step #step-N. Architect output: <architect JSON>. Coder output: <coder JSON>. Artifact dir: <artifacts_base>/step-N.',
+  prompt: 'Review step #step-N. Bead: <bead_id from bead_mapping>.',
   description: "Verify step N completion"
 )
 ```
@@ -427,19 +422,19 @@ Increment `reviewer_attempts`. If `reviewer_attempts >= 3`, ESCALATE to user.
 ```
 Task(
   resume: "<coder_id>",
-  prompt: 'Reviewer found issues. Fix these: <failed tasks from plan_conformance> <issues array>. Then return updated output. Artifact dir: <artifacts_base>/step-N.',
+  prompt: 'Reviewer found issues. Bead: <bead_id>. Fix these: <failed tasks from plan_conformance> <issues array>. Then return updated output.',
   description: "Fix reviewer issues for step N"
 )
 ```
 
 Output the Coder post-call message.
 
-2. **Resume reviewer** with updated coder output:
+2. **Resume reviewer** for re-review:
 
 ```
 Task(
   resume: "<reviewer_id>",
-  prompt: 'Coder has addressed the issues. Updated output: <new coder output>. Re-review.',
+  prompt: 'Coder has addressed the issues. Bead: <bead_id>. Re-review.',
   description: "Re-review step N"
 )
 ```
@@ -639,7 +634,6 @@ When you receive an agent response:
 {
   "plan_conformance": object (required: tasks, checkpoints, decisions),
   "tests_match_plan": boolean (required),
-  "artifacts_produced": boolean (required),
   "issues": array (required),
   "drift_notes": string or null (required),
   "review_categories": object (required: structure, error_handling, security — each PASS/WARN/FAIL),
