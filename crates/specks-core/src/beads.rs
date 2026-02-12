@@ -5,10 +5,15 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
 use crate::error::SpecksError;
+
+/// Body content threshold for using temporary file instead of command line argument
+/// Set to 64KB to avoid ARG_MAX issues on most systems
+const BODY_FILE_THRESHOLD: usize = 64 * 1024;
 
 /// Issue object returned by `bd create --json`
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +48,10 @@ pub struct IssueDetails {
     pub acceptance_criteria: Option<String>,
     #[serde(default)]
     pub notes: Option<String>,
+    #[serde(default)]
+    pub close_reason: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Dependency reference in IssueDetails
@@ -138,17 +147,50 @@ impl BeadsCli {
     }
 
     /// Build a Command with the bd path and any configured env vars applied
-    fn cmd(&self) -> Command {
+    /// If working_dir is provided, sets the command's current directory
+    fn cmd_with_dir(&self, working_dir: Option<&Path>) -> Command {
         let mut cmd = Command::new(&self.bd_path);
         for (k, v) in &self.env_vars {
             cmd.env(k, v);
         }
+        if let Some(dir) = working_dir {
+            cmd.current_dir(dir);
+        }
         cmd
     }
 
+    /// Build a Command with the bd path and any configured env vars applied
+    /// (internal convenience wrapper for cmd_with_dir)
+    #[allow(dead_code)]
+    fn cmd(&self) -> Command {
+        self.cmd_with_dir(None)
+    }
+
+    /// Write content to a temporary file and return the path
+    /// Used when content exceeds BODY_FILE_THRESHOLD to avoid ARG_MAX issues
+    fn write_temp_body_file(content: &str) -> Result<std::path::PathBuf, SpecksError> {
+        use std::env;
+        use std::fs::File;
+
+        let temp_dir = env::temp_dir();
+        let filename = format!("beads-body-{}.txt", std::process::id());
+        let path = temp_dir.join(filename);
+
+        let mut file = File::create(&path).map_err(|e| {
+            SpecksError::BeadsCommand(format!("failed to create temp file: {}", e))
+        })?;
+
+        file.write_all(content.as_bytes()).map_err(|e| {
+            SpecksError::BeadsCommand(format!("failed to write temp file: {}", e))
+        })?;
+
+        Ok(path)
+    }
+
     /// Check if beads CLI is installed
-    pub fn is_installed(&self) -> bool {
-        self.cmd()
+    /// working_dir is optional - if provided, commands will run in that directory
+    pub fn is_installed(&self, working_dir: Option<&Path>) -> bool {
+        self.cmd_with_dir(working_dir)
             .arg("--version")
             .output()
             .map(|o| o.status.success())
@@ -172,12 +214,21 @@ impl BeadsCli {
         design: Option<&str>,
         acceptance: Option<&str>,
         notes: Option<&str>,
+        working_dir: Option<&Path>,
     ) -> Result<Issue, SpecksError> {
-        let mut cmd = self.cmd();
+        let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("create").arg("--json").arg(title);
 
+        let mut temp_files = Vec::new();
+
         if let Some(desc) = description {
-            cmd.arg("--description").arg(desc);
+            if desc.len() > BODY_FILE_THRESHOLD {
+                let path = Self::write_temp_body_file(desc)?;
+                cmd.arg("--description").arg(format!("@{}", path.display()));
+                temp_files.push(path);
+            } else {
+                cmd.arg("--description").arg(desc);
+            }
         }
         if let Some(p) = parent {
             cmd.arg("--parent").arg(p);
@@ -189,13 +240,31 @@ impl BeadsCli {
             cmd.arg(format!("-p{}", pri));
         }
         if let Some(d) = design {
-            cmd.arg("--design").arg(d);
+            if d.len() > BODY_FILE_THRESHOLD {
+                let path = Self::write_temp_body_file(d)?;
+                cmd.arg("--design").arg(format!("@{}", path.display()));
+                temp_files.push(path);
+            } else {
+                cmd.arg("--design").arg(d);
+            }
         }
         if let Some(a) = acceptance {
-            cmd.arg("--acceptance").arg(a);
+            if a.len() > BODY_FILE_THRESHOLD {
+                let path = Self::write_temp_body_file(a)?;
+                cmd.arg("--acceptance").arg(format!("@{}", path.display()));
+                temp_files.push(path);
+            } else {
+                cmd.arg("--acceptance").arg(a);
+            }
         }
         if let Some(n) = notes {
-            cmd.arg("--notes").arg(n);
+            if n.len() > BODY_FILE_THRESHOLD {
+                let path = Self::write_temp_body_file(n)?;
+                cmd.arg("--notes").arg(format!("@{}", path.display()));
+                temp_files.push(path);
+            } else {
+                cmd.arg("--notes").arg(n);
+            }
         }
 
         let output = cmd.output().map_err(|e| {
@@ -205,6 +274,11 @@ impl BeadsCli {
                 SpecksError::BeadsCommand(format!("failed to run bd create: {}", e))
             }
         })?;
+
+        // Clean up temp files
+        for path in temp_files {
+            let _ = std::fs::remove_file(path);
+        }
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -222,9 +296,9 @@ impl BeadsCli {
 
     /// Show a bead by ID
     /// Returns IssueDetails, handling both array and object responses
-    pub fn show(&self, id: &str) -> Result<IssueDetails, SpecksError> {
+    pub fn show(&self, id: &str, working_dir: Option<&Path>) -> Result<IssueDetails, SpecksError> {
         let output = self
-            .cmd()
+            .cmd_with_dir(working_dir)
             .arg("show")
             .arg(id)
             .arg("--json")
@@ -262,26 +336,36 @@ impl BeadsCli {
     }
 
     /// Check if a bead exists
-    pub fn bead_exists(&self, id: &str) -> bool {
-        self.show(id).is_ok()
+    pub fn bead_exists(&self, id: &str, working_dir: Option<&Path>) -> bool {
+        self.show(id, working_dir).is_ok()
     }
 
     /// Update the description field of a bead
-    pub fn update_description(&self, id: &str, content: &str) -> Result<(), SpecksError> {
-        let output = self
-            .cmd()
-            .arg("update")
-            .arg(id)
-            .arg("--description")
-            .arg(content)
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    SpecksError::BeadsNotInstalled
-                } else {
-                    SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
-                }
-            })?;
+    pub fn update_description(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+        let mut cmd = self.cmd_with_dir(working_dir);
+        cmd.arg("update").arg(id).arg("--description");
+
+        let temp_file = if content.len() > BODY_FILE_THRESHOLD {
+            let path = Self::write_temp_body_file(content)?;
+            cmd.arg(format!("@{}", path.display()));
+            Some(path)
+        } else {
+            cmd.arg(content);
+            None
+        };
+
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::BeadsNotInstalled
+            } else {
+                SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
+            }
+        })?;
+
+        // Clean up temp file
+        if let Some(path) = temp_file {
+            let _ = std::fs::remove_file(path);
+        }
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -295,21 +379,31 @@ impl BeadsCli {
     }
 
     /// Update the design field of a bead
-    pub fn update_design(&self, id: &str, content: &str) -> Result<(), SpecksError> {
-        let output = self
-            .cmd()
-            .arg("update")
-            .arg(id)
-            .arg("--design")
-            .arg(content)
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    SpecksError::BeadsNotInstalled
-                } else {
-                    SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
-                }
-            })?;
+    pub fn update_design(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+        let mut cmd = self.cmd_with_dir(working_dir);
+        cmd.arg("update").arg(id).arg("--design");
+
+        let temp_file = if content.len() > BODY_FILE_THRESHOLD {
+            let path = Self::write_temp_body_file(content)?;
+            cmd.arg(format!("@{}", path.display()));
+            Some(path)
+        } else {
+            cmd.arg(content);
+            None
+        };
+
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::BeadsNotInstalled
+            } else {
+                SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
+            }
+        })?;
+
+        // Clean up temp file
+        if let Some(path) = temp_file {
+            let _ = std::fs::remove_file(path);
+        }
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -323,21 +417,31 @@ impl BeadsCli {
     }
 
     /// Update the acceptance_criteria field of a bead
-    pub fn update_acceptance(&self, id: &str, content: &str) -> Result<(), SpecksError> {
-        let output = self
-            .cmd()
-            .arg("update")
-            .arg(id)
-            .arg("--acceptance")
-            .arg(content)
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    SpecksError::BeadsNotInstalled
-                } else {
-                    SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
-                }
-            })?;
+    pub fn update_acceptance(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+        let mut cmd = self.cmd_with_dir(working_dir);
+        cmd.arg("update").arg(id).arg("--acceptance");
+
+        let temp_file = if content.len() > BODY_FILE_THRESHOLD {
+            let path = Self::write_temp_body_file(content)?;
+            cmd.arg(format!("@{}", path.display()));
+            Some(path)
+        } else {
+            cmd.arg(content);
+            None
+        };
+
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::BeadsNotInstalled
+            } else {
+                SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
+            }
+        })?;
+
+        // Clean up temp file
+        if let Some(path) = temp_file {
+            let _ = std::fs::remove_file(path);
+        }
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -350,10 +454,84 @@ impl BeadsCli {
         Ok(())
     }
 
+    /// Update the notes field of a bead (replaces existing content)
+    pub fn update_notes(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+        let mut cmd = self.cmd_with_dir(working_dir);
+        cmd.arg("update").arg(id).arg("--notes");
+
+        let temp_file = if content.len() > BODY_FILE_THRESHOLD {
+            let path = Self::write_temp_body_file(content)?;
+            cmd.arg(format!("@{}", path.display()));
+            Some(path)
+        } else {
+            cmd.arg(content);
+            None
+        };
+
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::BeadsNotInstalled
+            } else {
+                SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
+            }
+        })?;
+
+        // Clean up temp file
+        if let Some(path) = temp_file {
+            let _ = std::fs::remove_file(path);
+        }
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SpecksError::BeadsCommand(format!(
+                "bd update --notes failed: {}",
+                stderr
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Append content to the notes field of a bead
+    /// Uses "---" separator convention per D03
+    pub fn append_notes(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+        // Fetch current notes
+        let details = self.show(id, working_dir)?;
+        let current_notes = details.notes.unwrap_or_default();
+
+        // Build new notes with separator
+        let new_notes = if current_notes.is_empty() {
+            content.to_string()
+        } else {
+            format!("{}\n\n---\n\n{}", current_notes, content)
+        };
+
+        // Update with combined content
+        self.update_notes(id, &new_notes, working_dir)
+    }
+
+    /// Append content to the design field of a bead
+    /// Uses "---" separator convention per D03
+    pub fn append_design(&self, id: &str, content: &str, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+        // Fetch current design
+        let details = self.show(id, working_dir)?;
+        let current_design = details.design.unwrap_or_default();
+
+        // Build new design with separator
+        let new_design = if current_design.is_empty() {
+            content.to_string()
+        } else {
+            format!("{}\n\n---\n\n{}", current_design, content)
+        };
+
+        // Update with combined content
+        self.update_design(id, &new_design, working_dir)
+    }
+
     /// Add a dependency edge
-    pub fn dep_add(&self, from_id: &str, to_id: &str) -> Result<DepResult, SpecksError> {
+    pub fn dep_add(&self, from_id: &str, to_id: &str, working_dir: Option<&Path>) -> Result<DepResult, SpecksError> {
         let output = self
-            .cmd()
+            .cmd_with_dir(working_dir)
             .arg("dep")
             .arg("add")
             .arg(from_id)
@@ -383,9 +561,9 @@ impl BeadsCli {
     }
 
     /// Remove a dependency edge
-    pub fn dep_remove(&self, from_id: &str, to_id: &str) -> Result<DepResult, SpecksError> {
+    pub fn dep_remove(&self, from_id: &str, to_id: &str, working_dir: Option<&Path>) -> Result<DepResult, SpecksError> {
         let output = self
-            .cmd()
+            .cmd_with_dir(working_dir)
             .arg("dep")
             .arg("remove")
             .arg(from_id)
@@ -415,9 +593,9 @@ impl BeadsCli {
     }
 
     /// List dependencies for a bead
-    pub fn dep_list(&self, id: &str) -> Result<Vec<IssueWithDependencyMetadata>, SpecksError> {
+    pub fn dep_list(&self, id: &str, working_dir: Option<&Path>) -> Result<Vec<IssueWithDependencyMetadata>, SpecksError> {
         let output = self
-            .cmd()
+            .cmd_with_dir(working_dir)
             .arg("dep")
             .arg("list")
             .arg(id)
@@ -446,8 +624,8 @@ impl BeadsCli {
     }
 
     /// Close a bead
-    pub fn close(&self, id: &str, reason: Option<&str>) -> Result<(), SpecksError> {
-        let mut cmd = self.cmd();
+    pub fn close(&self, id: &str, reason: Option<&str>, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+        let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("close").arg(id);
 
         if let Some(r) = reason {
@@ -474,8 +652,8 @@ impl BeadsCli {
     }
 
     /// Sync beads state
-    pub fn sync(&self) -> Result<(), SpecksError> {
-        let output = self.cmd().arg("sync").output().map_err(|e| {
+    pub fn sync(&self, working_dir: Option<&Path>) -> Result<(), SpecksError> {
+        let output = self.cmd_with_dir(working_dir).arg("sync").output().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 SpecksError::BeadsNotInstalled
             } else {
@@ -500,6 +678,7 @@ impl BeadsCli {
     pub fn list_by_ids(
         &self,
         ids: &[String],
+        working_dir: Option<&Path>,
     ) -> Result<std::collections::HashSet<String>, SpecksError> {
         use std::collections::HashSet;
 
@@ -509,7 +688,7 @@ impl BeadsCli {
 
         let ids_arg = ids.join(",");
         let output = self
-            .cmd()
+            .cmd_with_dir(working_dir)
             .args(["list", "--id", &ids_arg, "--json", "--limit", "0", "--all"])
             .output()
             .map_err(|e| {
@@ -550,12 +729,21 @@ impl BeadsCli {
         design: Option<&str>,
         acceptance: Option<&str>,
         notes: Option<&str>,
+        working_dir: Option<&Path>,
     ) -> Result<Issue, SpecksError> {
-        let mut cmd = self.cmd();
+        let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("create").arg("--json").arg(title);
 
+        let mut temp_files = Vec::new();
+
         if let Some(desc) = description {
-            cmd.arg("--description").arg(desc);
+            if desc.len() > BODY_FILE_THRESHOLD {
+                let path = Self::write_temp_body_file(desc)?;
+                cmd.arg("--description").arg(format!("@{}", path.display()));
+                temp_files.push(path);
+            } else {
+                cmd.arg("--description").arg(desc);
+            }
         }
         if let Some(p) = parent {
             cmd.arg("--parent").arg(p);
@@ -570,13 +758,31 @@ impl BeadsCli {
             cmd.arg(format!("-p{}", pri));
         }
         if let Some(d) = design {
-            cmd.arg("--design").arg(d);
+            if d.len() > BODY_FILE_THRESHOLD {
+                let path = Self::write_temp_body_file(d)?;
+                cmd.arg("--design").arg(format!("@{}", path.display()));
+                temp_files.push(path);
+            } else {
+                cmd.arg("--design").arg(d);
+            }
         }
         if let Some(a) = acceptance {
-            cmd.arg("--acceptance").arg(a);
+            if a.len() > BODY_FILE_THRESHOLD {
+                let path = Self::write_temp_body_file(a)?;
+                cmd.arg("--acceptance").arg(format!("@{}", path.display()));
+                temp_files.push(path);
+            } else {
+                cmd.arg("--acceptance").arg(a);
+            }
         }
         if let Some(n) = notes {
-            cmd.arg("--notes").arg(n);
+            if n.len() > BODY_FILE_THRESHOLD {
+                let path = Self::write_temp_body_file(n)?;
+                cmd.arg("--notes").arg(format!("@{}", path.display()));
+                temp_files.push(path);
+            } else {
+                cmd.arg("--notes").arg(n);
+            }
         }
 
         let output = cmd.output().map_err(|e| {
@@ -586,6 +792,11 @@ impl BeadsCli {
                 SpecksError::BeadsCommand(format!("failed to run bd create: {}", e))
             }
         })?;
+
+        // Clean up temp files
+        for path in temp_files {
+            let _ = std::fs::remove_file(path);
+        }
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -603,9 +814,9 @@ impl BeadsCli {
 
     /// Get all children of a parent bead in a single subprocess call.
     /// Uses: `bd children <id> --json`
-    pub fn children(&self, parent_id: &str) -> Result<Vec<Issue>, SpecksError> {
+    pub fn children(&self, parent_id: &str, working_dir: Option<&Path>) -> Result<Vec<Issue>, SpecksError> {
         let output = self
-            .cmd()
+            .cmd_with_dir(working_dir)
             .args(["children", parent_id, "--json"])
             .output()
             .map_err(|e| {
@@ -632,8 +843,8 @@ impl BeadsCli {
 
     /// Get all ready beads (open beads with all dependencies complete).
     /// Uses: `bd ready --json` (all ready beads) or `bd ready <parent_id> --json` (ready children of parent).
-    pub fn ready(&self, parent_id: Option<&str>) -> Result<Vec<Issue>, SpecksError> {
-        let mut cmd = self.cmd();
+    pub fn ready(&self, parent_id: Option<&str>, working_dir: Option<&Path>) -> Result<Vec<Issue>, SpecksError> {
+        let mut cmd = self.cmd_with_dir(working_dir);
         cmd.arg("ready");
 
         if let Some(parent) = parent_id {
@@ -769,6 +980,8 @@ mod tests {
             design: Some("Design content".to_string()),
             acceptance_criteria: Some("Acceptance content".to_string()),
             notes: Some("Notes content".to_string()),
+            close_reason: Some("Completed".to_string()),
+            metadata: Some(serde_json::json!({"key": "value"})),
         };
 
         let json = serde_json::to_string(&original).unwrap();
@@ -782,5 +995,7 @@ mod tests {
             deserialized.acceptance_criteria
         );
         assert_eq!(original.notes, deserialized.notes);
+        assert_eq!(original.close_reason, deserialized.close_reason);
+        assert_eq!(original.metadata, deserialized.metadata);
     }
 }

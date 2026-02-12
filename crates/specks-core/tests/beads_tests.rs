@@ -114,13 +114,14 @@ fn test_bd_fake_create_with_rich_fields() {
             Some("Design content"),
             Some("Acceptance content"),
             Some("Notes content"),
+            None,
         )
         .expect("Failed to create issue");
 
     assert_eq!(issue.title, "Test Issue");
 
     // Show the issue and verify rich fields
-    let details = beads.show(&issue.id).expect("Failed to show issue");
+    let details = beads.show(&issue.id, None).expect("Failed to show issue");
     assert_eq!(details.design, Some("Design content".to_string()));
     assert_eq!(
         details.acceptance_criteria,
@@ -136,33 +137,33 @@ fn test_bd_fake_update_rich_fields() {
 
     // Create an issue without rich fields
     let issue = beads
-        .create("Test Issue", None, None, None, None, None, None, None)
+        .create("Test Issue", None, None, None, None, None, None, None, None)
         .expect("Failed to create issue");
 
     // Verify no rich fields
-    let details = beads.show(&issue.id).expect("Failed to show issue");
+    let details = beads.show(&issue.id, None).expect("Failed to show issue");
     assert!(details.design.is_none());
     assert!(details.acceptance_criteria.is_none());
     assert!(details.notes.is_none());
 
     // Update design field
     beads
-        .update_design(&issue.id, "Updated design")
+        .update_design(&issue.id, "Updated design", None)
         .expect("Failed to update design");
 
     // Verify design was updated
-    let details = beads.show(&issue.id).expect("Failed to show issue");
+    let details = beads.show(&issue.id, None).expect("Failed to show issue");
     assert_eq!(details.design, Some("Updated design".to_string()));
     assert!(details.acceptance_criteria.is_none());
     assert!(details.notes.is_none());
 
     // Update acceptance_criteria field
     beads
-        .update_acceptance(&issue.id, "Updated acceptance")
+        .update_acceptance(&issue.id, "Updated acceptance", None)
         .expect("Failed to update acceptance");
 
     // Verify acceptance_criteria was updated
-    let details = beads.show(&issue.id).expect("Failed to show issue");
+    let details = beads.show(&issue.id, None).expect("Failed to show issue");
     assert_eq!(details.design, Some("Updated design".to_string()));
     assert_eq!(
         details.acceptance_criteria,
@@ -172,11 +173,11 @@ fn test_bd_fake_update_rich_fields() {
 
     // Update description field (existing functionality)
     beads
-        .update_description(&issue.id, "Updated description")
+        .update_description(&issue.id, "Updated description", None)
         .expect("Failed to update description");
 
     // Verify description was updated
-    let details = beads.show(&issue.id).expect("Failed to show issue");
+    let details = beads.show(&issue.id, None).expect("Failed to show issue");
     assert_eq!(details.description, "Updated description");
     assert_eq!(details.design, Some("Updated design".to_string()));
 }

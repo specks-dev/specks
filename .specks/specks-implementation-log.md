@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-0
+date: 2025-02-12T15:01:43Z
+bead: specks-bvq.1
+---
+
+## #step-0: Add BeadsCli methods and CLI subcommands for agent-bead communication
+
+**Files changed:**
+- .specks/specks-6.md
+
+---
+
+---
 step: #step-5
 date: 2025-02-12T00:43:13Z
 bead: specks-0kf.6
