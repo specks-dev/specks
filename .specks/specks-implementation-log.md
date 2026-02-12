@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-5
+date: 2025-02-12T21:38:54Z
+bead: specks-t9v.6
+---
+
+## #step-5: Update agent and skill definitions to remove all session-related references
+
+**Files changed:**
+- .specks/specks-8.md
+
+---
+
+---
 step: #step-4
 date: 2025-02-12T21:31:27Z
 bead: specks-t9v.5

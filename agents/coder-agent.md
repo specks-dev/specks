@@ -52,8 +52,7 @@ If resumed with reviewer feedback, fix the identified issues. You retain full co
   "worktree_path": "/abs/path/to/.specks-worktrees/specks__auth-20260208-143022",
   "speck_path": ".specks/specks-N.md",
   "step_anchor": "#step-0",
-  "bead_id": "bd-abc123.0",
-  "session_id": "auth-20260208-143022"
+  "bead_id": "bd-abc123.0"
 }
 ```
 
@@ -63,7 +62,6 @@ If resumed with reviewer feedback, fix the identified issues. You retain full co
 | `speck_path` | Path to the speck file relative to repo root |
 | `step_anchor` | Anchor of the step being implemented |
 | `bead_id` | Bead ID for this step (e.g., "bd-abc123.0") |
-| `session_id` | Session ID for the implementation session |
 
 ### Resume (Next Step)
 

@@ -58,7 +58,6 @@ Implementation complete
   Branch: {branch_name} (from {base_branch})
   Steps to implement: {remaining_count} of {total_count} ({completed_count} already complete)
   Beads: synced | Root: {root_bead}
-  Session: {session_id}
 ```
 
 ### Step header
@@ -206,7 +205,7 @@ For `bead_close_failed` (warn and continue):
               ▼
        RESUME committer_id (publish mode)
               ├─► push branch
-              ├─► create PR with step_summaries
+              ├─► create PR (body from git log)
               └─► return PR URL
 ```
 
@@ -255,9 +254,7 @@ Task(
 - If `resolved_steps` is empty: report "All steps already complete." and HALT
 - Otherwise: output the Setup post-call message and proceed to the step loop
 
-Store in memory: `worktree_path`, `branch_name`, `base_branch`, `resolved_steps`, `bead_mapping`, `root_bead`, `session.session_id`, `session.session_file`
-
-**Note:** Session tracking is infrastructure-only (file paths, branch names, commit hashes). For step state (ready/blocked/complete), always use `bd ready` via beads integration. The session object does not track step completion state.
+Store in memory: `worktree_path`, `branch_name`, `base_branch`, `resolved_steps`, `bead_mapping`, `root_bead`
 
 ### 3. For Each Step in `resolved_steps`
 
@@ -266,7 +263,6 @@ Initialize once (persists across all steps):
 - `coder_id = null`
 - `reviewer_id = null`
 - `committer_id = null`
-- `step_summaries = []`
 
 Initialize per step: `reviewer_attempts = 0`
 
@@ -317,8 +313,7 @@ Task(
     "worktree_path": "<worktree_path>",
     "speck_path": "<path>",
     "step_anchor": "#step-0",
-    "bead_id": "<bead_id from bead_mapping>",
-    "session_id": "<session_id>"
+    "bead_id": "<bead_id from bead_mapping>"
   }',
   description: "Implement step 0"
 )
@@ -339,7 +334,7 @@ Task(
 Parse the coder's JSON output. If `success == false` and `halted_for_drift == false`, output failure message and HALT.
 
 **Context exhaustion recovery:** If the coder resume fails with "Prompt is too long", the coder's context is full. Spawn a FRESH coder with an explicit list of files already modified (from the last successful coder output). The fresh coder prompt must include:
-- Full initial spawn JSON (worktree_path, speck_path, step_anchor, bead_id, session_id)
+- Full initial spawn JSON (worktree_path, speck_path, step_anchor, bead_id)
 - `"continuation": true`
 - `"files_already_modified": [<files from previous coder output>]`
 - Instruction: "A previous coder modified these files but did not complete the step. Verify ALL files in expected_touch_set are addressed. Do NOT re-modify files that are already correct."
@@ -463,7 +458,6 @@ Task(
     "confirmed": false,
     "bead_id": "<bead_id from bead_mapping>",
     "close_reason": "Step N complete: <summary>",
-    "session_file": "<session_file>",
     "log_entry": {
       "summary": "<brief description>",
       "tasks_completed": [<from reviewer plan_conformance.tasks>],
@@ -494,14 +488,12 @@ If `aborted == true`: output failure message with reason and HALT.
 
 Output the Committer post-call message.
 
-Extract commit summary and add to `step_summaries`.
-
 #### 3g. Next Step
 
 1. If more steps: **GO TO 3a** for next step (all agent IDs are preserved)
-2. If all done: proceed to Session Completion
+2. If all done: proceed to Implementation Completion
 
-### 4. Session Completion
+### 4. Implementation Completion
 
 Resume committer in publish mode to create PR:
 
@@ -514,9 +506,7 @@ Task(
     "branch_name": "<branch_name>",
     "base_branch": "<base_branch>",
     "speck_title": "<speck title>",
-    "speck_path": "<path>",
-    "step_summaries": [<...step_summaries>],
-    "session_file": "<session_file>"
+    "speck_path": "<path>"
   }',
   description: "Push and create PR"
 )
@@ -524,7 +514,7 @@ Task(
 
 Parse the committer's publish output. Output the Publish post-call message.
 
-Output the session end message.
+Output the implementation completion message.
 
 ---
 
