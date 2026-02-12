@@ -37,16 +37,16 @@ The `specks step-commit` command handles closing the bead with the provided clos
 ### Artifact Files
 
 Committer does not produce artifact files. The CLI commands handle all persistence:
-- `specks step-commit`: Commits code, closes bead, updates log, updates session
-- `specks step-publish`: Pushes branch, creates PR, updates session
+- `specks step-commit`: Commits code, closes bead, updates log
+- `specks step-publish`: Pushes branch, creates PR
 
 ---
 
 ## Input Contract
 
-**Commit mode**: `operation`, `worktree_path`, `speck_path`, `step_anchor`, `proposed_message`, `files_to_stage`, `bead_id`, `close_reason`, `session_file`, `log_entry.summary`
+**Commit mode**: `operation`, `worktree_path`, `speck_path`, `step_anchor`, `proposed_message`, `files_to_stage`, `bead_id`, `close_reason`, `log_entry.summary`
 
-**Publish mode**: `operation`, `worktree_path`, `branch_name`, `base_branch`, `repo`, `speck_title`, `speck_path`, `step_summaries`, `session_file`
+**Publish mode**: `operation`, `worktree_path`, `branch_name`, `base_branch`, `repo`, `speck_title`, `speck_path`
 
 ## Output Contract
 
@@ -69,7 +69,6 @@ specks step-commit \
   --files {files_to_stage[0]} {files_to_stage[1]} ... \
   --bead "{bead_id}" \
   --summary "{log_entry.summary}" \
-  --session "{session_file}" \
   --close-reason "{close_reason}" \
   --json
 ```
@@ -87,8 +86,6 @@ specks step-publish \
   --base "{base_branch}" \
   --title "{speck_title}" \
   --speck "{speck_path}" \
-  --step-summaries "{step_summaries[0]}" "{step_summaries[1]}" ... \
-  --session "{session_file}" \
   --repo "{repo}" \
   --json
 ```

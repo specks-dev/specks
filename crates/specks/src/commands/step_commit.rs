@@ -1,11 +1,9 @@
 //! step-commit command implementation
 //!
-//! Atomically performs log rotation, prepend, git commit, bead close, and session update.
+//! Atomically performs log rotation, prepend, git commit, and bead close.
 
 use crate::commands::log::{log_prepend_inner, log_rotate_inner};
 use crate::output::{JsonResponse, StepCommitData};
-use specks_core::session::{Session, StepSummary, now_iso8601, save_session_atomic};
-use std::fs;
 use std::path::Path;
 use std::process::Command;
 
@@ -19,22 +17,16 @@ pub fn run_step_commit(
     files: Vec<String>,
     bead: String,
     summary: String,
-    session: String,
     close_reason: Option<String>,
     json: bool,
     quiet: bool,
 ) -> Result<i32, String> {
     // Convert paths to Path references
     let worktree_path = Path::new(&worktree);
-    let session_path = Path::new(&session);
 
     // Validate inputs
     if !worktree_path.exists() {
         return error_response("Worktree directory does not exist", json, quiet);
-    }
-
-    if !session_path.exists() {
-        return error_response("Session file does not exist", json, quiet);
     }
 
     // Validate that all files exist in worktree
@@ -48,16 +40,6 @@ pub fn run_step_commit(
             );
         }
     }
-
-    // Load session
-    let mut session_data =
-        load_session_file(session_path).map_err(|e| format!("Failed to load session: {}", e))?;
-
-    // Extract repo root from worktree path (parent of .specks-worktrees)
-    let repo_root = worktree_path
-        .parent()
-        .and_then(|p| p.parent())
-        .ok_or_else(|| "Cannot derive repo root from worktree path".to_string())?;
 
     // Step 1: Rotate log if needed
     let rotate_result = log_rotate_inner(worktree_path, false)
@@ -148,19 +130,6 @@ pub fn run_step_commit(
     // If bead close failed after commit, record in output
     let bead_close_failed = !bead_closed;
 
-    // Step 7: Update session
-    // In v2, session only tracks metadata (no step-tracking status)
-    // Bead state is the source of truth for step completion
-    match update_session(&mut session_data, &step, &commit_hash, &summary, repo_root) {
-        Ok(_) => {}
-        Err(e) => {
-            // Session update failure is a warning, not an error (commit succeeded)
-            if !quiet {
-                eprintln!("Warning: Session update failed: {}", e);
-            }
-        }
-    }
-
     // Build response
     let data = StepCommitData {
         committed: true,
@@ -206,14 +175,6 @@ pub fn run_step_commit(
     Ok(0)
 }
 
-/// Helper to load session from file
-fn load_session_file(path: &Path) -> Result<Session, String> {
-    let content =
-        fs::read_to_string(path).map_err(|e| format!("Failed to read session file: {}", e))?;
-
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse session JSON: {}", e))
-}
-
 /// Helper to close bead in worktree context
 fn close_bead_in_worktree(
     worktree_path: &Path,
@@ -242,36 +203,6 @@ fn close_bead_in_worktree(
         Ok(_) => Ok((true, vec![])),
         Err(e) => Ok((false, vec![format!("Bead close failed: {}", e)])),
     }
-}
-
-/// Helper to update session after successful commit
-fn update_session(
-    session: &mut Session,
-    step: &str,
-    commit_hash: &str,
-    summary: &str,
-    repo_root: &Path,
-) -> Result<(), String> {
-    // V2: Session only tracks step_summaries and timestamp
-    // Beads is the source of truth for step completion state
-
-    // Append to step_summaries
-    if session.step_summaries.is_none() {
-        session.step_summaries = Some(vec![]);
-    }
-    if let Some(ref mut summaries) = session.step_summaries {
-        summaries.push(StepSummary {
-            step: step.to_string(),
-            commit_hash: commit_hash.to_string(),
-            summary: summary.to_string(),
-        });
-    }
-
-    // Update timestamp
-    session.last_updated_at = Some(now_iso8601());
-
-    // Save atomically
-    save_session_atomic(session, repo_root).map_err(|e| format!("Failed to save session: {}", e))
 }
 
 /// Helper to construct error response

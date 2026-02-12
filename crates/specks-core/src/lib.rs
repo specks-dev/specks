@@ -23,7 +23,7 @@ pub mod beads;
 /// Interaction adapter for mode-agnostic user interaction
 pub mod interaction;
 
-/// Session state management for worktree-based implementations
+/// Timestamp utilities
 pub mod session;
 
 /// Worktree management for speck implementations
@@ -38,10 +38,7 @@ pub use config::{
 pub use error::SpecksError;
 pub use interaction::{InteractionAdapter, InteractionError, InteractionResult, ProgressHandle};
 pub use parser::parse_speck;
-pub use session::{
-    Session, StepSummary, artifacts_dir, load_session, now_iso8601, save_session,
-    session_file_path, session_id_from_worktree, sessions_dir,
-};
+pub use session::now_iso8601;
 pub use types::{
     Anchor, BeadsHints, Checkpoint, CheckpointKind, Decision, ParseDiagnostic, Question, Speck,
     SpeckMetadata, SpeckStatus, Step, Substep,

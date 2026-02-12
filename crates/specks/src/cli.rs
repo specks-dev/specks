@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 
-use crate::commands::{BeadsCommands, LogCommands, SessionCommands, WorktreeCommands};
+use crate::commands::{BeadsCommands, LogCommands, WorktreeCommands};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -131,15 +131,6 @@ pub enum Commands {
     )]
     Doctor,
 
-    /// Session management commands
-    ///
-    /// Manage implementation session state and recovery.
-    #[command(
-        subcommand,
-        long_about = "Session management commands.\n\nProvides session state recovery functionality:\n  - Reconcile: Manually recover sessions stuck in NeedsReconcile state\n\nSubcommands:\n  reconcile  Close pending bead and transition session to Completed\n\nTypical workflow:\n  1. Session enters NeedsReconcile after commit succeeds but bead close fails\n  2. specks session reconcile <session-id>  # Recover session"
-    )]
-    Session(SessionCommands),
-
     /// Merge a speck's implementation and clean up worktree
     ///
     /// Automates the post-implementation merge workflow with auto mode detection.
@@ -173,9 +164,9 @@ pub enum Commands {
 
     /// Commit a single implementation step
     ///
-    /// Atomically performs log rotation, prepend, git commit, bead close, and session update.
+    /// Atomically performs log rotation, prepend, git commit, and bead close.
     #[command(
-        long_about = "Commit a single implementation step.\n\nAtomic sequence:\n  1. Rotate log if over threshold\n  2. Prepend log entry\n  3. Stage files\n  4. Git commit\n  5. Close bead\n  6. Update session\n\nAll file paths are relative to worktree root.\nSession path must be absolute.\n\nPartial success: If commit succeeds but bead close fails, exits 0 with bead_close_failed=true."
+        long_about = "Commit a single implementation step.\n\nAtomic sequence:\n  1. Rotate log if over threshold\n  2. Prepend log entry\n  3. Stage files\n  4. Git commit\n  5. Close bead\n\nAll file paths are relative to worktree root.\n\nPartial success: If commit succeeds but bead close fails, exits 0 with bead_close_failed=true."
     )]
     StepCommit {
         /// Absolute path to the worktree directory
@@ -206,10 +197,6 @@ pub enum Commands {
         #[arg(long, value_name = "TEXT")]
         summary: String,
 
-        /// Absolute path to session JSON file
-        #[arg(long, value_name = "PATH")]
-        session: String,
-
         /// Reason for closing the bead (optional)
         #[arg(long, value_name = "TEXT")]
         close_reason: Option<String>,
@@ -217,9 +204,9 @@ pub enum Commands {
 
     /// Publish implementation results via push and PR creation
     ///
-    /// Pushes branch to remote, creates PR, and updates session status.
+    /// Pushes branch to remote and creates PR.
     #[command(
-        long_about = "Publish implementation results via push and PR creation.\n\nSequence:\n  1. Check gh auth\n  2. Derive repo from remote (if not provided)\n  3. Generate PR body from step summaries\n  4. Push branch to remote\n  5. Create PR via gh\n  6. Update session to Completed\n\nRequires:\n  - GitHub CLI (gh) installed and authenticated\n  - Remote 'origin' configured"
+        long_about = "Publish implementation results via push and PR creation.\n\nSequence:\n  1. Check gh auth\n  2. Derive repo from remote (if not provided)\n  3. Generate PR body from git log\n  4. Push branch to remote\n  5. Create PR via gh\n\nRequires:\n  - GitHub CLI (gh) installed and authenticated\n  - Remote 'origin' configured"
     )]
     StepPublish {
         /// Absolute path to the worktree directory
@@ -241,14 +228,6 @@ pub enum Commands {
         /// Speck file path relative to repo root
         #[arg(long, value_name = "PATH")]
         speck: String,
-
-        /// Step completion summaries for PR body (repeatable)
-        #[arg(long, value_name = "TEXT", num_args = 1..)]
-        step_summaries: Vec<String>,
-
-        /// Absolute path to session JSON file
-        #[arg(long, value_name = "PATH")]
-        session: String,
 
         /// GitHub repo in owner/repo format (auto-derived if not provided)
         #[arg(long, value_name = "REPO")]
@@ -782,8 +761,6 @@ mod tests {
             "bd-123",
             "--summary",
             "Completed step 0",
-            "--session",
-            "/path/to/session.json",
         ])
         .unwrap();
 
@@ -796,7 +773,6 @@ mod tests {
                 files,
                 bead,
                 summary,
-                session,
                 close_reason,
             }) => {
                 assert_eq!(worktree, "/path/to/worktree");
@@ -806,7 +782,6 @@ mod tests {
                 assert_eq!(files, vec!["src/a.rs", "src/b.rs"]);
                 assert_eq!(bead, "bd-123");
                 assert_eq!(summary, "Completed step 0");
-                assert_eq!(session, "/path/to/session.json");
                 assert!(close_reason.is_none());
             }
             _ => panic!("Expected StepCommit command"),
@@ -832,8 +807,6 @@ mod tests {
             "bd-456",
             "--summary",
             "Done",
-            "--session",
-            "/path/session.json",
             "--close-reason",
             "Step completed successfully",
         ])
@@ -865,11 +838,6 @@ mod tests {
             "feat: add authentication",
             "--speck",
             ".specks/specks-1.md",
-            "--step-summaries",
-            "Step 0: added models",
-            "Step 1: added handlers",
-            "--session",
-            "/path/to/session.json",
         ])
         .unwrap();
 
@@ -880,8 +848,6 @@ mod tests {
                 base,
                 title,
                 speck,
-                step_summaries,
-                session,
                 repo,
             }) => {
                 assert_eq!(worktree, "/path/to/worktree");
@@ -889,11 +855,6 @@ mod tests {
                 assert_eq!(base, "main");
                 assert_eq!(title, "feat: add authentication");
                 assert_eq!(speck, ".specks/specks-1.md");
-                assert_eq!(
-                    step_summaries,
-                    vec!["Step 0: added models", "Step 1: added handlers"]
-                );
-                assert_eq!(session, "/path/to/session.json");
                 assert!(repo.is_none());
             }
             _ => panic!("Expected StepPublish command"),
@@ -915,10 +876,6 @@ mod tests {
             "title",
             "--speck",
             ".specks/specks-1.md",
-            "--step-summaries",
-            "summary",
-            "--session",
-            "/path/session.json",
             "--repo",
             "owner/repo",
         ])

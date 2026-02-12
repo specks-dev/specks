@@ -1,9 +1,8 @@
 //! step-publish command implementation
 //!
-//! Pushes branch to remote, creates PR, and updates session status.
+//! Pushes branch to remote and creates PR.
 
 use crate::output::{JsonResponse, StepPublishData};
-use specks_core::session::{Session, now_iso8601, save_session_atomic};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -16,22 +15,15 @@ pub fn run_step_publish(
     base: String,
     title: String,
     _speck: String,
-    step_summaries: Vec<String>,
-    session: String,
     repo: Option<String>,
     json: bool,
     quiet: bool,
 ) -> Result<i32, String> {
     let worktree_path = Path::new(&worktree);
-    let session_path = Path::new(&session);
 
     // Validate inputs
     if !worktree_path.exists() {
         return error_response("Worktree directory does not exist", json, quiet);
-    }
-
-    if !session_path.exists() {
-        return error_response("Session file does not exist", json, quiet);
     }
 
     // Step 1: Check gh auth status
@@ -56,8 +48,8 @@ pub fn run_step_publish(
         derive_repo_from_remote(worktree_path)?
     };
 
-    // Step 3: Generate PR body
-    let pr_body = generate_pr_body(&step_summaries);
+    // Step 3: Generate PR body from git log
+    let pr_body = generate_pr_body(worktree_path, &base)?;
 
     // Write PR body to temp file to avoid shell escaping issues
     let temp_body_path = worktree_path.join(".specks").join("pr-body.md");
@@ -134,25 +126,7 @@ pub fn run_step_publish(
     let stdout = String::from_utf8_lossy(&output.stdout);
     let (pr_url, pr_number) = parse_pr_info(&stdout);
 
-    // Step 6: Update session
-    let mut session_data = load_session_file(session_path)?;
-    let repo_root = worktree_path
-        .parent()
-        .and_then(|p| p.parent())
-        .ok_or_else(|| "Cannot derive repo root from worktree path".to_string())?;
-
-    session_data.last_updated_at = Some(now_iso8601());
-
-    match save_session_atomic(&session_data, repo_root) {
-        Ok(_) => {}
-        Err(e) => {
-            if !quiet {
-                eprintln!("Warning: Failed to update session: {}", e);
-            }
-        }
-    }
-
-    // Step 7: Return response
+    // Step 6: Return response
     let data = StepPublishData {
         success: true,
         pushed,
@@ -176,14 +150,6 @@ pub fn run_step_publish(
     }
 
     Ok(0)
-}
-
-/// Helper to load session from file
-fn load_session_file(path: &Path) -> Result<Session, String> {
-    let content =
-        fs::read_to_string(path).map_err(|e| format!("Failed to read session file: {}", e))?;
-
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse session JSON: {}", e))
 }
 
 /// Helper to derive repo from git remote URL
@@ -226,13 +192,44 @@ fn derive_repo_from_remote(worktree_path: &Path) -> Result<String, String> {
     ))
 }
 
-/// Helper to generate PR body markdown
-fn generate_pr_body(step_summaries: &[String]) -> String {
+/// Helper to generate PR body markdown from git log
+fn generate_pr_body(worktree_path: &Path, base: &str) -> Result<String, String> {
+    // Run git log to get commits from base..HEAD
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(worktree_path)
+        .arg("log")
+        .arg("--oneline")
+        .arg(format!("{}..HEAD", base))
+        .output()
+        .map_err(|e| format!("Failed to run git log: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git log failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let commits: Vec<&str> = stdout.lines().collect();
+
     let mut body = String::new();
 
     body.push_str("## Summary\n\n");
-    for summary in step_summaries {
-        body.push_str(&format!("- {}\n", summary));
+    if commits.is_empty() {
+        body.push_str("- No commits found\n");
+    } else {
+        for commit in commits.iter().rev() {
+            // Commits are in reverse chronological order (newest first)
+            // We want oldest first, so reverse
+            // Format: "abcd123 commit message"
+            // Extract just the message (everything after first space)
+            if let Some((_hash, message)) = commit.split_once(' ') {
+                body.push_str(&format!("- {}\n", message));
+            } else {
+                // Fallback: use the whole line
+                body.push_str(&format!("- {}\n", commit));
+            }
+        }
     }
     body.push('\n');
 
@@ -244,7 +241,7 @@ fn generate_pr_body(step_summaries: &[String]) -> String {
 
     body.push_str("🤖 Generated with [Claude Code](https://claude.com/claude-code)\n");
 
-    body
+    Ok(body)
 }
 
 /// Helper to parse PR URL and number from gh pr create output
@@ -328,15 +325,84 @@ mod tests {
 
     #[test]
     fn test_generate_pr_body() {
-        let summaries = vec![
-            "Step 0: Added user model".to_string(),
-            "Step 1: Added authentication handlers".to_string(),
-        ];
-        let body = generate_pr_body(&summaries);
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create temp directory and init git repo
+        let temp = TempDir::new().unwrap();
+        let repo_path = temp.path();
+
+        // Init repo
+        Command::new("git")
+            .arg("init")
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Configure git
+        Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Create initial commit on main
+        fs::write(repo_path.join("file.txt"), "initial").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Create main branch reference
+        Command::new("git")
+            .args(["branch", "-M", "main"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Create feature commits
+        fs::write(repo_path.join("file.txt"), "step 0").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "feat: add user model"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        fs::write(repo_path.join("file.txt"), "step 1").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "feat: add authentication handlers"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+
+        // Generate PR body from git log
+        let body = generate_pr_body(repo_path, "main~2").unwrap();
 
         assert!(body.contains("## Summary"));
-        assert!(body.contains("- Step 0: Added user model"));
-        assert!(body.contains("- Step 1: Added authentication handlers"));
+        assert!(body.contains("- feat: add user model"));
+        assert!(body.contains("- feat: add authentication handlers"));
         assert!(body.contains("## Test plan"));
         assert!(body.contains("Build passes"));
         assert!(body.contains("Claude Code"));
