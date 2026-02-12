@@ -43,7 +43,7 @@ Follow these formats exactly.
 **Implementer** — Starting implementation of {speck_path}
 ```
 
-**End (output after publish):**
+**End (output after integrator passes):**
 ```
 Implementation complete
   Speck: {speck_path}
@@ -524,8 +524,6 @@ Task(
     "step_anchor": "#step-N",
     "proposed_message": "feat(<scope>): <description>",
     "files_to_stage": [<...files_created, ...files_modified from coder output, ".specks/specks-implementation-log.md">],
-    "commit_policy": "auto",
-    "confirmed": false,
     "bead_id": "<bead_id from bead_mapping>",
     "close_reason": "Step N complete: <summary>",
     "log_entry": {

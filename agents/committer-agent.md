@@ -84,7 +84,7 @@ Fixup mode handles polish commits outside the bead system. Execute three steps:
 **Step 1: Update implementation log**
 
 ```bash
-specks log prepend \
+cd "{worktree_path}" && specks log prepend \
   --step audit-fix \
   --speck "{speck_path}" \
   --summary "{log_entry.summary}"
