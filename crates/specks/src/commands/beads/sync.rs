@@ -16,16 +16,17 @@ pub struct SyncData {
     pub steps_synced: usize,
     pub deps_added: usize,
     pub dry_run: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enriched: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enrich_errors: Option<Vec<String>>,
 }
 
 /// Options for the sync command
 pub struct SyncOptions {
     pub file: String,
     pub dry_run: bool,
-    #[allow(dead_code)]
-    pub update_title: bool,
-    #[allow(dead_code)]
-    pub update_body: bool,
+    pub enrich: bool,
     pub prune_deps: bool,
     pub substeps_mode: String,
     pub json_output: bool,
@@ -37,8 +38,7 @@ pub fn run_sync(opts: SyncOptions) -> Result<i32, String> {
     let SyncOptions {
         file,
         dry_run,
-        update_title: _,
-        update_body: _,
+        enrich,
         prune_deps,
         substeps_mode,
         json_output,
@@ -130,6 +130,7 @@ pub fn run_sync(opts: SyncOptions) -> Result<i32, String> {
         beads: &beads,
         config: &config,
         dry_run,
+        enrich,
         prune_deps,
         substeps_mode: &substeps_mode,
         quiet,
@@ -137,7 +138,7 @@ pub fn run_sync(opts: SyncOptions) -> Result<i32, String> {
     let result = sync_speck_to_beads(&path, &speck, &content, &ctx);
 
     match result {
-        Ok((root_id, steps_synced, deps_added, updated_content)) => {
+        Ok((root_id, steps_synced, deps_added, updated_content, enrich_errors)) => {
             // Write updated content back to file (unless dry run)
             if !dry_run {
                 if let Some(new_content) = updated_content {
@@ -160,6 +161,12 @@ pub fn run_sync(opts: SyncOptions) -> Result<i32, String> {
                     steps_synced,
                     deps_added,
                     dry_run,
+                    enriched: if enrich { Some(true) } else { None },
+                    enrich_errors: if enrich_errors.is_empty() {
+                        None
+                    } else {
+                        Some(enrich_errors.clone())
+                    },
                 };
                 let response = JsonResponse::ok("beads sync", data);
                 println!("{}", serde_json::to_string_pretty(&response).unwrap());
@@ -174,6 +181,16 @@ pub fn run_sync(opts: SyncOptions) -> Result<i32, String> {
                 }
                 println!("  Steps synced: {}", steps_synced);
                 println!("  Dependencies added: {}", deps_added);
+                if enrich {
+                    if enrich_errors.is_empty() {
+                        println!("  Enriched: all beads updated successfully");
+                    } else {
+                        println!("  Enriched: with {} errors", enrich_errors.len());
+                        for error in &enrich_errors {
+                            eprintln!("    - {}", error);
+                        }
+                    }
+                }
             }
 
             Ok(0)
@@ -195,18 +212,20 @@ struct SyncContext<'a> {
     beads: &'a BeadsCli,
     config: &'a Config,
     dry_run: bool,
+    enrich: bool,
     prune_deps: bool,
     substeps_mode: &'a str,
     quiet: bool,
 }
 
 /// Sync a speck to beads
+#[allow(clippy::type_complexity)] // Return tuple includes enrichment errors
 fn sync_speck_to_beads(
     path: &Path,
     speck: &Speck,
     content: &str,
     ctx: &SyncContext<'_>,
-) -> Result<(Option<String>, usize, usize, Option<String>), SpecksError> {
+) -> Result<(Option<String>, usize, usize, Option<String>, Vec<String>), SpecksError> {
     let mut updated_content = content.to_string();
     let mut steps_synced = 0;
     let mut deps_added = 0;
@@ -346,6 +365,49 @@ fn sync_speck_to_beads(
         }
     }
 
+    // Phase 4: Enrich beads with rich content if requested
+    let mut enrich_errors = Vec::new();
+    if ctx.enrich {
+        // Enrich root bead
+        let root_errors = enrich_root_bead(speck, &root_id, ctx);
+        enrich_errors.extend(root_errors);
+
+        // Enrich step beads
+        for step in &speck.steps {
+            if let Some(bead_id) = anchor_to_bead.get(&step.anchor) {
+                let step_errors = enrich_step_bead(step, bead_id, speck, ctx);
+                enrich_errors.extend(step_errors);
+            }
+
+            // Enrich substep beads if using children mode
+            if ctx.substeps_mode == "children" {
+                for substep in &step.substeps {
+                    if let Some(bead_id) = anchor_to_bead.get(&substep.anchor) {
+                        // Convert Substep to Step for enrichment (substeps have same fields)
+                        let substep_as_step = specks_core::Step {
+                            number: substep.number.clone(),
+                            title: substep.title.clone(),
+                            anchor: substep.anchor.clone(),
+                            line: substep.line,
+                            depends_on: substep.depends_on.clone(),
+                            bead_id: substep.bead_id.clone(),
+                            beads_hints: substep.beads_hints.clone(),
+                            commit_message: substep.commit_message.clone(),
+                            references: substep.references.clone(),
+                            tasks: substep.tasks.clone(),
+                            tests: substep.tests.clone(),
+                            checkpoints: substep.checkpoints.clone(),
+                            artifacts: substep.artifacts.clone(),
+                            substeps: vec![],
+                        };
+                        let substep_errors = enrich_step_bead(&substep_as_step, bead_id, speck, ctx);
+                        enrich_errors.extend(substep_errors);
+                    }
+                }
+            }
+        }
+    }
+
     let content_changed = updated_content != content;
     Ok((
         Some(root_id),
@@ -356,6 +418,7 @@ fn sync_speck_to_beads(
         } else {
             None
         },
+        enrich_errors,
     ))
 }
 
@@ -691,6 +754,156 @@ fn resolve_file_path(project_root: &Path, file: &str) -> std::path::PathBuf {
     }
 }
 
+/// Resolve step references and expand decision IDs to titles
+fn resolve_step_design(step: &specks_core::Step, speck: &Speck) -> String {
+    use regex::Regex;
+    use std::sync::LazyLock;
+
+    static DECISION_REF: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\[([DQ]\d+)\]").unwrap());
+    static ANCHOR_REF: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"#([a-z0-9-]+)").unwrap());
+
+    let references = match &step.references {
+        Some(r) => r,
+        None => return String::new(),
+    };
+
+    let mut design_lines = vec!["## References".to_string()];
+
+    // Build decision lookup map
+    let decision_map: HashMap<String, String> = speck
+        .decisions
+        .iter()
+        .map(|d| (d.id.clone(), d.title.clone()))
+        .collect();
+
+    // Extract decision references and expand them
+    let mut decisions = Vec::new();
+    for cap in DECISION_REF.captures_iter(references) {
+        let id = cap.get(1).unwrap().as_str();
+        if let Some(title) = decision_map.get(id) {
+            decisions.push(format!("- [{}] {}", id, title));
+        } else {
+            // Decision not found, pass through as-is
+            decisions.push(format!("- [{}]", id));
+        }
+    }
+
+    // Extract anchor references
+    let mut anchors = Vec::new();
+    for cap in ANCHOR_REF.captures_iter(references) {
+        let anchor = cap.get(1).unwrap().as_str();
+        // Only include if not part of a decision reference
+        if !DECISION_REF.is_match(&format!("[{}]", anchor)) {
+            anchors.push(format!("- #{}", anchor));
+        }
+    }
+
+    // Add decisions first
+    let has_decisions = !decisions.is_empty();
+    if has_decisions {
+        design_lines.extend(decisions);
+    }
+
+    // Add anchors
+    if !anchors.is_empty() {
+        if has_decisions {
+            design_lines.push(String::new()); // Blank line between sections
+        }
+        design_lines.extend(anchors);
+    }
+
+    if design_lines.len() == 1 {
+        // Only header, return empty
+        String::new()
+    } else {
+        design_lines.join("\n")
+    }
+}
+
+/// Enrich root bead with full speck content
+fn enrich_root_bead(
+    speck: &Speck,
+    root_id: &str,
+    ctx: &SyncContext<'_>,
+) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    if ctx.dry_run {
+        return errors;
+    }
+
+    // Update description (purpose + strategy + success criteria)
+    let description = speck.render_root_description();
+    if !description.is_empty() {
+        if let Err(e) = ctx.beads.update_description(root_id, &description) {
+            errors.push(format!("Failed to update root description: {}", e));
+        }
+    }
+
+    // Update design (decision summary)
+    let design = speck.render_root_design();
+    if !design.is_empty() {
+        if let Err(e) = ctx.beads.update_design(root_id, &design) {
+            errors.push(format!("Failed to update root design: {}", e));
+        }
+    }
+
+    // Update acceptance criteria (phase exit criteria)
+    let acceptance = speck.render_root_acceptance();
+    if !acceptance.is_empty() {
+        if let Err(e) = ctx.beads.update_acceptance(root_id, &acceptance) {
+            errors.push(format!("Failed to update root acceptance: {}", e));
+        }
+    }
+
+    errors
+}
+
+/// Enrich step bead with full step content
+fn enrich_step_bead(
+    step: &specks_core::Step,
+    bead_id: &str,
+    speck: &Speck,
+    ctx: &SyncContext<'_>,
+) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    if ctx.dry_run {
+        return errors;
+    }
+
+    // Update description (tasks + artifacts + commit template)
+    let description = step.render_description();
+    if !description.is_empty() {
+        if let Err(e) = ctx.beads.update_description(bead_id, &description) {
+            errors.push(format!("Failed to update description for {}: {}", bead_id, e));
+        }
+    }
+
+    // Update acceptance criteria (tests + checkpoints)
+    let acceptance = step.render_acceptance_criteria();
+    if !acceptance.is_empty() {
+        if let Err(e) = ctx.beads.update_acceptance(bead_id, &acceptance) {
+            errors.push(format!(
+                "Failed to update acceptance for {}: {}",
+                bead_id, e
+            ));
+        }
+    }
+
+    // Update design (resolved references)
+    let design = resolve_step_design(step, speck);
+    if !design.is_empty() {
+        if let Err(e) = ctx.beads.update_design(bead_id, &design) {
+            errors.push(format!("Failed to update design for {}: {}", bead_id, e));
+        }
+    }
+
+    errors
+}
+
 /// Output an error in JSON or text format
 fn output_error(
     json_output: bool,
@@ -716,6 +929,8 @@ fn output_error(
                 steps_synced: 0,
                 deps_added: 0,
                 dry_run: false,
+                enriched: None,
+                enrich_errors: None,
             },
             issues,
         );

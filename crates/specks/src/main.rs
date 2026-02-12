@@ -30,15 +30,13 @@ fn main() -> ExitCode {
             BeadsCommands::Sync {
                 file,
                 dry_run,
-                update_title,
-                update_body,
+                enrich,
                 prune_deps,
                 substeps,
             } => commands::run_sync(commands::beads::sync::SyncOptions {
                 file,
                 dry_run,
-                update_title,
-                update_body,
+                enrich,
                 prune_deps,
                 substeps_mode: substeps,
                 json_output: cli.json,
