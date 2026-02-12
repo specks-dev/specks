@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-4
+date: 2025-02-12T18:19:33Z
+bead: specks-70x.5
+---
+
+## #step-4: Enforced specks validate as hard gate in critic-agent
+
+**Files changed:**
+- .specks/specks-7.md
+
+---
+
+---
 step: #step-3
 date: 2025-02-12T18:13:01Z
 bead: specks-70x.4
