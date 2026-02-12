@@ -9,6 +9,19 @@ bead: specks-jlu.4
 ---
 
 ---
+step: #step-1
+date: 2025-02-12T00:11:12Z
+bead: specks-0kf.2
+---
+
+## #step-1: Extended BeadsCli and bd-fake with rich bead fields (design, acceptance_criteria, notes), update methods, and create extensions
+
+**Files changed:**
+- .specks/specks-5.md
+
+---
+
+---
 step: #step-0
 date: 2025-02-11T23:59:40Z
 bead: specks-0kf.1

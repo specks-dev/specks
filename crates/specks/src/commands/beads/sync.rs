@@ -397,6 +397,9 @@ fn ensure_root_bead(
         None,
         Some(issue_type),
         None,
+        None,
+        None,
+        None,
     )?;
 
     // Write Beads Root to content
@@ -447,7 +450,7 @@ fn ensure_step_bead(
         return Ok(fake_id);
     }
 
-    let issue = beads.create(&title, Some(&description), Some(root_id), None, None)?;
+    let issue = beads.create(&title, Some(&description), Some(root_id), None, None, None, None, None)?;
 
     // Write Bead ID to step in content
     write_bead_to_step(content, &step.anchor, &issue.id);
@@ -496,7 +499,7 @@ fn ensure_substep_bead(
         return Ok(fake_id);
     }
 
-    let issue = beads.create(&title, Some(&description), Some(parent_bead_id), None, None)?;
+    let issue = beads.create(&title, Some(&description), Some(parent_bead_id), None, None, None, None, None)?;
 
     // Write Bead ID to substep in content
     write_bead_to_step(content, &substep.anchor, &issue.id);

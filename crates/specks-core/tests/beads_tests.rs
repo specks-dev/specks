@@ -85,3 +85,120 @@ fn test_dep_result_json_parsing() {
     assert_eq!(result.issue_id, "bd-fake-1");
     assert_eq!(result.depends_on_id, "bd-fake-0");
 }
+
+#[test]
+fn test_bd_fake_create_with_rich_fields() {
+    use specks_core::beads::BeadsCli;
+    use std::env;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    let temp_dir = TempDir::new().unwrap();
+    unsafe {
+        env::set_var("SPECKS_BD_STATE", temp_dir.path());
+    }
+
+    // Navigate from specks-core/tests to workspace root tests/bin/bd-fake
+    let mut bd_fake_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    bd_fake_path.pop(); // Go up to crates/
+    bd_fake_path.pop(); // Go up to workspace root
+    bd_fake_path.push("tests");
+    bd_fake_path.push("bin");
+    bd_fake_path.push("bd-fake");
+
+    let beads = BeadsCli::new(bd_fake_path.to_string_lossy().to_string());
+
+    // Create an issue with rich fields
+    let issue = beads
+        .create(
+            "Test Issue",
+            Some("Test description"),
+            None,
+            None,
+            None,
+            Some("Design content"),
+            Some("Acceptance content"),
+            Some("Notes content"),
+        )
+        .expect("Failed to create issue");
+
+    assert_eq!(issue.title, "Test Issue");
+
+    // Show the issue and verify rich fields
+    let details = beads.show(&issue.id).expect("Failed to show issue");
+    assert_eq!(details.design, Some("Design content".to_string()));
+    assert_eq!(
+        details.acceptance_criteria,
+        Some("Acceptance content".to_string())
+    );
+    assert_eq!(details.notes, Some("Notes content".to_string()));
+}
+
+#[test]
+fn test_bd_fake_update_rich_fields() {
+    use specks_core::beads::BeadsCli;
+    use std::env;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    let temp_dir = TempDir::new().unwrap();
+    unsafe {
+        env::set_var("SPECKS_BD_STATE", temp_dir.path());
+    }
+
+    // Navigate from specks-core/tests to workspace root tests/bin/bd-fake
+    let mut bd_fake_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    bd_fake_path.pop(); // Go up to crates/
+    bd_fake_path.pop(); // Go up to workspace root
+    bd_fake_path.push("tests");
+    bd_fake_path.push("bin");
+    bd_fake_path.push("bd-fake");
+
+    let beads = BeadsCli::new(bd_fake_path.to_string_lossy().to_string());
+
+    // Create an issue without rich fields
+    let issue = beads
+        .create("Test Issue", None, None, None, None, None, None, None)
+        .expect("Failed to create issue");
+
+    // Verify no rich fields
+    let details = beads.show(&issue.id).expect("Failed to show issue");
+    assert!(details.design.is_none());
+    assert!(details.acceptance_criteria.is_none());
+    assert!(details.notes.is_none());
+
+    // Update design field
+    beads
+        .update_design(&issue.id, "Updated design")
+        .expect("Failed to update design");
+
+    // Verify design was updated
+    let details = beads.show(&issue.id).expect("Failed to show issue");
+    assert_eq!(details.design, Some("Updated design".to_string()));
+    assert!(details.acceptance_criteria.is_none());
+    assert!(details.notes.is_none());
+
+    // Update acceptance_criteria field
+    beads
+        .update_acceptance(&issue.id, "Updated acceptance")
+        .expect("Failed to update acceptance");
+
+    // Verify acceptance_criteria was updated
+    let details = beads.show(&issue.id).expect("Failed to show issue");
+    assert_eq!(details.design, Some("Updated design".to_string()));
+    assert_eq!(
+        details.acceptance_criteria,
+        Some("Updated acceptance".to_string())
+    );
+    assert!(details.notes.is_none());
+
+    // Update description field (existing functionality)
+    beads
+        .update_description(&issue.id, "Updated description")
+        .expect("Failed to update description");
+
+    // Verify description was updated
+    let details = beads.show(&issue.id).expect("Failed to show issue");
+    assert_eq!(details.description, "Updated description");
+    assert_eq!(details.design, Some("Updated design".to_string()));
+}

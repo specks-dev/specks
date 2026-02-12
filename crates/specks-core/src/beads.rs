@@ -36,6 +36,12 @@ pub struct IssueDetails {
     pub dependencies: Vec<DependencyRef>,
     #[serde(default)]
     pub dependents: Vec<DependencyRef>,
+    #[serde(default)]
+    pub design: Option<String>,
+    #[serde(default)]
+    pub acceptance_criteria: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 /// Dependency reference in IssueDetails
@@ -134,6 +140,7 @@ impl BeadsCli {
     }
 
     /// Create a new bead
+    #[allow(clippy::too_many_arguments)] // Backward compatibility requires optional parameters
     pub fn create(
         &self,
         title: &str,
@@ -141,6 +148,9 @@ impl BeadsCli {
         parent: Option<&str>,
         issue_type: Option<&str>,
         priority: Option<i32>,
+        design: Option<&str>,
+        acceptance: Option<&str>,
+        notes: Option<&str>,
     ) -> Result<Issue, SpecksError> {
         let mut cmd = Command::new(&self.bd_path);
         cmd.arg("create").arg("--json").arg(title);
@@ -156,6 +166,15 @@ impl BeadsCli {
         }
         if let Some(pri) = priority {
             cmd.arg(format!("-p{}", pri));
+        }
+        if let Some(d) = design {
+            cmd.arg("--design").arg(d);
+        }
+        if let Some(a) = acceptance {
+            cmd.arg("--acceptance").arg(a);
+        }
+        if let Some(n) = notes {
+            cmd.arg("--notes").arg(n);
         }
 
         let output = cmd.output().map_err(|e| {
@@ -223,6 +242,87 @@ impl BeadsCli {
     /// Check if a bead exists
     pub fn bead_exists(&self, id: &str) -> bool {
         self.show(id).is_ok()
+    }
+
+    /// Update the description field of a bead
+    pub fn update_description(&self, id: &str, content: &str) -> Result<(), SpecksError> {
+        let output = Command::new(&self.bd_path)
+            .arg("update")
+            .arg(id)
+            .arg("--description")
+            .arg(content)
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    SpecksError::BeadsNotInstalled
+                } else {
+                    SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
+                }
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SpecksError::BeadsCommand(format!(
+                "bd update --description failed: {}",
+                stderr
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Update the design field of a bead
+    pub fn update_design(&self, id: &str, content: &str) -> Result<(), SpecksError> {
+        let output = Command::new(&self.bd_path)
+            .arg("update")
+            .arg(id)
+            .arg("--design")
+            .arg(content)
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    SpecksError::BeadsNotInstalled
+                } else {
+                    SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
+                }
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SpecksError::BeadsCommand(format!(
+                "bd update --design failed: {}",
+                stderr
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Update the acceptance_criteria field of a bead
+    pub fn update_acceptance(&self, id: &str, content: &str) -> Result<(), SpecksError> {
+        let output = Command::new(&self.bd_path)
+            .arg("update")
+            .arg(id)
+            .arg("--acceptance")
+            .arg(content)
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    SpecksError::BeadsNotInstalled
+                } else {
+                    SpecksError::BeadsCommand(format!("failed to run bd update: {}", e))
+                }
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SpecksError::BeadsCommand(format!(
+                "bd update --acceptance failed: {}",
+                stderr
+            )));
+        }
+
+        Ok(())
     }
 
     /// Add a dependency edge
@@ -412,6 +512,7 @@ impl BeadsCli {
 
     /// Create a bead with inline dependencies (reduces subprocess calls).
     /// Uses: `bd create --deps "dep1,dep2"`
+    #[allow(clippy::too_many_arguments)] // Backward compatibility requires optional parameters
     pub fn create_with_deps(
         &self,
         title: &str,
@@ -420,6 +521,9 @@ impl BeadsCli {
         deps: &[String],
         issue_type: Option<&str>,
         priority: Option<i32>,
+        design: Option<&str>,
+        acceptance: Option<&str>,
+        notes: Option<&str>,
     ) -> Result<Issue, SpecksError> {
         let mut cmd = Command::new(&self.bd_path);
         cmd.arg("create").arg("--json").arg(title);
@@ -438,6 +542,15 @@ impl BeadsCli {
         }
         if let Some(pri) = priority {
             cmd.arg(format!("-p{}", pri));
+        }
+        if let Some(d) = design {
+            cmd.arg("--design").arg(d);
+        }
+        if let Some(a) = acceptance {
+            cmd.arg("--acceptance").arg(a);
+        }
+        if let Some(n) = notes {
+            cmd.arg("--notes").arg(n);
         }
 
         let output = cmd.output().map_err(|e| {
@@ -562,5 +675,82 @@ mod tests {
         assert_eq!(format!("{}", BeadStatus::Ready), "ready");
         assert_eq!(format!("{}", BeadStatus::Blocked), "blocked");
         assert_eq!(format!("{}", BeadStatus::Pending), "pending");
+    }
+
+    #[test]
+    fn test_issue_details_serde_without_rich_fields() {
+        // Test backward compatibility: IssueDetails without new fields should deserialize correctly
+        let json = r#"{
+            "id": "bd-test1",
+            "title": "Test Issue",
+            "description": "Test description",
+            "status": "open",
+            "priority": 2,
+            "issue_type": "task",
+            "dependencies": [],
+            "dependents": []
+        }"#;
+
+        let details: IssueDetails = serde_json::from_str(json).unwrap();
+        assert_eq!(details.id, "bd-test1");
+        assert_eq!(details.title, "Test Issue");
+        assert_eq!(details.description, "Test description");
+        assert!(details.design.is_none());
+        assert!(details.acceptance_criteria.is_none());
+        assert!(details.notes.is_none());
+    }
+
+    #[test]
+    fn test_issue_details_serde_with_rich_fields() {
+        // Test new fields serialize and deserialize correctly
+        let json = "{
+            \"id\": \"bd-test2\",
+            \"title\": \"Rich Issue\",
+            \"description\": \"Description\",
+            \"status\": \"open\",
+            \"priority\": 1,
+            \"issue_type\": \"feature\",
+            \"dependencies\": [],
+            \"dependents\": [],
+            \"design\": \"Design content\",
+            \"acceptance_criteria\": \"Acceptance content\",
+            \"notes\": \"Notes content\"
+        }";
+
+        let details: IssueDetails = serde_json::from_str(json).unwrap();
+        assert_eq!(details.id, "bd-test2");
+        assert_eq!(details.design, Some("Design content".to_string()));
+        assert_eq!(
+            details.acceptance_criteria,
+            Some("Acceptance content".to_string())
+        );
+        assert_eq!(details.notes, Some("Notes content".to_string()));
+    }
+
+    #[test]
+    fn test_issue_details_roundtrip() {
+        // Test that IssueDetails with all fields round-trips correctly
+        let original = IssueDetails {
+            id: "bd-test3".to_string(),
+            title: "Full Issue".to_string(),
+            description: "Full description".to_string(),
+            status: "open".to_string(),
+            priority: 3,
+            issue_type: "bug".to_string(),
+            dependencies: vec![],
+            dependents: vec![],
+            design: Some("Design content".to_string()),
+            acceptance_criteria: Some("Acceptance content".to_string()),
+            notes: Some("Notes content".to_string()),
+        };
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: IssueDetails = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original.id, deserialized.id);
+        assert_eq!(original.title, deserialized.title);
+        assert_eq!(original.design, deserialized.design);
+        assert_eq!(original.acceptance_criteria, deserialized.acceptance_criteria);
+        assert_eq!(original.notes, deserialized.notes);
     }
 }
