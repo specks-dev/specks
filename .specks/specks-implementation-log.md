@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-4
+date: 2025-02-13T02:07:23Z
+bead: specks-dg0.5
+---
+
+## #step-4: Add P1 bead completion warning and P3 multiple worktree/gh fallback warnings
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
 step: #step-3
 date: 2025-02-13T01:58:44Z
 bead: specks-dg0.4

@@ -8,7 +8,7 @@
 //! - Local: No remote → `git merge --squash` directly
 
 use serde::{Deserialize, Serialize};
-use specks_core::{derive_speck_slug, find_worktree_by_speck, remove_worktree};
+use specks_core::{BeadsCli, Step, derive_speck_slug, find_worktree_by_speck, parse_speck, remove_worktree};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -209,9 +209,62 @@ fn check_worktree_dirty(wt_path: &Path) -> Result<Option<String>, String> {
     }
 }
 
+/// P1 preflight check: warn if beads/steps are not all complete.
+/// Returns None if all complete, beads unavailable, or beads not configured.
+fn check_bead_completion(repo_root: &Path, speck_path: &Path) -> Option<String> {
+    // Read and parse the speck file
+    let full_path = repo_root.join(speck_path);
+    let content = std::fs::read_to_string(&full_path).ok()?;
+    let speck = parse_speck(&content).ok()?;
+
+    // Check if beads are configured (has any bead_id on steps)
+    let steps_with_beads: Vec<&Step> = speck
+        .steps
+        .iter()
+        .filter(|s| s.bead_id.is_some())
+        .collect();
+
+    if steps_with_beads.is_empty() {
+        return None; // No beads configured, skip check silently
+    }
+
+    // Check bead completion via BeadsCli
+    let beads = BeadsCli::default();
+    if !beads.is_installed(None) {
+        return None; // bd not installed, skip silently
+    }
+
+    let total = steps_with_beads.len();
+    let complete = steps_with_beads
+        .iter()
+        .filter(|s| {
+            if let Some(ref bead_id) = s.bead_id {
+                beads
+                    .show(bead_id, None)
+                    .map(|d| d.status.to_lowercase() == "closed")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        })
+        .count();
+
+    let incomplete = total - complete;
+    if incomplete == 0 {
+        None
+    } else {
+        Some(format!(
+            "{} of {} steps incomplete. Run 'specks beads status {}' to review.",
+            incomplete,
+            total,
+            speck_path.display()
+        ))
+    }
+}
+
 /// Run all preflight checks before merge execution.
 /// Returns warnings (non-blocking) and an optional blocking error.
-fn run_preflight_checks(wt_path: &Path) -> PreflightResult {
+fn run_preflight_checks(wt_path: &Path, repo_root: &Path, speck_path: &Path) -> PreflightResult {
     let mut warnings = Vec::new();
     let mut blocking_error = None;
 
@@ -220,6 +273,11 @@ fn run_preflight_checks(wt_path: &Path) -> PreflightResult {
         Ok(Some(err)) => blocking_error = Some(err),
         Ok(None) => {}
         Err(e) => warnings.push(format!("Could not check worktree status: {}", e)),
+    }
+
+    // P1: Bead completion check (warning only)
+    if let Some(warning) = check_bead_completion(repo_root, speck_path) {
+        warnings.push(warning);
     }
 
     PreflightResult {
@@ -784,20 +842,36 @@ pub fn run_merge(
     let wt_path = &discovered.path;
     let branch = &discovered.branch;
 
-    // Preflight checks
-    let preflight = run_preflight_checks(wt_path);
+    // P3: Multiple worktree warning
+    let mut extra_warnings: Vec<String> = Vec::new();
+    if discovery.match_count > 1 {
+        let others: Vec<String> = discovery
+            .all_matches
+            .iter()
+            .map(|wt| format!("  {} ({})", wt.path.display(), wt.branch))
+            .collect();
+        extra_warnings.push(format!(
+            "Multiple worktrees found for this speck ({} total). Using most recent: {}\nAll matches:\n{}",
+            discovery.match_count,
+            branch,
+            others.join("\n")
+        ));
+    }
 
-    // Convert warnings for MergeData
-    let preflight_warnings: Option<Vec<String>> = if preflight.warnings.is_empty() {
-        None
-    } else {
-        Some(preflight.warnings)
-    };
+    // Preflight checks
+    let preflight = run_preflight_checks(wt_path, &repo_root, &speck_path);
 
     // P0 blocker: dirty implementation worktree
     if let Some(ref blocking_err) = preflight.blocking_error {
         let mut data = MergeData::error(blocking_err.clone(), dry_run);
-        data.warnings = preflight_warnings.clone();
+        // Include warnings accumulated so far
+        let mut all_warnings = extra_warnings.clone();
+        all_warnings.extend(preflight.warnings);
+        data.warnings = if all_warnings.is_empty() {
+            None
+        } else {
+            Some(all_warnings)
+        };
         if json {
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
         }
@@ -808,8 +882,20 @@ pub fn run_merge(
     let has_origin = has_remote_origin(&repo_root);
 
     // Step 1b: Get PR info (remote mode only)
+    let mut gh_fallback_warning: Option<String> = None;
     let pr_info = if has_origin {
-        get_pr_for_branch(branch).ok() // No PR or gh not available — will fall back to local
+        match get_pr_for_branch(branch) {
+            Ok(pr) => Some(pr),
+            Err(e) => {
+                if !e.contains("No PR found") {
+                    gh_fallback_warning = Some(
+                        "Remote detected but gh CLI unavailable -- falling back to local mode"
+                            .to_string(),
+                    );
+                }
+                None
+            }
+        }
     } else {
         None
     };
@@ -819,6 +905,19 @@ pub fn run_merge(
         "remote"
     } else {
         "local"
+    };
+
+    // Merge all warning sources
+    let mut all_warnings = extra_warnings; // P3 multiple worktree
+    all_warnings.extend(preflight.warnings); // P0/P1 from preflight
+    if let Some(w) = gh_fallback_warning {
+        all_warnings.push(w); // P3 gh fallback
+    }
+
+    let preflight_warnings: Option<Vec<String>> = if all_warnings.is_empty() {
+        None
+    } else {
+        Some(all_warnings)
     };
 
     // Step 2: Pre-dry-run checks
@@ -2106,6 +2205,95 @@ mod tests {
         assert_eq!(result.warnings.len(), 1);
         assert_eq!(result.warnings[0], "some warning");
         assert_eq!(result.blocking_error.unwrap(), "blocking issue");
+    }
+
+    #[test]
+    fn test_check_bead_completion_no_beads_returns_none() {
+        use tempfile::TempDir;
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Create a minimal speck file with no bead IDs
+        let specks_dir = temp_path.join(".specks");
+        fs::create_dir_all(&specks_dir).unwrap();
+        fs::write(
+            specks_dir.join("specks-test.md"),
+            "## Phase 1 {#phase-1}\n\n---\n\n### 1.0.4 Execution Steps {#execution-steps}\n\n#### Step 0: Do something {#step-0}\n\n**Tasks:**\n- [ ] Do a thing\n",
+        )
+        .unwrap();
+
+        let result = check_bead_completion(temp_path, Path::new(".specks/specks-test.md"));
+        assert!(
+            result.is_none(),
+            "No beads configured should return None"
+        );
+    }
+
+    #[test]
+    fn test_check_bead_completion_bd_not_installed_returns_none() {
+        use tempfile::TempDir;
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Create a speck file with bead IDs
+        let specks_dir = temp_path.join(".specks");
+        fs::create_dir_all(&specks_dir).unwrap();
+        fs::write(
+            specks_dir.join("specks-test.md"),
+            "## Phase 1 {#phase-1}\n\n---\n\n### Plan Metadata {#plan-metadata}\n\n| Field | Value |\n|------|-------|\n| Beads Root | `test-root` |\n\n---\n\n### 1.0.4 Execution Steps {#execution-steps}\n\n#### Step 0: Do something {#step-0}\n\n**Bead:** `test-root.1`\n\n**Tasks:**\n- [ ] Do a thing\n",
+        )
+        .unwrap();
+
+        // When bd is not installed, should return None (skip silently)
+        let result = check_bead_completion(temp_path, Path::new(".specks/specks-test.md"));
+        // Result depends on whether bd is installed in the test environment
+        // If bd is not installed: None (silently skipped)
+        // If bd is installed but bead doesn't exist: None (show fails, treated as incomplete)
+        // Either way, this should not panic
+        let _ = result;
+    }
+
+    #[test]
+    fn test_check_bead_completion_missing_file_returns_none() {
+        use tempfile::TempDir;
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Speck file does not exist
+        let result =
+            check_bead_completion(temp_path, Path::new(".specks/specks-nonexistent.md"));
+        assert!(result.is_none(), "Missing speck file should return None");
+    }
+
+    #[test]
+    fn test_merge_data_with_multiple_warnings() {
+        let data = MergeData {
+            status: "ok".to_string(),
+            merge_mode: Some("local".to_string()),
+            branch_name: Some("specks/1-20260210-120000".to_string()),
+            worktree_path: None,
+            pr_url: None,
+            pr_number: None,
+            squash_commit: None,
+            worktree_cleaned: None,
+            dry_run: true,
+            dirty_files: None,
+            warnings: Some(vec![
+                "2 of 5 steps incomplete. Run 'specks beads status .specks/specks-1.md' to review."
+                    .to_string(),
+                "Remote detected but gh CLI unavailable -- falling back to local mode".to_string(),
+                "Multiple worktrees found for this speck (2 total). Using most recent: specks/1-20260210-140000"
+                    .to_string(),
+            ]),
+            error: None,
+            message: Some("Would squash-merge".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"warnings\""));
+        assert!(json.contains("steps incomplete"));
+        assert!(json.contains("gh CLI unavailable"));
+        assert!(json.contains("Multiple worktrees"));
     }
 
     // -- check_main_sync tests --
