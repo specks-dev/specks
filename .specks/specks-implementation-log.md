@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-5
+date: 2025-02-13T02:13:34Z
+bead: specks-dg0.6
+---
+
+## #step-5: Add P2 branch divergence and infrastructure diff previews for dry-run mode
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
 step: #step-4
 date: 2025-02-13T02:07:23Z
 bead: specks-dg0.5

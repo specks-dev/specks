@@ -262,9 +262,116 @@ fn check_bead_completion(repo_root: &Path, speck_path: &Path) -> Option<String> 
     }
 }
 
+/// P2 preflight check (dry-run only): preview branch divergence from main.
+/// Shows commit count and diff stat summary.
+/// Returns None if merge-base fails or branch has no commits ahead.
+fn check_branch_divergence(repo_root: &Path, branch: &str) -> Option<String> {
+    // Get merge base
+    let merge_base_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["merge-base", "main", branch])
+        .output()
+        .ok()?;
+
+    if !merge_base_output.status.success() {
+        return None; // merge-base failed (e.g., unrelated histories), skip gracefully
+    }
+
+    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
+        .trim()
+        .to_string();
+
+    // Count commits ahead
+    let count_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["rev-list", "--count", &format!("{}..{}", merge_base, branch)])
+        .output()
+        .ok()?;
+
+    if !count_output.status.success() {
+        return None;
+    }
+
+    let count_str = String::from_utf8_lossy(&count_output.stdout)
+        .trim()
+        .to_string();
+    let commit_count: usize = count_str.parse().unwrap_or(0);
+
+    if commit_count == 0 {
+        return None; // No divergence
+    }
+
+    // Get diff stat
+    let stat_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["diff", "--stat", &format!("{}..{}", merge_base, branch)])
+        .output()
+        .ok()?;
+
+    let stat_summary = if stat_output.status.success() {
+        let stat = String::from_utf8_lossy(&stat_output.stdout)
+            .trim()
+            .to_string();
+        // The last line of --stat is the summary (e.g., "14 files changed, 312 insertions(+), 45 deletions(-)")
+        stat.lines().last().unwrap_or("").to_string()
+    } else {
+        String::new()
+    };
+
+    if stat_summary.is_empty() {
+        Some(format!("Branch has {} commits ahead of main", commit_count))
+    } else {
+        Some(format!(
+            "Branch has {} commits ahead of main ({})",
+            commit_count, stat_summary
+        ))
+    }
+}
+
+/// P2 preflight check (dry-run only): detect infrastructure file differences.
+/// Shows .specks/ and .beads/ files that differ between main and the branch.
+/// Returns None if no infrastructure files differ or diff fails.
+fn check_infra_diff(repo_root: &Path, branch: &str) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["diff", "--name-only", &format!("main..{}", branch)])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let infra_files: Vec<&str> = stdout
+        .lines()
+        .filter(|line| !line.is_empty() && is_infrastructure_path(line))
+        .collect();
+
+    if infra_files.is_empty() {
+        return None;
+    }
+
+    Some(format!(
+        "Infrastructure files differ between main and branch ({} files):\n  {}\n  These will be auto-resolved during merge (branch version wins).",
+        infra_files.len(),
+        infra_files.join("\n  ")
+    ))
+}
+
 /// Run all preflight checks before merge execution.
 /// Returns warnings (non-blocking) and an optional blocking error.
-fn run_preflight_checks(wt_path: &Path, repo_root: &Path, speck_path: &Path) -> PreflightResult {
+fn run_preflight_checks(
+    wt_path: &Path,
+    repo_root: &Path,
+    speck_path: &Path,
+    dry_run: bool,
+    branch: &str,
+) -> PreflightResult {
     let mut warnings = Vec::new();
     let mut blocking_error = None;
 
@@ -278,6 +385,16 @@ fn run_preflight_checks(wt_path: &Path, repo_root: &Path, speck_path: &Path) -> 
     // P1: Bead completion check (warning only)
     if let Some(warning) = check_bead_completion(repo_root, speck_path) {
         warnings.push(warning);
+    }
+
+    // P2: Branch divergence and infrastructure diff (dry-run only)
+    if dry_run {
+        if let Some(warning) = check_branch_divergence(repo_root, branch) {
+            warnings.push(warning);
+        }
+        if let Some(warning) = check_infra_diff(repo_root, branch) {
+            warnings.push(warning);
+        }
     }
 
     PreflightResult {
@@ -859,7 +976,7 @@ pub fn run_merge(
     }
 
     // Preflight checks
-    let preflight = run_preflight_checks(wt_path, &repo_root, &speck_path);
+    let preflight = run_preflight_checks(wt_path, &repo_root, &speck_path, dry_run, branch);
 
     // P0 blocker: dirty implementation worktree
     if let Some(ref blocking_err) = preflight.blocking_error {
@@ -2294,6 +2411,157 @@ mod tests {
         assert!(json.contains("steps incomplete"));
         assert!(json.contains("gh CLI unavailable"));
         assert!(json.contains("Multiple worktrees"));
+    }
+
+    #[test]
+    fn test_check_branch_divergence_with_commits() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Create a feature branch with 2 commits
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "specks/test-20260210-120000"])
+            .output()
+            .expect("git checkout");
+
+        fs::write(temp_path.join("file1.txt"), "change1").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file1.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "commit1"])
+            .output()
+            .unwrap();
+
+        fs::write(temp_path.join("file2.txt"), "change2").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file2.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "commit2"])
+            .output()
+            .unwrap();
+
+        // Switch back to main
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+
+        let result = check_branch_divergence(temp_path, "specks/test-20260210-120000");
+        assert!(result.is_some(), "Should return divergence summary");
+        let msg = result.unwrap();
+        assert!(
+            msg.contains("2 commits ahead"),
+            "Should mention 2 commits: {}",
+            msg
+        );
+        assert!(
+            msg.contains("files changed") || msg.contains("file changed"),
+            "Should include diff stat: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_check_infra_diff_with_specks_changes() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Create branch with infrastructure file changes
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "specks/infra-20260210-120000"])
+            .output()
+            .expect("git checkout");
+
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
+        fs::write(
+            temp_path.join(".specks/specks-implementation-log.md"),
+            "# Log\nstep-0",
+        )
+        .unwrap();
+        fs::create_dir_all(temp_path.join(".beads")).unwrap();
+        fs::write(temp_path.join(".beads/beads.jsonl"), "{}").unwrap();
+        // Also add a non-infra file to verify filtering
+        fs::write(temp_path.join("src_file.rs"), "fn main() {}").unwrap();
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "branch changes"])
+            .output()
+            .unwrap();
+
+        // Switch back to main
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+
+        let result = check_infra_diff(temp_path, "specks/infra-20260210-120000");
+        assert!(result.is_some(), "Should detect infrastructure diffs");
+        let msg = result.unwrap();
+        assert!(
+            msg.contains(".specks/"),
+            "Should mention .specks/ files: {}",
+            msg
+        );
+        assert!(msg.contains(".beads/"), "Should mention .beads/ files: {}", msg);
+        assert!(
+            !msg.contains("src_file.rs"),
+            "Should NOT include non-infra files: {}",
+            msg
+        );
+        assert!(
+            msg.contains("auto-resolved"),
+            "Should mention auto-resolution: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_check_branch_divergence_nonexistent_branch_returns_none() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        let result = check_branch_divergence(temp_path, "nonexistent-branch");
+        assert!(result.is_none(), "Nonexistent branch should return None");
     }
 
     // -- check_main_sync tests --
