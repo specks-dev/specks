@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-2
+date: 2025-02-13T01:51:55Z
+bead: specks-dg0.3
+---
+
+## #step-2: Refactor find_worktree_by_speck to return WorktreeDiscovery with match count
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
 step: #step-1
 date: 2025-02-13T01:45:39Z
 bead: specks-dg0.2

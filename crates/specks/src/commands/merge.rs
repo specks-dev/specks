@@ -710,23 +710,27 @@ pub fn run_merge(
         return Err(e);
     }
 
-    let discovered = match find_worktree_by_speck(&repo_root, &speck_path) {
-        Ok(Some(wt)) => wt,
-        Ok(None) => {
-            let slug = derive_speck_slug(&speck_path);
-            let e = format!(
-                "No worktree found for speck: {} (looked for branch specks/{}-*)",
-                speck_path.display(),
-                slug
-            );
+    let discovery = match find_worktree_by_speck(&repo_root, &speck_path) {
+        Ok(d) => d,
+        Err(err) => {
+            let e = format!("Failed to discover worktrees: {}", err);
             let data = MergeData::error(e.clone(), dry_run);
             if json {
                 println!("{}", serde_json::to_string_pretty(&data).unwrap());
             }
             return Err(e);
         }
-        Err(err) => {
-            let e = format!("Failed to discover worktrees: {}", err);
+    };
+
+    let discovered = match discovery.selected {
+        Some(wt) => wt,
+        None => {
+            let slug = derive_speck_slug(&speck_path);
+            let e = format!(
+                "No worktree found for speck: {} (looked for branch specks/{}-*)",
+                speck_path.display(),
+                slug
+            );
             let data = MergeData::error(e.clone(), dry_run);
             if json {
                 println!("{}", serde_json::to_string_pretty(&data).unwrap());
