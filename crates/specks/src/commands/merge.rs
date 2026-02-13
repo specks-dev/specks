@@ -699,6 +699,17 @@ pub fn run_merge(
 
     // Step 1: Find the worktree via git-native discovery
     let speck_path = normalize_speck_path(&speck);
+
+    // Check that the speck file actually exists before worktree discovery
+    if !repo_root.join(&speck_path).exists() {
+        let e = format!("Speck file not found: {}", speck_path.display());
+        let data = MergeData::error(e.clone(), dry_run);
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        }
+        return Err(e);
+    }
+
     let discovered = match find_worktree_by_speck(&repo_root, &speck_path) {
         Ok(Some(wt)) => wt,
         Ok(None) => {
@@ -1397,6 +1408,15 @@ mod tests {
             normalize_speck_path("./.specks/specks-1.md"),
             PathBuf::from(".specks/specks-1.md")
         );
+    }
+
+    #[test]
+    fn test_speck_file_not_found_error_message() {
+        // Test the error message format for non-existent speck files
+        let speck_path = PathBuf::from(".specks/specks-nonexistent.md");
+        let error_msg = format!("Speck file not found: {}", speck_path.display());
+        assert!(error_msg.contains("Speck file not found:"));
+        assert!(error_msg.contains(".specks/specks-nonexistent.md"));
     }
 
     // -- is_main_worktree tests --

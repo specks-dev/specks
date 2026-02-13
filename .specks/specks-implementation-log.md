@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-1
+date: 2025-02-13T01:45:39Z
+bead: specks-dg0.2
+---
+
+## #step-1: Add speck file existence validation before worktree discovery
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
 step: #step-0
 date: 2025-02-13T01:41:37Z
 bead: specks-dg0.1
