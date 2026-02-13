@@ -9,6 +9,18 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: audit-fix
+date: 2025-02-13T02:27:21Z
+---
+
+## audit-fix: Audit fix: apply cargo fmt formatting to merge.rs
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
 step: #step-7
 date: 2025-02-13T02:24:00Z
 bead: specks-dg0.8

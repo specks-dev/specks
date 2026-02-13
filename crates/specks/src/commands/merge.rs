@@ -8,7 +8,9 @@
 //! - Local: No remote → `git merge --squash` directly
 
 use serde::{Deserialize, Serialize};
-use specks_core::{BeadsCli, Step, derive_speck_slug, find_worktree_by_speck, parse_speck, remove_worktree};
+use specks_core::{
+    BeadsCli, Step, derive_speck_slug, find_worktree_by_speck, parse_speck, remove_worktree,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -218,11 +220,7 @@ fn check_bead_completion(repo_root: &Path, speck_path: &Path) -> Option<String> 
     let speck = parse_speck(&content).ok()?;
 
     // Check if beads are configured (has any bead_id on steps)
-    let steps_with_beads: Vec<&Step> = speck
-        .steps
-        .iter()
-        .filter(|s| s.bead_id.is_some())
-        .collect();
+    let steps_with_beads: Vec<&Step> = speck.steps.iter().filter(|s| s.bead_id.is_some()).collect();
 
     if steps_with_beads.is_empty() {
         return None; // No beads configured, skip check silently
@@ -286,7 +284,11 @@ fn check_branch_divergence(repo_root: &Path, branch: &str) -> Option<String> {
     let count_output = Command::new("git")
         .arg("-C")
         .arg(repo_root)
-        .args(["rev-list", "--count", &format!("{}..{}", merge_base, branch)])
+        .args([
+            "rev-list",
+            "--count",
+            &format!("{}..{}", merge_base, branch),
+        ])
         .output()
         .ok()?;
 
@@ -2412,10 +2414,7 @@ mod tests {
         .unwrap();
 
         let result = check_bead_completion(temp_path, Path::new(".specks/specks-test.md"));
-        assert!(
-            result.is_none(),
-            "No beads configured should return None"
-        );
+        assert!(result.is_none(), "No beads configured should return None");
     }
 
     #[test]
@@ -2449,8 +2448,7 @@ mod tests {
         let temp_path = temp_dir.path();
 
         // Speck file does not exist
-        let result =
-            check_bead_completion(temp_path, Path::new(".specks/specks-nonexistent.md"));
+        let result = check_bead_completion(temp_path, Path::new(".specks/specks-nonexistent.md"));
         assert!(result.is_none(), "Missing speck file should return None");
     }
 
@@ -2610,7 +2608,11 @@ mod tests {
             "Should mention .specks/ files: {}",
             msg
         );
-        assert!(msg.contains(".beads/"), "Should mention .beads/ files: {}", msg);
+        assert!(
+            msg.contains(".beads/"),
+            "Should mention .beads/ files: {}",
+            msg
+        );
         assert!(
             !msg.contains("src_file.rs"),
             "Should NOT include non-infra files: {}",
