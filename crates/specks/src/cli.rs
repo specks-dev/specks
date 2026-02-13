@@ -438,7 +438,11 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "status", "specks-1.md"]).unwrap();
 
         match cli.command {
-            Some(Commands::Status { file, verbose, full }) => {
+            Some(Commands::Status {
+                file,
+                verbose,
+                full,
+            }) => {
                 assert_eq!(file, "specks-1.md");
                 assert!(!verbose);
                 assert!(!full);
@@ -452,7 +456,11 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "status", "specks-1.md", "--full"]).unwrap();
 
         match cli.command {
-            Some(Commands::Status { file, verbose, full }) => {
+            Some(Commands::Status {
+                file,
+                verbose,
+                full,
+            }) => {
                 assert_eq!(file, "specks-1.md");
                 assert!(!verbose);
                 assert!(full);

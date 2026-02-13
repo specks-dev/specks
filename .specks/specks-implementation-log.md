@@ -9,6 +9,18 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: audit-fix
+date: 2025-02-13T00:25:18Z
+---
+
+## audit-fix: CI fix: apply cargo fmt formatting to pass format check
+
+**Files changed:**
+- .specks/specks-10.md
+
+---
+
+---
 step: #step-3
 date: 2025-02-13T00:21:04Z
 bead: specks-hfq.4

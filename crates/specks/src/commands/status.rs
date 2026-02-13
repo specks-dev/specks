@@ -234,7 +234,10 @@ pub fn run_status(
                 Ok(0)
             }
             Err(e) => {
-                eprintln!("warning: beads query failed ({}), falling back to checkbox mode", e);
+                eprintln!(
+                    "warning: beads query failed ({}), falling back to checkbox mode",
+                    e
+                );
                 // Fall back to checkbox mode
                 let status_data = build_checkbox_status_data(&speck, &name);
                 if json_output {
@@ -1050,7 +1053,10 @@ mod tests {
         let actual_json = serde_json::to_value(&response).unwrap();
 
         // Load golden file (from workspace root)
-        let golden_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/golden/status_beads.json");
+        let golden_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/golden/status_beads.json"
+        );
         let golden_content = fs::read_to_string(golden_path)
             .unwrap_or_else(|_| panic!("Failed to read golden file: {}", golden_path));
         let expected_json: serde_json::Value = serde_json::from_str(&golden_content).unwrap();
@@ -1141,7 +1147,10 @@ Last updated: 2026-02-01
         let actual_json = serde_json::to_value(&response).unwrap();
 
         // Load golden file (from workspace root)
-        let golden_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/golden/status_fallback.json");
+        let golden_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/golden/status_fallback.json"
+        );
         let golden_content = fs::read_to_string(golden_path)
             .unwrap_or_else(|_| panic!("Failed to read golden file: {}", golden_path));
         let expected_json: serde_json::Value = serde_json::from_str(&golden_content).unwrap();

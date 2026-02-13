@@ -23,7 +23,11 @@ fn main() -> ExitCode {
             level,
         }) => commands::run_validate(file, strict, level, cli.json, cli.quiet),
         Some(Commands::List { status }) => commands::run_list(status, cli.json, cli.quiet),
-        Some(Commands::Status { file, verbose, full }) => {
+        Some(Commands::Status {
+            file,
+            verbose,
+            full,
+        }) => {
             // Use verbose flag from subcommand, or global verbose
             let verbose = verbose || cli.verbose;
             commands::run_status(file, verbose, full, cli.json, cli.quiet)
