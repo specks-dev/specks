@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-1
+date: 2025-02-13T00:01:43Z
+bead: specks-hfq.2
+---
+
+## #step-1: Add --full flag and redesign output types for beads-based status
+
+**Files changed:**
+- .specks/specks-10.md
+
+---
+
+---
 step: #step-0
 date: 2025-02-12T23:54:05Z
 bead: specks-hfq.1

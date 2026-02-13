@@ -85,7 +85,7 @@ pub enum Commands {
     ///
     /// Displays step-by-step progress with task and checkpoint counts.
     #[command(
-        long_about = "Show detailed completion status for a speck.\n\nDisplays:\n  - Overall progress percentage\n  - Per-step completion (tasks, tests, checkpoints)\n  - Substep progress if present\n\nUse -v/--verbose to see individual task and checkpoint items."
+        long_about = "Show detailed completion status for a speck.\n\nDisplays:\n  - Overall progress percentage\n  - Per-step completion (tasks, tests, checkpoints)\n  - Substep progress if present\n\nUse -v/--verbose to see individual task and checkpoint items.\nUse --full to include bead-enriched status (bead IDs, commit info, block status)."
     )]
     Status {
         /// Speck file to show status for
@@ -94,6 +94,10 @@ pub enum Commands {
         /// Show individual task and checkpoint details
         #[arg(short, long)]
         verbose: bool,
+
+        /// Include bead-enriched status (requires beads integration)
+        #[arg(long)]
+        full: bool,
     },
 
     /// Beads integration commands
@@ -434,9 +438,24 @@ mod tests {
         let cli = Cli::try_parse_from(["specks", "status", "specks-1.md"]).unwrap();
 
         match cli.command {
-            Some(Commands::Status { file, verbose }) => {
+            Some(Commands::Status { file, verbose, full }) => {
                 assert_eq!(file, "specks-1.md");
                 assert!(!verbose);
+                assert!(!full);
+            }
+            _ => panic!("Expected Status command"),
+        }
+    }
+
+    #[test]
+    fn test_status_command_with_full() {
+        let cli = Cli::try_parse_from(["specks", "status", "specks-1.md", "--full"]).unwrap();
+
+        match cli.command {
+            Some(Commands::Status { file, verbose, full }) => {
+                assert_eq!(file, "specks-1.md");
+                assert!(!verbose);
+                assert!(full);
             }
             _ => panic!("Expected Status command"),
         }
