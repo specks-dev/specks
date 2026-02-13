@@ -30,7 +30,10 @@ pub mod session;
 pub mod worktree;
 
 // Re-exports for convenience
-pub use beads::{BeadStatus, BeadsCli, Issue, IssueDetails, is_valid_bead_id};
+pub use beads::{
+    BeadStatus, BeadsCli, CloseReasonParsed, Issue, IssueDetails, is_valid_bead_id,
+    parse_close_reason,
+};
 pub use config::{
     BeadsConfig, Config, NamingConfig, RESERVED_FILES, SpecksConfig, find_project_root,
     find_project_root_from, find_specks, is_reserved_file, speck_name_from_path,

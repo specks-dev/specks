@@ -114,6 +114,17 @@ impl std::fmt::Display for BeadStatus {
     }
 }
 
+/// Parsed close reason with structured fields
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloseReasonParsed {
+    /// Commit hash extracted from "Committed: <hash> -- <summary>" format
+    pub commit_hash: Option<String>,
+    /// Commit summary extracted from "Committed: <hash> -- <summary>" format
+    pub commit_summary: Option<String>,
+    /// Original close_reason string
+    pub raw: String,
+}
+
 /// Beads CLI wrapper
 #[derive(Debug, Clone)]
 pub struct BeadsCli {
@@ -933,6 +944,49 @@ impl BeadsCli {
             SpecksError::BeadsCommand(format!("failed to parse bd ready output: {}", e))
         })
     }
+
+    /// Get detailed information for all children of a parent bead.
+    /// Tries `bd children <id> --detailed --json` first. If --detailed flag is not supported,
+    /// falls back to calling children() followed by show() for each child.
+    pub fn list_children_detailed(
+        &self,
+        parent_id: &str,
+        working_dir: Option<&Path>,
+    ) -> Result<Vec<IssueDetails>, SpecksError> {
+        // Try primary path: bd children <id> --detailed --json
+        let mut cmd = self.cmd_with_dir(working_dir);
+        cmd.args(["children", parent_id, "--detailed", "--json"]);
+
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                SpecksError::BeadsNotInstalled
+            } else {
+                SpecksError::BeadsCommand(format!("failed to run bd children: {}", e))
+            }
+        })?;
+
+        if output.status.success() {
+            // Primary path succeeded, parse as Vec<IssueDetails>
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            return serde_json::from_str(&stdout).map_err(|e| {
+                SpecksError::BeadsCommand(format!(
+                    "failed to parse bd children --detailed output: {}",
+                    e
+                ))
+            });
+        }
+
+        // Primary path failed (likely --detailed not supported), fall back to N x show()
+        let children = self.children(parent_id, working_dir)?;
+        let mut details = Vec::new();
+
+        for child in children {
+            let detail = self.show(&child.id, working_dir)?;
+            details.push(detail);
+        }
+
+        Ok(details)
+    }
 }
 
 /// Validate bead ID format
@@ -945,6 +999,58 @@ pub fn is_valid_bead_id(id: &str) -> bool {
         LazyLock::new(|| Regex::new(r"^[a-z0-9][a-z0-9-]*-[a-z0-9]+(\.[0-9]+)*$").unwrap());
 
     BEAD_ID_REGEX.is_match(id)
+}
+
+/// Parse close_reason string into structured fields
+///
+/// Expects format: "Committed: <hash> -- <summary>"
+/// Falls back to raw text if format doesn't match.
+///
+/// # Examples
+///
+/// ```
+/// use specks_core::parse_close_reason;
+///
+/// let parsed = parse_close_reason("Committed: abc123d -- feat(api): add client");
+/// assert_eq!(parsed.commit_hash, Some("abc123d".to_string()));
+/// assert_eq!(parsed.commit_summary, Some("feat(api): add client".to_string()));
+///
+/// let parsed = parse_close_reason("Manually closed");
+/// assert_eq!(parsed.commit_hash, None);
+/// assert_eq!(parsed.commit_summary, None);
+/// assert_eq!(parsed.raw, "Manually closed");
+/// ```
+pub fn parse_close_reason(close_reason: &str) -> CloseReasonParsed {
+    let raw = close_reason.to_string();
+
+    // Check if it starts with "Committed: "
+    if let Some(after_prefix) = close_reason.strip_prefix("Committed: ") {
+        // Split on " -- " to separate hash from summary
+        if let Some(pos) = after_prefix.find(" -- ") {
+            let hash = after_prefix[..pos].trim().to_string();
+            let summary = after_prefix[pos + 4..].trim().to_string();
+            CloseReasonParsed {
+                commit_hash: Some(hash),
+                commit_summary: Some(summary),
+                raw,
+            }
+        } else {
+            // Has "Committed: " prefix but no " -- " separator
+            let hash = after_prefix.trim().to_string();
+            CloseReasonParsed {
+                commit_hash: Some(hash),
+                commit_summary: None,
+                raw,
+            }
+        }
+    } else {
+        // Non-standard format
+        CloseReasonParsed {
+            commit_hash: None,
+            commit_summary: None,
+            raw,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1056,5 +1162,40 @@ mod tests {
         assert_eq!(original.notes, deserialized.notes);
         assert_eq!(original.close_reason, deserialized.close_reason);
         assert_eq!(original.metadata, deserialized.metadata);
+    }
+
+    #[test]
+    fn test_parse_close_reason_valid() {
+        let parsed = parse_close_reason("Committed: abc123d -- feat(api): add client");
+        assert_eq!(parsed.commit_hash, Some("abc123d".to_string()));
+        assert_eq!(
+            parsed.commit_summary,
+            Some("feat(api): add client".to_string())
+        );
+        assert_eq!(parsed.raw, "Committed: abc123d -- feat(api): add client");
+    }
+
+    #[test]
+    fn test_parse_close_reason_non_standard() {
+        let parsed = parse_close_reason("Manually closed");
+        assert_eq!(parsed.commit_hash, None);
+        assert_eq!(parsed.commit_summary, None);
+        assert_eq!(parsed.raw, "Manually closed");
+    }
+
+    #[test]
+    fn test_parse_close_reason_empty() {
+        let parsed = parse_close_reason("");
+        assert_eq!(parsed.commit_hash, None);
+        assert_eq!(parsed.commit_summary, None);
+        assert_eq!(parsed.raw, "");
+    }
+
+    #[test]
+    fn test_parse_close_reason_no_separator() {
+        let parsed = parse_close_reason("Committed: abc123d");
+        assert_eq!(parsed.commit_hash, Some("abc123d".to_string()));
+        assert_eq!(parsed.commit_summary, None);
+        assert_eq!(parsed.raw, "Committed: abc123d");
     }
 }
