@@ -363,6 +363,59 @@ fn check_infra_diff(repo_root: &Path, branch: &str) -> Option<String> {
     ))
 }
 
+/// P3 preflight check (dry-run, remote mode only): check PR CI status.
+/// Returns None if all checks pass, gh is unavailable, or no checks exist.
+fn check_pr_checks(branch: &str) -> Option<String> {
+    let output = Command::new("gh")
+        .args(["pr", "checks", branch])
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        return None; // All checks passing
+    }
+
+    // gh pr checks exits non-zero if any check fails or is pending
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // If stderr indicates gh is not available or no PR exists, skip
+    if stderr.contains("not found")
+        || stderr.contains("no pull requests found")
+        || stderr.contains("Could not")
+    {
+        return None;
+    }
+
+    // Parse stdout for failing checks
+    let failed: Vec<&str> = stdout
+        .lines()
+        .filter(|line| line.contains("fail") || line.contains("FAIL"))
+        .collect();
+
+    if failed.is_empty() {
+        // Non-zero exit but no failures found -- likely pending checks
+        let pending: Vec<&str> = stdout
+            .lines()
+            .filter(|line| line.contains("pending") || line.contains("PENDING"))
+            .collect();
+        if !pending.is_empty() {
+            Some(format!(
+                "PR has {} pending check(s). Review before merging.",
+                pending.len()
+            ))
+        } else {
+            None
+        }
+    } else {
+        Some(format!(
+            "PR has {} failing check(s):\n  {}",
+            failed.len(),
+            failed.join("\n  ")
+        ))
+    }
+}
+
 /// Run all preflight checks before merge execution.
 /// Returns warnings (non-blocking) and an optional blocking error.
 fn run_preflight_checks(
@@ -1031,6 +1084,13 @@ pub fn run_merge(
         all_warnings.push(w); // P3 gh fallback
     }
 
+    // P3: PR checks status (dry-run, remote mode only)
+    if dry_run && effective_mode == "remote" {
+        if let Some(w) = check_pr_checks(branch) {
+            all_warnings.push(w);
+        }
+    }
+
     let preflight_warnings: Option<Vec<String>> = if all_warnings.is_empty() {
         None
     } else {
@@ -1306,7 +1366,10 @@ pub fn run_merge(
             if let Ok(output) = push {
                 if !output.status.success() && !quiet {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Warning: Failed to push infrastructure sync: {}", stderr);
+                    eprintln!(
+                        "Warning: Failed to push infrastructure sync to origin. Run `git push origin main` to sync.\n  Detail: {}",
+                        stderr.trim()
+                    );
                 }
             }
         }
@@ -1420,10 +1483,19 @@ pub fn run_merge(
         if let Ok(ref o) = commit {
             if o.status.success() {
                 // Auto-push if we have an origin
-                let _ = Command::new("git")
+                let push = Command::new("git")
                     .current_dir(&repo_root)
                     .args(["push", "origin", "main"])
                     .output();
+                if let Ok(ref push_output) = push {
+                    if !push_output.status.success() && !quiet {
+                        let stderr = String::from_utf8_lossy(&push_output.stderr);
+                        eprintln!(
+                            "Warning: Failed to push infrastructure sync to origin. Run `git push origin main` to sync.\n  Detail: {}",
+                            stderr.trim()
+                        );
+                    }
+                }
             }
         }
     }
@@ -2562,6 +2634,29 @@ mod tests {
 
         let result = check_branch_divergence(temp_path, "nonexistent-branch");
         assert!(result.is_none(), "Nonexistent branch should return None");
+    }
+
+    #[test]
+    fn test_check_pr_checks_nonexistent_branch_returns_none() {
+        // gh pr checks with a nonexistent branch should return None
+        // (either gh is not installed, or the branch has no PR)
+        let result = check_pr_checks("nonexistent-branch-12345");
+        // Whether gh is installed or not, this should not panic
+        // and should return None (no PR to check)
+        assert!(
+            result.is_none(),
+            "Nonexistent branch should return None: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_check_pr_checks_returns_none_gracefully() {
+        // Verify the function handles any input without panicking
+        let result = check_pr_checks("main");
+        // Result depends on whether gh is installed and authenticated
+        // but should never panic
+        let _ = result;
     }
 
     // -- check_main_sync tests --
