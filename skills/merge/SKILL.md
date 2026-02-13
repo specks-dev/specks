@@ -48,6 +48,7 @@ Parse the JSON output. Key fields:
 | `pr_url` | PR URL (remote mode only) |
 | `pr_number` | PR number (remote mode only) |
 | `dirty_files` | Uncommitted files in main (if any) |
+| `warnings` | Non-blocking preflight warnings (array of strings, omitted when empty) |
 | `error` | Error message (if status is error) |
 | `message` | Human-readable summary |
 
@@ -56,6 +57,14 @@ If the command fails (exit code non-zero), report the error and halt. The error 
 ### 2. Ask for Confirmation
 
 Note: The CLI handles dirty files automatically during the actual merge (commits infrastructure files, discards leaked implementation files). The skill does NOT need to commit or clean up dirty files — just report them if present in the dry-run output.
+
+If the dry-run output includes a `warnings` array, present each warning to the user before asking for confirmation. Warnings are non-blocking (the merge can proceed) but surface important information such as:
+- Incomplete steps/beads
+- Multiple worktrees found for the speck
+- gh CLI unavailable (falling back to local mode)
+- Branch divergence details (commit count, diff stat)
+- Infrastructure file differences
+- Failing CI checks on the PR
 
 Present the dry-run results and ask the user to confirm:
 
@@ -108,6 +117,7 @@ Parse the JSON output. Key fields for the result:
 | `squash_commit` | Commit hash (local mode only) |
 | `pr_url` | PR URL (remote mode only) |
 | `worktree_cleaned` | Whether worktree was removed |
+| `warnings` | Non-blocking preflight warnings (array of strings, omitted when empty) |
 | `error` | Error message (if failed) |
 
 If the command fails, report the error and suggest recovery.
@@ -151,6 +161,15 @@ If any step fails, report clearly and suggest recovery. Do not retry automatical
 - **Merge conflicts** (local): User must resolve manually, then retry
 - **PR merge failed** (remote): Check PR status on GitHub
 - **Worktree cleanup failed**: Run `git worktree remove <path> --force`
+
+**Common preflight warnings** (non-blocking):
+- **Incomplete steps**: "N of M steps incomplete" -- some beads are still open. Merge can proceed; user may be deferring work to a follow-up.
+- **Multiple worktrees**: More than one worktree matches the speck. The most recent is used; others may be stale.
+- **gh CLI unavailable**: Remote origin detected but `gh` is not installed or authenticated. Falls back to local merge mode.
+- **Branch divergence**: Shows commit count and diff stat for the branch ahead of main. Informational only.
+- **Infrastructure diff**: Lists .specks/ and .beads/ files that differ between main and the branch. These are auto-resolved during merge.
+- **Failing CI checks**: PR has failing or pending CI checks. User should review before merging.
+- **Dirty implementation worktree** (blocking): Uncommitted changes in the implementation worktree would be lost during cleanup. Must commit or discard before merging.
 
 ---
 

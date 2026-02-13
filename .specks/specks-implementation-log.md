@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-7
+date: 2025-02-13T02:24:00Z
+bead: specks-dg0.8
+---
+
+## #step-7: Document warnings field and preflight checks in merge SKILL.md
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
 step: #step-6
 date: 2025-02-13T02:19:47Z
 bead: specks-dg0.7
