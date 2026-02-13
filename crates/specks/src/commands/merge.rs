@@ -36,6 +36,8 @@ pub struct MergeData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dirty_files: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -58,6 +60,7 @@ impl MergeData {
             worktree_cleaned: None,
             dry_run,
             dirty_files: None,
+            warnings: None,
             error: Some(msg),
             message: None,
         }
@@ -798,6 +801,7 @@ pub fn run_merge(
             } else {
                 Some(infra_files.iter().map(|s| s.to_string()).collect())
             },
+            warnings: None,
             error: None,
             message: Some(match effective_mode {
                 "remote" => format!(
@@ -827,6 +831,14 @@ pub fn run_merge(
                     infra_files.len(),
                     infra_files.join("\n  ")
                 );
+            }
+            if let Some(ref warnings) = data.warnings {
+                if !warnings.is_empty() {
+                    println!("\nWarnings:");
+                    for w in warnings {
+                        println!("  - {}", w);
+                    }
+                }
             }
             println!("\nWould squash-merge and clean up worktree");
         }
@@ -900,6 +912,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
+                warnings: None,
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -936,6 +949,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
+                warnings: None,
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -967,6 +981,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
+                warnings: None,
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -1037,6 +1052,7 @@ pub fn run_merge(
                     worktree_cleaned: None,
                     dry_run: false,
                     dirty_files: None,
+                    warnings: None,
                     error: Some(format!("Squash merge failed: {}", e)),
                     message: None,
                 };
@@ -1131,6 +1147,7 @@ pub fn run_merge(
         worktree_cleaned: Some(worktree_cleaned),
         dry_run: false,
         dirty_files: None,
+        warnings: None,
         error: None,
         message: Some(match effective_mode {
             "remote" => format!(
@@ -1214,6 +1231,57 @@ mod tests {
     }
 
     #[test]
+    fn test_merge_data_no_warnings_omits_field() {
+        let data = MergeData {
+            status: "ok".to_string(),
+            merge_mode: Some("local".to_string()),
+            branch_name: Some("specks/test".to_string()),
+            worktree_path: None,
+            pr_url: None,
+            pr_number: None,
+            squash_commit: None,
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            dirty_files: None,
+            warnings: None,
+            error: None,
+            message: Some("Success".to_string()),
+        };
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(!json.contains("\"warnings\""));
+    }
+
+    #[test]
+    fn test_merge_data_with_warnings_includes_array() {
+        let data = MergeData {
+            status: "ok".to_string(),
+            merge_mode: Some("local".to_string()),
+            branch_name: Some("specks/test".to_string()),
+            worktree_path: None,
+            pr_url: None,
+            pr_number: None,
+            squash_commit: None,
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            dirty_files: None,
+            warnings: Some(vec!["warn1".to_string(), "warn2".to_string()]),
+            error: None,
+            message: Some("Success".to_string()),
+        };
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"warnings\""));
+        assert!(json.contains("warn1"));
+        assert!(json.contains("warn2"));
+    }
+
+    #[test]
+    fn test_merge_data_error_has_no_warnings() {
+        let data = MergeData::error("error message".to_string(), false);
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(!json.contains("\"warnings\""));
+    }
+
+    #[test]
     fn test_merge_data_dry_run_local() {
         let data = MergeData {
             status: "ok".to_string(),
@@ -1226,6 +1294,7 @@ mod tests {
             worktree_cleaned: None,
             dry_run: true,
             dirty_files: Some(vec![".beads/beads.jsonl".to_string()]),
+            warnings: None,
             error: None,
             message: Some("Would squash-merge".to_string()),
         };
@@ -1251,6 +1320,7 @@ mod tests {
             worktree_cleaned: Some(true),
             dry_run: false,
             dirty_files: None,
+            warnings: None,
             error: None,
             message: Some("Merged PR #42".to_string()),
         };
@@ -1275,6 +1345,7 @@ mod tests {
             worktree_cleaned: Some(true),
             dry_run: false,
             dirty_files: None,
+            warnings: None,
             error: None,
             message: Some("Squash merged".to_string()),
         };

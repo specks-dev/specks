@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-0
+date: 2025-02-13T01:41:37Z
+bead: specks-dg0.1
+---
+
+## #step-0: Add warnings field to MergeData struct for preflight check warnings
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
 step: audit-fix
 date: 2025-02-13T00:25:18Z
 ---
