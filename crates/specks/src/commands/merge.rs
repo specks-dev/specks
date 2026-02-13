@@ -186,6 +186,48 @@ fn is_infrastructure_path(path: &str) -> bool {
     path.starts_with(".specks/") || path.starts_with(".beads/")
 }
 
+/// Result from preflight checks run before merge execution.
+struct PreflightResult {
+    /// Non-blocking warnings accumulated from all checks
+    warnings: Vec<String>,
+    /// If Some, a blocking error that prevents the merge from proceeding
+    blocking_error: Option<String>,
+}
+
+/// P0 preflight check: block merge if implementation worktree has dirty files.
+/// Returns Some(error_message) if dirty files found, None if clean.
+fn check_worktree_dirty(wt_path: &Path) -> Result<Option<String>, String> {
+    let dirty = get_dirty_files(wt_path)?;
+    if dirty.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(format!(
+            "Implementation worktree has uncommitted changes:\n  {}\n\n\
+             Please commit or discard these changes before merging.",
+            dirty.join("\n  ")
+        )))
+    }
+}
+
+/// Run all preflight checks before merge execution.
+/// Returns warnings (non-blocking) and an optional blocking error.
+fn run_preflight_checks(wt_path: &Path) -> PreflightResult {
+    let mut warnings = Vec::new();
+    let mut blocking_error = None;
+
+    // P0: Implementation worktree dirty check (blocker)
+    match check_worktree_dirty(wt_path) {
+        Ok(Some(err)) => blocking_error = Some(err),
+        Ok(None) => {}
+        Err(e) => warnings.push(format!("Could not check worktree status: {}", e)),
+    }
+
+    PreflightResult {
+        warnings,
+        blocking_error,
+    }
+}
+
 /// Prepare main for merge by committing infrastructure files and discarding everything else.
 /// Returns the list of dirty files that were found (for reporting).
 fn prepare_main_for_merge(repo_root: &Path, quiet: bool) -> Result<Vec<String>, String> {
@@ -742,6 +784,26 @@ pub fn run_merge(
     let wt_path = &discovered.path;
     let branch = &discovered.branch;
 
+    // Preflight checks
+    let preflight = run_preflight_checks(wt_path);
+
+    // Convert warnings for MergeData
+    let preflight_warnings: Option<Vec<String>> = if preflight.warnings.is_empty() {
+        None
+    } else {
+        Some(preflight.warnings)
+    };
+
+    // P0 blocker: dirty implementation worktree
+    if let Some(ref blocking_err) = preflight.blocking_error {
+        let mut data = MergeData::error(blocking_err.clone(), dry_run);
+        data.warnings = preflight_warnings.clone();
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        }
+        return Err(blocking_err.clone());
+    }
+
     // Step 1a: Detect mode
     let has_origin = has_remote_origin(&repo_root);
 
@@ -816,7 +878,7 @@ pub fn run_merge(
             } else {
                 Some(infra_files.iter().map(|s| s.to_string()).collect())
             },
-            warnings: None,
+            warnings: preflight_warnings.clone(),
             error: None,
             message: Some(match effective_mode {
                 "remote" => format!(
@@ -927,7 +989,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
-                warnings: None,
+                warnings: preflight_warnings.clone(),
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -964,7 +1026,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
-                warnings: None,
+                warnings: preflight_warnings.clone(),
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -996,7 +1058,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
-                warnings: None,
+                warnings: preflight_warnings.clone(),
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -1067,7 +1129,7 @@ pub fn run_merge(
                     worktree_cleaned: None,
                     dry_run: false,
                     dirty_files: None,
-                    warnings: None,
+                    warnings: preflight_warnings.clone(),
                     error: Some(format!("Squash merge failed: {}", e)),
                     message: None,
                 };
@@ -1162,7 +1224,7 @@ pub fn run_merge(
         worktree_cleaned: Some(worktree_cleaned),
         dry_run: false,
         dirty_files: None,
-        warnings: None,
+        warnings: preflight_warnings,
         error: None,
         message: Some(match effective_mode {
             "remote" => format!(
@@ -1950,6 +2012,100 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files.contains(&".beads/beads.jsonl".to_string()));
         assert!(files.contains(&"new_file.txt".to_string()));
+    }
+
+    // -- Preflight check tests --
+
+    #[test]
+    fn test_check_worktree_dirty_blocks_on_dirty_files() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Create a worktree
+        let wt_path = temp_path.join("impl-worktree");
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args([
+                "worktree",
+                "add",
+                wt_path.to_str().unwrap(),
+                "-b",
+                "specks/test-20260210-120000",
+            ])
+            .output()
+            .expect("git worktree add");
+
+        // Add a dirty file to the worktree
+        fs::write(wt_path.join("uncommitted.txt"), "dirty").unwrap();
+
+        // check_worktree_dirty should return a blocking error
+        let result = check_worktree_dirty(&wt_path);
+        assert!(result.is_ok());
+        let error = result.unwrap();
+        assert!(
+            error.is_some(),
+            "Expected blocking error for dirty worktree"
+        );
+        let msg = error.unwrap();
+        assert!(
+            msg.contains("uncommitted changes"),
+            "Error should mention uncommitted changes: {}",
+            msg
+        );
+        assert!(
+            msg.contains("uncommitted.txt"),
+            "Error should list the dirty file: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_check_worktree_dirty_clean_worktree() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Create a clean worktree
+        let wt_path = temp_path.join("clean-worktree");
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args([
+                "worktree",
+                "add",
+                wt_path.to_str().unwrap(),
+                "-b",
+                "specks/clean-20260210-120000",
+            ])
+            .output()
+            .expect("git worktree add");
+
+        let result = check_worktree_dirty(&wt_path);
+        assert!(result.is_ok());
+        assert!(
+            result.unwrap().is_none(),
+            "Clean worktree should return None"
+        );
+    }
+
+    #[test]
+    fn test_preflight_result_with_blocking_error_and_warnings() {
+        let result = PreflightResult {
+            warnings: vec!["some warning".to_string()],
+            blocking_error: Some("blocking issue".to_string()),
+        };
+        assert!(result.blocking_error.is_some());
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(result.warnings[0], "some warning");
+        assert_eq!(result.blocking_error.unwrap(), "blocking issue");
     }
 
     // -- check_main_sync tests --

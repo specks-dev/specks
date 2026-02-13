@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-3
+date: 2025-02-13T01:58:44Z
+bead: specks-dg0.4
+---
+
+## #step-3: Add P0 preflight check infrastructure blocking merge on dirty implementation worktree
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-13T01:51:55Z
 bead: specks-dg0.3
