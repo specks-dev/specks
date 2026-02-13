@@ -910,15 +910,50 @@ pub fn run_merge(
             return Err(err_msg);
         }
 
-        // Pull with --ff-only (must succeed)
-        let mut pull_cmd = Command::new("git");
-        pull_cmd
+        // Fetch and reset to origin/main (infra files are safe in temp)
+        // We use fetch + reset --hard instead of pull --ff-only because
+        // pull --ff-only fails if any dirty files survive the discard step,
+        // and the fetch part advances the branch ref leaving HEAD and working
+        // tree out of sync (making ALL implementation files appear dirty).
+        let mut fetch_cmd = Command::new("git");
+        fetch_cmd
             .arg("-C")
             .arg(&repo_root)
-            .args(["pull", "--ff-only", "origin", "main"]);
-        if let Err(e) = run_cmd(&mut pull_cmd, "git pull --ff-only origin main") {
+            .args(["fetch", "origin", "main"]);
+        if let Err(e) = run_cmd(&mut fetch_cmd, "git fetch origin main") {
             let err_msg = format!(
-                "Failed to pull after merge: {}. Working tree has been restored to pre-merge state.",
+                "Failed to fetch after merge: {}. Working tree has been restored to pre-merge state.",
+                e
+            );
+            let data = MergeData {
+                status: "error".to_string(),
+                merge_mode: Some("remote".to_string()),
+                branch_name: Some(branch.clone()),
+                worktree_path: Some(wt_path.display().to_string()),
+                pr_url: Some(pr.url.clone()),
+                pr_number: Some(pr.number),
+                squash_commit: None,
+                worktree_cleaned: None,
+                dry_run: false,
+                dirty_files: None,
+                error: Some(err_msg.clone()),
+                message: None,
+            };
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            // Guard drops here, restoring files
+            return Err(err_msg);
+        }
+
+        let mut reset_cmd = Command::new("git");
+        reset_cmd
+            .arg("-C")
+            .arg(&repo_root)
+            .args(["reset", "--hard", "origin/main"]);
+        if let Err(e) = run_cmd(&mut reset_cmd, "git reset --hard origin/main") {
+            let err_msg = format!(
+                "Failed to reset after merge: {}. Working tree has been restored to pre-merge state.",
                 e
             );
             let data = MergeData {
