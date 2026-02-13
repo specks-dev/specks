@@ -9,6 +9,19 @@ Entries are sorted newest-first.
 ---
 
 ---
+step: #step-3
+date: 2025-02-13T00:21:04Z
+bead: specks-hfq.4
+---
+
+## #step-3: Add golden tests and JSON schema validation for beads and fallback status modes
+
+**Files changed:**
+- .specks/specks-10.md
+
+---
+
+---
 step: #step-2
 date: 2025-02-13T00:11:19Z
 bead: specks-hfq.3

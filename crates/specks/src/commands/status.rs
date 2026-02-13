@@ -655,26 +655,30 @@ fn build_beads_status_data(
     Ok((status_data, details_map))
 }
 
-/// Output beads-mode status in text format
-fn output_beads_text(
+/// Format beads-mode status as text (returns String for testability)
+fn format_beads_text(
     data: &StatusData,
-    _speck: &Speck,
     full: bool,
     details_map: &HashMap<String, IssueDetails>,
-) {
+) -> String {
+    let mut output = String::new();
+
     // Print phase title or speck name
     if let Some(ref phase_title) = data.phase_title {
-        println!("## {}", phase_title);
+        output.push_str(&format!("## {}\n", phase_title));
     } else {
-        println!("## {}", data.name);
+        output.push_str(&format!("## {}\n", data.name));
     }
-    println!();
+    output.push('\n');
 
     // Print summary
     let completed = data.completed_step_count.unwrap_or(0);
     let total = data.total_step_count.unwrap_or(0);
-    println!("Status: {} | {}/{} steps complete", data.status, completed, total);
-    println!();
+    output.push_str(&format!(
+        "Status: {} | {}/{} steps complete\n",
+        data.status, completed, total
+    ));
+    output.push('\n');
 
     // Print each step
     if let Some(ref bead_steps) = data.bead_steps {
@@ -688,14 +692,14 @@ fn output_beads_text(
 
             let status_label = step.bead_status.as_deref().unwrap_or("pending");
 
-            println!(
-                "Step {}: {}   {} {}",
+            output.push_str(&format!(
+                "Step {}: {}   {} {}\n",
                 step.number, step.title, indicator, status_label
-            );
+            ));
 
             // Show close reason for completed steps
             if let Some(ref close_reason) = step.close_reason {
-                println!("  {}", close_reason);
+                output.push_str(&format!("  {}\n", close_reason));
             }
 
             // Show task/test/checkpoint counts for ready steps
@@ -703,10 +707,10 @@ fn output_beads_text(
                 let tasks = step.task_count.unwrap_or(0);
                 let tests = step.test_count.unwrap_or(0);
                 let checkpoints = step.checkpoint_count.unwrap_or(0);
-                println!(
-                    "  Tasks: {} | Tests: {} | Checkpoints: {}",
+                output.push_str(&format!(
+                    "  Tasks: {} | Tests: {} | Checkpoints: {}\n",
                     tasks, tests, checkpoints
-                );
+                ));
             }
 
             // Show blocked_by for blocked steps
@@ -719,39 +723,39 @@ fn output_beads_text(
                     })
                     .collect::<Vec<_>>()
                     .join(", ");
-                println!("  Blocked by: {}", blocked_str);
+                output.push_str(&format!("  Blocked by: {}\n", blocked_str));
             }
 
             // --full mode: show raw bead field content
             if full {
                 if let Some(details) = details_map.get(&step.anchor) {
                     if !details.description.is_empty() {
-                        println!("  --- Description ---");
+                        output.push_str("  --- Description ---\n");
                         for line in details.description.lines() {
-                            println!("  {}", line);
+                            output.push_str(&format!("  {}\n", line));
                         }
                     }
                     if let Some(ref design) = details.design {
                         if !design.is_empty() {
-                            println!("  --- Design ---");
+                            output.push_str("  --- Design ---\n");
                             for line in design.lines() {
-                                println!("  {}", line);
+                                output.push_str(&format!("  {}\n", line));
                             }
                         }
                     }
                     if let Some(ref acceptance) = details.acceptance_criteria {
                         if !acceptance.is_empty() {
-                            println!("  --- Acceptance Criteria ---");
+                            output.push_str("  --- Acceptance Criteria ---\n");
                             for line in acceptance.lines() {
-                                println!("  {}", line);
+                                output.push_str(&format!("  {}\n", line));
                             }
                         }
                     }
                     if let Some(ref notes) = details.notes {
                         if !notes.is_empty() {
-                            println!("  --- Notes ---");
+                            output.push_str("  --- Notes ---\n");
                             for line in notes.lines() {
-                                println!("  {}", line);
+                                output.push_str(&format!("  {}\n", line));
                             }
                         }
                     }
@@ -759,6 +763,18 @@ fn output_beads_text(
             }
         }
     }
+
+    output
+}
+
+/// Output beads-mode status in text format
+fn output_beads_text(
+    data: &StatusData,
+    _speck: &Speck,
+    full: bool,
+    details_map: &HashMap<String, IssueDetails>,
+) {
+    print!("{}", format_beads_text(data, full, details_map));
 }
 
 /// Output status in text format
@@ -839,4 +855,394 @@ fn output_text(data: &StatusData, speck: &Speck, verbose: bool) {
         "Total: {}/{} tasks complete",
         data.progress.done, data.progress.total
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use specks_core::{SpeckMetadata, Step};
+    use std::fs;
+
+    /// Helper to build a minimal speck for testing
+    fn build_test_speck(steps: Vec<Step>) -> Speck {
+        Speck {
+            path: None,
+            phase_title: Some("Test Beads Feature".to_string()),
+            phase_anchor: None,
+            purpose: None,
+            metadata: SpeckMetadata {
+                owner: None,
+                status: Some("active".to_string()),
+                target_branch: None,
+                tracking: None,
+                last_updated: None,
+                beads_root_id: None,
+            },
+            anchors: vec![],
+            decisions: vec![],
+            questions: vec![],
+            steps,
+            raw_content: String::new(),
+            diagnostics: vec![],
+        }
+    }
+
+    #[test]
+    fn test_golden_beads_status_json() {
+        // Build test speck with 3 steps
+        let step0 = Step {
+            anchor: "step-0".to_string(),
+            number: "0".to_string(),
+            title: "Setup infrastructure".to_string(),
+            line: 10,
+            bead_id: Some("bd-001".to_string()),
+            beads_hints: None,
+            commit_message: None,
+            references: None,
+            tasks: vec![],
+            tests: vec![],
+            checkpoints: vec![],
+            artifacts: vec![],
+            depends_on: vec![],
+            substeps: vec![],
+        };
+
+        let step1 = Step {
+            anchor: "step-1".to_string(),
+            number: "1".to_string(),
+            title: "Implement core logic".to_string(),
+            line: 20,
+            bead_id: Some("bd-002".to_string()),
+            beads_hints: None,
+            commit_message: None,
+            references: None,
+            tasks: vec![
+                specks_core::Checkpoint {
+                    text: "task 1".to_string(),
+                    kind: specks_core::CheckpointKind::Task,
+                    checked: false,
+                    line: 21,
+                },
+                specks_core::Checkpoint {
+                    text: "task 2".to_string(),
+                    kind: specks_core::CheckpointKind::Task,
+                    checked: false,
+                    line: 22,
+                },
+            ],
+            tests: vec![specks_core::Checkpoint {
+                text: "test 1".to_string(),
+                kind: specks_core::CheckpointKind::Test,
+                checked: false,
+                line: 23,
+            }],
+            checkpoints: vec![specks_core::Checkpoint {
+                text: "checkpoint 1".to_string(),
+                kind: specks_core::CheckpointKind::Checkpoint,
+                checked: false,
+                line: 24,
+            }],
+            artifacts: vec![],
+            depends_on: vec![],
+            substeps: vec![],
+        };
+
+        let step2 = Step {
+            anchor: "step-2".to_string(),
+            number: "2".to_string(),
+            title: "Add documentation".to_string(),
+            line: 30,
+            bead_id: Some("bd-003".to_string()),
+            beads_hints: None,
+            commit_message: None,
+            references: None,
+            tasks: vec![],
+            tests: vec![],
+            checkpoints: vec![],
+            artifacts: vec![],
+            depends_on: vec!["step-1".to_string()],
+            substeps: vec![],
+        };
+
+        let speck = build_test_speck(vec![step0, step1, step2]);
+
+        // Build mock IssueDetails
+        let bd001 = IssueDetails {
+            id: "bd-001".to_string(),
+            title: "Setup infrastructure".to_string(),
+            description: String::new(),
+            status: "closed".to_string(),
+            priority: 2,
+            issue_type: "task".to_string(),
+            dependencies: vec![],
+            dependents: vec![],
+            design: None,
+            acceptance_criteria: None,
+            notes: None,
+            close_reason: Some("Committed: abc123d -- feat: setup".to_string()),
+            metadata: None,
+        };
+
+        let bd002 = IssueDetails {
+            id: "bd-002".to_string(),
+            title: "Implement core logic".to_string(),
+            description: String::new(),
+            status: "open".to_string(),
+            priority: 2,
+            issue_type: "task".to_string(),
+            dependencies: vec![],
+            dependents: vec![],
+            design: None,
+            acceptance_criteria: None,
+            notes: None,
+            close_reason: None,
+            metadata: None,
+        };
+
+        let bd003 = IssueDetails {
+            id: "bd-003".to_string(),
+            title: "Add documentation".to_string(),
+            description: String::new(),
+            status: "open".to_string(),
+            priority: 2,
+            issue_type: "task".to_string(),
+            dependencies: vec![specks_core::beads::DependencyRef {
+                id: "bd-002".to_string(),
+                dependency_type: String::new(),
+            }],
+            dependents: vec![],
+            design: None,
+            acceptance_criteria: None,
+            notes: None,
+            close_reason: None,
+            metadata: None,
+        };
+
+        let children = vec![bd001, bd002, bd003];
+        let ready_ids: HashSet<String> = vec!["bd-002".to_string()].into_iter().collect();
+
+        // Classify steps
+        let (bead_steps, _details_map) = classify_steps(&speck, &children, &ready_ids);
+
+        // Build StatusData
+        let status_data = StatusData {
+            name: "test-beads".to_string(),
+            status: "active".to_string(),
+            progress: Progress { done: 1, total: 3 },
+            steps: vec![],
+            all_steps: None,
+            completed_steps: None,
+            remaining_steps: None,
+            next_step: None,
+            bead_mapping: None,
+            dependencies: None,
+            mode: Some("beads".to_string()),
+            speck: Some(".specks/specks-test-beads.md".to_string()),
+            phase_title: Some("Test Beads Feature".to_string()),
+            total_step_count: Some(3),
+            completed_step_count: Some(1),
+            ready_step_count: Some(1),
+            blocked_step_count: Some(1),
+            bead_steps: Some(bead_steps),
+        };
+
+        let response = JsonResponse::ok("status", status_data);
+        let actual_json = serde_json::to_value(&response).unwrap();
+
+        // Load golden file (from workspace root)
+        let golden_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/golden/status_beads.json");
+        let golden_content = fs::read_to_string(golden_path)
+            .unwrap_or_else(|_| panic!("Failed to read golden file: {}", golden_path));
+        let expected_json: serde_json::Value = serde_json::from_str(&golden_content).unwrap();
+
+        // Compare key fields
+        assert_eq!(actual_json["status"], expected_json["status"]);
+        assert_eq!(actual_json["command"], expected_json["command"]);
+        assert_eq!(actual_json["data"]["mode"], expected_json["data"]["mode"]);
+        assert_eq!(
+            actual_json["data"]["total_step_count"],
+            expected_json["data"]["total_step_count"]
+        );
+        assert_eq!(
+            actual_json["data"]["completed_step_count"],
+            expected_json["data"]["completed_step_count"]
+        );
+        assert_eq!(
+            actual_json["data"]["ready_step_count"],
+            expected_json["data"]["ready_step_count"]
+        );
+        assert_eq!(
+            actual_json["data"]["blocked_step_count"],
+            expected_json["data"]["blocked_step_count"]
+        );
+
+        // Verify bead_steps array
+        let actual_bead_steps = actual_json["data"]["bead_steps"].as_array().unwrap();
+        let expected_bead_steps = expected_json["data"]["bead_steps"].as_array().unwrap();
+        assert_eq!(actual_bead_steps.len(), expected_bead_steps.len());
+
+        // Check first step (complete)
+        assert_eq!(
+            actual_bead_steps[0]["bead_status"],
+            expected_bead_steps[0]["bead_status"]
+        );
+        assert_eq!(
+            actual_bead_steps[0]["commit_hash"],
+            expected_bead_steps[0]["commit_hash"]
+        );
+
+        // Check second step (ready)
+        assert_eq!(
+            actual_bead_steps[1]["bead_status"],
+            expected_bead_steps[1]["bead_status"]
+        );
+        assert_eq!(
+            actual_bead_steps[1]["task_count"],
+            expected_bead_steps[1]["task_count"]
+        );
+
+        // Check third step (blocked)
+        assert_eq!(
+            actual_bead_steps[2]["bead_status"],
+            expected_bead_steps[2]["bead_status"]
+        );
+        assert_eq!(
+            actual_bead_steps[2]["blocked_by"],
+            expected_bead_steps[2]["blocked_by"]
+        );
+    }
+
+    #[test]
+    fn test_golden_fallback_status_json() {
+        // Build a minimal speck inline
+        let speck_content = r#"
+---
+Owner: test
+Status: draft
+Last updated: 2026-02-01
+---
+
+## Execution
+
+### Step 0: Bootstrap {#step-0}
+
+## Tasks
+- [x] Setup project
+- [ ] Add tests
+- [x] Document API
+- [ ] Deploy
+
+"#;
+
+        let speck = parse_speck(speck_content).unwrap();
+        let status_data = build_checkbox_status_data(&speck, "test-fallback");
+
+        let response = JsonResponse::ok("status", status_data);
+        let actual_json = serde_json::to_value(&response).unwrap();
+
+        // Load golden file (from workspace root)
+        let golden_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/golden/status_fallback.json");
+        let golden_content = fs::read_to_string(golden_path)
+            .unwrap_or_else(|_| panic!("Failed to read golden file: {}", golden_path));
+        let expected_json: serde_json::Value = serde_json::from_str(&golden_content).unwrap();
+
+        // Compare key fields
+        assert_eq!(actual_json["status"], expected_json["status"]);
+        assert_eq!(actual_json["data"]["mode"], expected_json["data"]["mode"]);
+        assert_eq!(actual_json["data"]["name"], expected_json["data"]["name"]);
+        assert_eq!(
+            actual_json["data"]["progress"]["done"],
+            expected_json["data"]["progress"]["done"]
+        );
+        assert_eq!(
+            actual_json["data"]["progress"]["total"],
+            expected_json["data"]["progress"]["total"]
+        );
+
+        // Verify steps array
+        let actual_steps = actual_json["data"]["steps"].as_array().unwrap();
+        assert_eq!(actual_steps.len(), 1);
+        assert_eq!(actual_steps[0]["title"], "Bootstrap");
+        assert_eq!(actual_steps[0]["done"], 2);
+        assert_eq!(actual_steps[0]["total"], 4);
+    }
+
+    #[test]
+    fn test_full_text_output_has_section_headers() {
+        // Build minimal StatusData with one complete bead_step
+        let bead_step = BeadStepStatus {
+            anchor: "#step-0".to_string(),
+            title: "Test step".to_string(),
+            number: "0".to_string(),
+            bead_status: Some("complete".to_string()),
+            bead_id: Some("bd-001".to_string()),
+            commit_hash: Some("abc123".to_string()),
+            commit_summary: Some("feat: test".to_string()),
+            close_reason: Some("Committed: abc123 -- feat: test".to_string()),
+            task_count: None,
+            test_count: None,
+            checkpoint_count: None,
+            blocked_by: None,
+        };
+
+        let status_data = StatusData {
+            name: "test".to_string(),
+            status: "active".to_string(),
+            progress: Progress { done: 1, total: 1 },
+            steps: vec![],
+            all_steps: None,
+            completed_steps: None,
+            remaining_steps: None,
+            next_step: None,
+            bead_mapping: None,
+            dependencies: None,
+            mode: Some("beads".to_string()),
+            speck: Some("test.md".to_string()),
+            phase_title: Some("Test Phase".to_string()),
+            total_step_count: Some(1),
+            completed_step_count: Some(1),
+            ready_step_count: Some(0),
+            blocked_step_count: Some(0),
+            bead_steps: Some(vec![bead_step]),
+        };
+
+        // Build details_map with content
+        let mut details_map = HashMap::new();
+        details_map.insert(
+            "#step-0".to_string(),
+            IssueDetails {
+                id: "bd-001".to_string(),
+                title: "Test step".to_string(),
+                description: "This is a test description".to_string(),
+                status: "closed".to_string(),
+                priority: 2,
+                issue_type: "task".to_string(),
+                dependencies: vec![],
+                dependents: vec![],
+                design: Some("This is test design content".to_string()),
+                acceptance_criteria: Some("Test acceptance".to_string()),
+                notes: Some("Test notes".to_string()),
+                close_reason: Some("Committed: abc123 -- feat: test".to_string()),
+                metadata: None,
+            },
+        );
+
+        // Test full=true output
+        let output = format_beads_text(&status_data, true, &details_map);
+
+        // Verify section headers are present
+        assert!(output.contains("--- Description ---"));
+        assert!(output.contains("--- Design ---"));
+        assert!(output.contains("--- Acceptance Criteria ---"));
+        assert!(output.contains("--- Notes ---"));
+
+        // Verify content is included
+        assert!(output.contains("This is a test description"));
+        assert!(output.contains("This is test design content"));
+
+        // Test full=false output (should not have headers)
+        let output_brief = format_beads_text(&status_data, false, &details_map);
+        assert!(!output_brief.contains("--- Description ---"));
+        assert!(!output_brief.contains("--- Design ---"));
+    }
 }
