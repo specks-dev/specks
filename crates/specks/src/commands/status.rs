@@ -1,20 +1,24 @@
 //! Implementation of the `specks status` command (Spec S04)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use specks_core::{Speck, find_project_root, parse_speck, speck_name_from_path};
+use specks_core::{
+    BeadsCli, IssueDetails, Speck, find_project_root, parse_close_reason, parse_speck,
+    speck_name_from_path,
+};
 
 use crate::output::{
-    JsonIssue, JsonResponse, Progress, StatusData, StepInfo, StepStatus, SubstepStatus,
+    BeadStepStatus, JsonIssue, JsonResponse, Progress, StatusData, StepInfo, StepStatus,
+    SubstepStatus,
 };
 
 /// Run the status command
 pub fn run_status(
     file: String,
     verbose: bool,
-    _full: bool,
+    full: bool,
     json_output: bool,
     _quiet: bool,
 ) -> Result<i32, String> {
@@ -200,16 +204,59 @@ pub fn run_status(
     };
 
     let name = speck_name_from_path(&path).unwrap_or_else(|| file.clone());
-    let status_data = build_status_data(&speck, &name);
 
-    if json_output {
-        let response = JsonResponse::ok("status", status_data);
-        println!("{}", serde_json::to_string_pretty(&response).unwrap());
+    // Check if beads integration is available
+    if let Some(ref root_id) = speck.metadata.beads_root_id {
+        // Try beads path
+        let beads_cli = BeadsCli::default();
+
+        if !beads_cli.is_installed(None) {
+            eprintln!("warning: beads CLI not found, falling back to checkbox mode");
+            // Fall back to checkbox mode
+            let status_data = build_checkbox_status_data(&speck, &name);
+            if json_output {
+                let response = JsonResponse::ok("status", status_data);
+                println!("{}", serde_json::to_string_pretty(&response).unwrap());
+            } else {
+                output_text(&status_data, &speck, verbose);
+            }
+            return Ok(0);
+        }
+
+        match build_beads_status_data(&speck, &name, &file, root_id, &beads_cli) {
+            Ok((status_data, details_map)) => {
+                if json_output {
+                    let response = JsonResponse::ok("status", status_data);
+                    println!("{}", serde_json::to_string_pretty(&response).unwrap());
+                } else {
+                    output_beads_text(&status_data, &speck, full, &details_map);
+                }
+                Ok(0)
+            }
+            Err(e) => {
+                eprintln!("warning: beads query failed ({}), falling back to checkbox mode", e);
+                // Fall back to checkbox mode
+                let status_data = build_checkbox_status_data(&speck, &name);
+                if json_output {
+                    let response = JsonResponse::ok("status", status_data);
+                    println!("{}", serde_json::to_string_pretty(&response).unwrap());
+                } else {
+                    output_text(&status_data, &speck, verbose);
+                }
+                Ok(0)
+            }
+        }
     } else {
-        output_text(&status_data, &speck, verbose);
+        // No beads_root_id, use checkbox mode
+        let status_data = build_checkbox_status_data(&speck, &name);
+        if json_output {
+            let response = JsonResponse::ok("status", status_data);
+            println!("{}", serde_json::to_string_pretty(&response).unwrap());
+        } else {
+            output_text(&status_data, &speck, verbose);
+        }
+        Ok(0)
     }
-
-    Ok(0)
 }
 
 /// Resolve a file path relative to the project
@@ -243,8 +290,8 @@ fn resolve_file_path(project_root: &Path, file: &str) -> PathBuf {
     }
 }
 
-/// Build status data from a parsed speck
-fn build_status_data(speck: &Speck, name: &str) -> StatusData {
+/// Build status data from a parsed speck using checkbox counting (fallback mode)
+fn build_checkbox_status_data(speck: &Speck, name: &str) -> StatusData {
     let mut total_done = 0;
     let mut total_items = 0;
 
@@ -372,7 +419,7 @@ fn build_status_data(speck: &Speck, name: &str) -> StatusData {
         next_step,
         bead_mapping: Some(bead_mapping),
         dependencies: Some(dependencies),
-        mode: None,
+        mode: Some("checkbox".to_string()),
         speck: None,
         phase_title: None,
         total_step_count: None,
@@ -380,6 +427,337 @@ fn build_status_data(speck: &Speck, name: &str) -> StatusData {
         ready_step_count: None,
         blocked_step_count: None,
         bead_steps: None,
+    }
+}
+
+/// Classify steps based on bead data (pure function for testability)
+fn classify_steps(
+    speck: &Speck,
+    children: &[IssueDetails],
+    ready_ids: &HashSet<String>,
+) -> (Vec<BeadStepStatus>, HashMap<String, IssueDetails>) {
+    // Build bead_id -> IssueDetails map
+    let bead_id_to_details: HashMap<String, &IssueDetails> =
+        children.iter().map(|d| (d.id.clone(), d)).collect();
+
+    // Build bead_id -> step anchor map (for blocked_by resolution)
+    let bead_id_to_anchor: HashMap<String, String> = speck
+        .steps
+        .iter()
+        .filter_map(|step| {
+            step.bead_id
+                .as_ref()
+                .map(|bead_id| (bead_id.clone(), format!("#{}", step.anchor)))
+        })
+        .collect();
+
+    // Build a map of bead ID to full IssueDetails for --full rendering
+    let mut details_map: HashMap<String, IssueDetails> = HashMap::new();
+
+    let bead_steps: Vec<BeadStepStatus> = speck
+        .steps
+        .iter()
+        .map(|step| {
+            let anchor = format!("#{}", step.anchor);
+            let title = step.title.clone();
+            let number = step.number.clone();
+
+            match &step.bead_id {
+                None => BeadStepStatus {
+                    anchor,
+                    title,
+                    number,
+                    bead_status: Some("pending".to_string()),
+                    bead_id: None,
+                    commit_hash: None,
+                    commit_summary: None,
+                    close_reason: None,
+                    task_count: None,
+                    test_count: None,
+                    checkpoint_count: None,
+                    blocked_by: None,
+                },
+                Some(bead_id) => {
+                    if let Some(&details) = bead_id_to_details.get(bead_id) {
+                        // Store full details for --full rendering
+                        details_map.insert(anchor.clone(), details.clone());
+
+                        if details.status == "closed" {
+                            // Complete step
+                            let parsed = details
+                                .close_reason
+                                .as_ref()
+                                .map(|r| parse_close_reason(r))
+                                .unwrap_or_else(|| parse_close_reason(""));
+
+                            BeadStepStatus {
+                                anchor,
+                                title,
+                                number,
+                                bead_status: Some("complete".to_string()),
+                                bead_id: Some(bead_id.clone()),
+                                commit_hash: parsed.commit_hash,
+                                commit_summary: parsed.commit_summary,
+                                close_reason: Some(parsed.raw),
+                                task_count: None,
+                                test_count: None,
+                                checkpoint_count: None,
+                                blocked_by: None,
+                            }
+                        } else if ready_ids.contains(bead_id) {
+                            // Ready step
+                            BeadStepStatus {
+                                anchor,
+                                title,
+                                number,
+                                bead_status: Some("ready".to_string()),
+                                bead_id: Some(bead_id.clone()),
+                                commit_hash: None,
+                                commit_summary: None,
+                                close_reason: None,
+                                task_count: Some(step.tasks.len()),
+                                test_count: Some(step.tests.len()),
+                                checkpoint_count: Some(step.checkpoints.len()),
+                                blocked_by: None,
+                            }
+                        } else {
+                            // Blocked step
+                            // Compute blocked_by: find dependencies that are not closed
+                            let blocked_by: Vec<String> = details
+                                .dependencies
+                                .iter()
+                                .filter_map(|dep| {
+                                    // Check if this dependency is still open
+                                    if let Some(&dep_details) = bead_id_to_details.get(&dep.id) {
+                                        if dep_details.status != "closed" {
+                                            // Resolve to step anchor
+                                            bead_id_to_anchor.get(&dep.id).cloned()
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+
+                            BeadStepStatus {
+                                anchor,
+                                title,
+                                number,
+                                bead_status: Some("blocked".to_string()),
+                                bead_id: Some(bead_id.clone()),
+                                commit_hash: None,
+                                commit_summary: None,
+                                close_reason: None,
+                                task_count: None,
+                                test_count: None,
+                                checkpoint_count: None,
+                                blocked_by: if blocked_by.is_empty() {
+                                    None
+                                } else {
+                                    Some(blocked_by)
+                                },
+                            }
+                        }
+                    } else {
+                        // Bead ID present but not in children (edge case)
+                        BeadStepStatus {
+                            anchor,
+                            title,
+                            number,
+                            bead_status: Some("pending".to_string()),
+                            bead_id: Some(bead_id.clone()),
+                            commit_hash: None,
+                            commit_summary: None,
+                            close_reason: None,
+                            task_count: None,
+                            test_count: None,
+                            checkpoint_count: None,
+                            blocked_by: None,
+                        }
+                    }
+                }
+            }
+        })
+        .collect();
+
+    (bead_steps, details_map)
+}
+
+/// Build status data using beads integration
+fn build_beads_status_data(
+    speck: &Speck,
+    name: &str,
+    file_path: &str,
+    root_id: &str,
+    beads_cli: &BeadsCli,
+) -> Result<(StatusData, HashMap<String, IssueDetails>), String> {
+    // Query all child beads with details
+    let children = beads_cli
+        .list_children_detailed(root_id, None)
+        .map_err(|e| format!("failed to query bead children: {}", e))?;
+
+    // Query ready beads
+    let ready_beads = beads_cli
+        .ready(Some(root_id), None)
+        .map_err(|e| format!("failed to query ready beads: {}", e))?;
+
+    let ready_ids: HashSet<String> = ready_beads.iter().map(|b| b.id.clone()).collect();
+
+    // Classify steps
+    let (bead_steps, details_map) = classify_steps(speck, &children, &ready_ids);
+
+    // Count step statuses
+    let completed_count = bead_steps
+        .iter()
+        .filter(|s| s.bead_status.as_deref() == Some("complete"))
+        .count();
+    let ready_count = bead_steps
+        .iter()
+        .filter(|s| s.bead_status.as_deref() == Some("ready"))
+        .count();
+    let blocked_count = bead_steps
+        .iter()
+        .filter(|s| s.bead_status.as_deref() == Some("blocked"))
+        .count();
+
+    let status = speck
+        .metadata
+        .status
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let status_data = StatusData {
+        name: name.to_string(),
+        status,
+        progress: Progress {
+            done: completed_count,
+            total: speck.steps.len(),
+        },
+        steps: vec![], // Empty in beads mode
+        all_steps: None,
+        completed_steps: None,
+        remaining_steps: None,
+        next_step: None,
+        bead_mapping: None,
+        dependencies: None,
+        mode: Some("beads".to_string()),
+        speck: Some(file_path.to_string()),
+        phase_title: speck.phase_title.clone(),
+        total_step_count: Some(speck.steps.len()),
+        completed_step_count: Some(completed_count),
+        ready_step_count: Some(ready_count),
+        blocked_step_count: Some(blocked_count),
+        bead_steps: Some(bead_steps),
+    };
+
+    Ok((status_data, details_map))
+}
+
+/// Output beads-mode status in text format
+fn output_beads_text(
+    data: &StatusData,
+    _speck: &Speck,
+    full: bool,
+    details_map: &HashMap<String, IssueDetails>,
+) {
+    // Print phase title or speck name
+    if let Some(ref phase_title) = data.phase_title {
+        println!("## {}", phase_title);
+    } else {
+        println!("## {}", data.name);
+    }
+    println!();
+
+    // Print summary
+    let completed = data.completed_step_count.unwrap_or(0);
+    let total = data.total_step_count.unwrap_or(0);
+    println!("Status: {} | {}/{} steps complete", data.status, completed, total);
+    println!();
+
+    // Print each step
+    if let Some(ref bead_steps) = data.bead_steps {
+        for step in bead_steps {
+            let indicator = match step.bead_status.as_deref() {
+                Some("complete") => "[✓]",
+                Some("ready") => "[...]",
+                Some("blocked") => "[⏳]",
+                _ => "[ ]",
+            };
+
+            let status_label = step.bead_status.as_deref().unwrap_or("pending");
+
+            println!(
+                "Step {}: {}   {} {}",
+                step.number, step.title, indicator, status_label
+            );
+
+            // Show close reason for completed steps
+            if let Some(ref close_reason) = step.close_reason {
+                println!("  {}", close_reason);
+            }
+
+            // Show task/test/checkpoint counts for ready steps
+            if step.bead_status.as_deref() == Some("ready") {
+                let tasks = step.task_count.unwrap_or(0);
+                let tests = step.test_count.unwrap_or(0);
+                let checkpoints = step.checkpoint_count.unwrap_or(0);
+                println!(
+                    "  Tasks: {} | Tests: {} | Checkpoints: {}",
+                    tasks, tests, checkpoints
+                );
+            }
+
+            // Show blocked_by for blocked steps
+            if let Some(ref blocked_by) = step.blocked_by {
+                let blocked_str = blocked_by
+                    .iter()
+                    .map(|anchor| {
+                        // Convert #step-N to "Step N"
+                        anchor.trim_start_matches('#').replace("step-", "Step ")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                println!("  Blocked by: {}", blocked_str);
+            }
+
+            // --full mode: show raw bead field content
+            if full {
+                if let Some(details) = details_map.get(&step.anchor) {
+                    if !details.description.is_empty() {
+                        println!("  --- Description ---");
+                        for line in details.description.lines() {
+                            println!("  {}", line);
+                        }
+                    }
+                    if let Some(ref design) = details.design {
+                        if !design.is_empty() {
+                            println!("  --- Design ---");
+                            for line in design.lines() {
+                                println!("  {}", line);
+                            }
+                        }
+                    }
+                    if let Some(ref acceptance) = details.acceptance_criteria {
+                        if !acceptance.is_empty() {
+                            println!("  --- Acceptance Criteria ---");
+                            for line in acceptance.lines() {
+                                println!("  {}", line);
+                            }
+                        }
+                    }
+                    if let Some(ref notes) = details.notes {
+                        if !notes.is_empty() {
+                            println!("  --- Notes ---");
+                            for line in notes.lines() {
+                                println!("  {}", line);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
