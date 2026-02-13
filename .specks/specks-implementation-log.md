@@ -10,6 +10,122 @@ Entries are sorted newest-first.
 
 ---
 step: audit-fix
+date: 2025-02-13T02:27:21Z
+---
+
+## audit-fix: Audit fix: apply cargo fmt formatting to merge.rs
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: #step-7
+date: 2025-02-13T02:24:00Z
+bead: specks-dg0.8
+---
+
+## #step-7: Document warnings field and preflight checks in merge SKILL.md
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: #step-6
+date: 2025-02-13T02:19:47Z
+bead: specks-dg0.7
+---
+
+## #step-6: Improve push failure messaging and add PR CI checks warning for dry-run
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: #step-5
+date: 2025-02-13T02:13:34Z
+bead: specks-dg0.6
+---
+
+## #step-5: Add P2 branch divergence and infrastructure diff previews for dry-run mode
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: #step-4
+date: 2025-02-13T02:07:23Z
+bead: specks-dg0.5
+---
+
+## #step-4: Add P1 bead completion warning and P3 multiple worktree/gh fallback warnings
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: #step-3
+date: 2025-02-13T01:58:44Z
+bead: specks-dg0.4
+---
+
+## #step-3: Add P0 preflight check infrastructure blocking merge on dirty implementation worktree
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: #step-2
+date: 2025-02-13T01:51:55Z
+bead: specks-dg0.3
+---
+
+## #step-2: Refactor find_worktree_by_speck to return WorktreeDiscovery with match count
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: #step-1
+date: 2025-02-13T01:45:39Z
+bead: specks-dg0.2
+---
+
+## #step-1: Add speck file existence validation before worktree discovery
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: #step-0
+date: 2025-02-13T01:41:37Z
+bead: specks-dg0.1
+---
+
+## #step-0: Add warnings field to MergeData struct for preflight check warnings
+
+**Files changed:**
+- .specks/specks-1.md
+
+---
+
+---
+step: audit-fix
 date: 2025-02-13T00:25:18Z
 ---
 

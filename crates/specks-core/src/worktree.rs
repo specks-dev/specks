@@ -685,6 +685,20 @@ pub struct DiscoveredWorktree {
     pub base_branch: String,
 }
 
+/// Result from worktree discovery, containing the selected worktree and all matches.
+///
+/// When multiple worktrees match a speck, `selected` contains the most recent one
+/// (by branch timestamp), and `all_matches` contains all of them.
+#[derive(Debug, Clone)]
+pub struct WorktreeDiscovery {
+    /// The most recent matching worktree (same as previous behavior)
+    pub selected: Option<DiscoveredWorktree>,
+    /// All matching worktrees found
+    pub all_matches: Vec<DiscoveredWorktree>,
+    /// Count of matches (convenience for all_matches.len())
+    pub match_count: usize,
+}
+
 /// Find worktrees for a speck using git-native discovery.
 ///
 /// Parses `git worktree list --porcelain` and matches worktrees whose branch
@@ -694,11 +708,11 @@ pub struct DiscoveredWorktree {
 /// If multiple worktrees match (shouldn't happen normally), returns the most
 /// recent one by branch name (which contains a timestamp suffix).
 ///
-/// Returns `None` if no matching worktree is found.
+/// Returns `WorktreeDiscovery` with `selected: None` if no matching worktree is found.
 pub fn find_worktree_by_speck(
     repo_root: &Path,
     speck_path: &Path,
-) -> Result<Option<DiscoveredWorktree>, SpecksError> {
+) -> Result<WorktreeDiscovery, SpecksError> {
     let slug = derive_speck_slug(speck_path);
     let branch_prefix = format!("specks/{}-", slug);
 
@@ -752,13 +766,15 @@ pub fn find_worktree_by_speck(
         }
     }
 
-    if matches.is_empty() {
-        return Ok(None);
-    }
-
     // If multiple, pick the most recent by branch name (contains timestamp)
     matches.sort_by(|a, b| a.branch.cmp(&b.branch));
-    Ok(matches.into_iter().last())
+    let match_count = matches.len();
+    let selected = matches.last().cloned();
+    Ok(WorktreeDiscovery {
+        selected,
+        all_matches: matches,
+        match_count,
+    })
 }
 
 /// Validate that a worktree path follows the expected pattern
@@ -1408,10 +1424,11 @@ mod tests {
 
         // Test find_worktree_by_speck
         let speck_path = Path::new(".specks/specks-auth.md");
-        let result = find_worktree_by_speck(temp_dir, speck_path).unwrap();
+        let discovery = find_worktree_by_speck(temp_dir, speck_path).unwrap();
 
-        assert!(result.is_some());
-        let wt = result.unwrap();
+        assert!(discovery.selected.is_some());
+        assert_eq!(discovery.match_count, 1);
+        let wt = discovery.selected.unwrap();
         assert_eq!(wt.branch, "specks/auth-20260208-120000");
         assert_eq!(wt.speck_slug, "auth");
     }
@@ -1432,9 +1449,11 @@ mod tests {
 
         // Test with non-existent speck
         let speck_path = Path::new(".specks/specks-nonexistent.md");
-        let result = find_worktree_by_speck(temp_dir, speck_path).unwrap();
+        let discovery = find_worktree_by_speck(temp_dir, speck_path).unwrap();
 
-        assert!(result.is_none());
+        assert!(discovery.selected.is_none());
+        assert_eq!(discovery.match_count, 0);
+        assert!(discovery.all_matches.is_empty());
     }
 
     #[test]

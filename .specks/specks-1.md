@@ -14,6 +14,7 @@
 | Tracking issue/PR | TBD |
 | Last updated | 2026-02-12 |
 | Beads Root | `specks-dg0` |
+| Beads Root | `specks-w1l` |
 
 ---
 
@@ -337,7 +338,7 @@ pub struct WorktreeDiscovery {
 
 #### Step 0: Add warnings field to MergeData and update serialization {#step-0}
 
-**Bead:** `specks-dg0.1`
+**Bead:** `specks-w1l.1`
 
 **Commit:** `feat(merge): add warnings field to MergeData struct`
 
@@ -376,7 +377,7 @@ pub struct WorktreeDiscovery {
 
 **Depends on:** #step-0
 
-**Bead:** `specks-dg0.2`
+**Bead:** `specks-w1l.2`
 
 **Commit:** `feat(merge): validate speck file exists before worktree discovery`
 
@@ -409,7 +410,7 @@ pub struct WorktreeDiscovery {
 
 **Depends on:** #step-0
 
-**Bead:** `specks-dg0.3`
+**Bead:** `specks-w1l.3`
 
 **Commit:** `refactor(worktree): return WorktreeDiscovery with match count from find_worktree_by_speck`
 
@@ -446,7 +447,7 @@ pub struct WorktreeDiscovery {
 
 **Depends on:** #step-0, #step-2
 
-**Bead:** `specks-dg0.4`
+**Bead:** `specks-w1l.4`
 
 **Commit:** `feat(merge): block merge when implementation worktree has dirty files (P0)`
 
@@ -486,7 +487,7 @@ pub struct WorktreeDiscovery {
 
 **Depends on:** #step-3
 
-**Bead:** `specks-dg0.5`
+**Bead:** `specks-w1l.5`
 
 **Commit:** `feat(merge): add bead completion, gh fallback, and multiple worktree warnings`
 
@@ -526,7 +527,7 @@ pub struct WorktreeDiscovery {
 
 **Depends on:** #step-3
 
-**Bead:** `specks-dg0.6`
+**Bead:** `specks-w1l.6`
 
 **Commit:** `feat(merge): add branch divergence and infrastructure diff previews for dry-run`
 
@@ -563,7 +564,7 @@ pub struct WorktreeDiscovery {
 
 **Depends on:** #step-5
 
-**Bead:** `specks-dg0.7`
+**Bead:** `specks-w1l.7`
 
 **Commit:** `feat(merge): improve push failure messaging and add PR checks warning`
 
@@ -599,7 +600,7 @@ pub struct WorktreeDiscovery {
 
 **Depends on:** #step-0
 
-**Bead:** `specks-dg0.8`
+**Bead:** `specks-w1l.8`
 
 **Commit:** `docs(merge): document warnings field in SKILL.md dry-run field table`
 

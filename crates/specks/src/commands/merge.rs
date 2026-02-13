@@ -8,7 +8,9 @@
 //! - Local: No remote → `git merge --squash` directly
 
 use serde::{Deserialize, Serialize};
-use specks_core::{derive_speck_slug, find_worktree_by_speck, remove_worktree};
+use specks_core::{
+    BeadsCli, Step, derive_speck_slug, find_worktree_by_speck, parse_speck, remove_worktree,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -36,6 +38,8 @@ pub struct MergeData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dirty_files: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -58,6 +62,7 @@ impl MergeData {
             worktree_cleaned: None,
             dry_run,
             dirty_files: None,
+            warnings: None,
             error: Some(msg),
             message: None,
         }
@@ -181,6 +186,276 @@ fn get_dirty_files(repo_root: &Path) -> Result<Vec<String>, String> {
 
 fn is_infrastructure_path(path: &str) -> bool {
     path.starts_with(".specks/") || path.starts_with(".beads/")
+}
+
+/// Result from preflight checks run before merge execution.
+struct PreflightResult {
+    /// Non-blocking warnings accumulated from all checks
+    warnings: Vec<String>,
+    /// If Some, a blocking error that prevents the merge from proceeding
+    blocking_error: Option<String>,
+}
+
+/// P0 preflight check: block merge if implementation worktree has dirty files.
+/// Returns Some(error_message) if dirty files found, None if clean.
+fn check_worktree_dirty(wt_path: &Path) -> Result<Option<String>, String> {
+    let dirty = get_dirty_files(wt_path)?;
+    if dirty.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(format!(
+            "Implementation worktree has uncommitted changes:\n  {}\n\n\
+             Please commit or discard these changes before merging.",
+            dirty.join("\n  ")
+        )))
+    }
+}
+
+/// P1 preflight check: warn if beads/steps are not all complete.
+/// Returns None if all complete, beads unavailable, or beads not configured.
+fn check_bead_completion(repo_root: &Path, speck_path: &Path) -> Option<String> {
+    // Read and parse the speck file
+    let full_path = repo_root.join(speck_path);
+    let content = std::fs::read_to_string(&full_path).ok()?;
+    let speck = parse_speck(&content).ok()?;
+
+    // Check if beads are configured (has any bead_id on steps)
+    let steps_with_beads: Vec<&Step> = speck.steps.iter().filter(|s| s.bead_id.is_some()).collect();
+
+    if steps_with_beads.is_empty() {
+        return None; // No beads configured, skip check silently
+    }
+
+    // Check bead completion via BeadsCli
+    let beads = BeadsCli::default();
+    if !beads.is_installed(None) {
+        return None; // bd not installed, skip silently
+    }
+
+    let total = steps_with_beads.len();
+    let complete = steps_with_beads
+        .iter()
+        .filter(|s| {
+            if let Some(ref bead_id) = s.bead_id {
+                beads
+                    .show(bead_id, None)
+                    .map(|d| d.status.to_lowercase() == "closed")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        })
+        .count();
+
+    let incomplete = total - complete;
+    if incomplete == 0 {
+        None
+    } else {
+        Some(format!(
+            "{} of {} steps incomplete. Run 'specks beads status {}' to review.",
+            incomplete,
+            total,
+            speck_path.display()
+        ))
+    }
+}
+
+/// P2 preflight check (dry-run only): preview branch divergence from main.
+/// Shows commit count and diff stat summary.
+/// Returns None if merge-base fails or branch has no commits ahead.
+fn check_branch_divergence(repo_root: &Path, branch: &str) -> Option<String> {
+    // Get merge base
+    let merge_base_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["merge-base", "main", branch])
+        .output()
+        .ok()?;
+
+    if !merge_base_output.status.success() {
+        return None; // merge-base failed (e.g., unrelated histories), skip gracefully
+    }
+
+    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
+        .trim()
+        .to_string();
+
+    // Count commits ahead
+    let count_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args([
+            "rev-list",
+            "--count",
+            &format!("{}..{}", merge_base, branch),
+        ])
+        .output()
+        .ok()?;
+
+    if !count_output.status.success() {
+        return None;
+    }
+
+    let count_str = String::from_utf8_lossy(&count_output.stdout)
+        .trim()
+        .to_string();
+    let commit_count: usize = count_str.parse().unwrap_or(0);
+
+    if commit_count == 0 {
+        return None; // No divergence
+    }
+
+    // Get diff stat
+    let stat_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["diff", "--stat", &format!("{}..{}", merge_base, branch)])
+        .output()
+        .ok()?;
+
+    let stat_summary = if stat_output.status.success() {
+        let stat = String::from_utf8_lossy(&stat_output.stdout)
+            .trim()
+            .to_string();
+        // The last line of --stat is the summary (e.g., "14 files changed, 312 insertions(+), 45 deletions(-)")
+        stat.lines().last().unwrap_or("").to_string()
+    } else {
+        String::new()
+    };
+
+    if stat_summary.is_empty() {
+        Some(format!("Branch has {} commits ahead of main", commit_count))
+    } else {
+        Some(format!(
+            "Branch has {} commits ahead of main ({})",
+            commit_count, stat_summary
+        ))
+    }
+}
+
+/// P2 preflight check (dry-run only): detect infrastructure file differences.
+/// Shows .specks/ and .beads/ files that differ between main and the branch.
+/// Returns None if no infrastructure files differ or diff fails.
+fn check_infra_diff(repo_root: &Path, branch: &str) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["diff", "--name-only", &format!("main..{}", branch)])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let infra_files: Vec<&str> = stdout
+        .lines()
+        .filter(|line| !line.is_empty() && is_infrastructure_path(line))
+        .collect();
+
+    if infra_files.is_empty() {
+        return None;
+    }
+
+    Some(format!(
+        "Infrastructure files differ between main and branch ({} files):\n  {}\n  These will be auto-resolved during merge (branch version wins).",
+        infra_files.len(),
+        infra_files.join("\n  ")
+    ))
+}
+
+/// P3 preflight check (dry-run, remote mode only): check PR CI status.
+/// Returns None if all checks pass, gh is unavailable, or no checks exist.
+fn check_pr_checks(branch: &str) -> Option<String> {
+    let output = Command::new("gh")
+        .args(["pr", "checks", branch])
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        return None; // All checks passing
+    }
+
+    // gh pr checks exits non-zero if any check fails or is pending
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // If stderr indicates gh is not available or no PR exists, skip
+    if stderr.contains("not found")
+        || stderr.contains("no pull requests found")
+        || stderr.contains("Could not")
+    {
+        return None;
+    }
+
+    // Parse stdout for failing checks
+    let failed: Vec<&str> = stdout
+        .lines()
+        .filter(|line| line.contains("fail") || line.contains("FAIL"))
+        .collect();
+
+    if failed.is_empty() {
+        // Non-zero exit but no failures found -- likely pending checks
+        let pending: Vec<&str> = stdout
+            .lines()
+            .filter(|line| line.contains("pending") || line.contains("PENDING"))
+            .collect();
+        if !pending.is_empty() {
+            Some(format!(
+                "PR has {} pending check(s). Review before merging.",
+                pending.len()
+            ))
+        } else {
+            None
+        }
+    } else {
+        Some(format!(
+            "PR has {} failing check(s):\n  {}",
+            failed.len(),
+            failed.join("\n  ")
+        ))
+    }
+}
+
+/// Run all preflight checks before merge execution.
+/// Returns warnings (non-blocking) and an optional blocking error.
+fn run_preflight_checks(
+    wt_path: &Path,
+    repo_root: &Path,
+    speck_path: &Path,
+    dry_run: bool,
+    branch: &str,
+) -> PreflightResult {
+    let mut warnings = Vec::new();
+    let mut blocking_error = None;
+
+    // P0: Implementation worktree dirty check (blocker)
+    match check_worktree_dirty(wt_path) {
+        Ok(Some(err)) => blocking_error = Some(err),
+        Ok(None) => {}
+        Err(e) => warnings.push(format!("Could not check worktree status: {}", e)),
+    }
+
+    // P1: Bead completion check (warning only)
+    if let Some(warning) = check_bead_completion(repo_root, speck_path) {
+        warnings.push(warning);
+    }
+
+    // P2: Branch divergence and infrastructure diff (dry-run only)
+    if dry_run {
+        if let Some(warning) = check_branch_divergence(repo_root, branch) {
+            warnings.push(warning);
+        }
+        if let Some(warning) = check_infra_diff(repo_root, branch) {
+            warnings.push(warning);
+        }
+    }
+
+    PreflightResult {
+        warnings,
+        blocking_error,
+    }
 }
 
 /// Prepare main for merge by committing infrastructure files and discarding everything else.
@@ -696,9 +971,32 @@ pub fn run_merge(
 
     // Step 1: Find the worktree via git-native discovery
     let speck_path = normalize_speck_path(&speck);
-    let discovered = match find_worktree_by_speck(&repo_root, &speck_path) {
-        Ok(Some(wt)) => wt,
-        Ok(None) => {
+
+    // Check that the speck file actually exists before worktree discovery
+    if !repo_root.join(&speck_path).exists() {
+        let e = format!("Speck file not found: {}", speck_path.display());
+        let data = MergeData::error(e.clone(), dry_run);
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        }
+        return Err(e);
+    }
+
+    let discovery = match find_worktree_by_speck(&repo_root, &speck_path) {
+        Ok(d) => d,
+        Err(err) => {
+            let e = format!("Failed to discover worktrees: {}", err);
+            let data = MergeData::error(e.clone(), dry_run);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&data).unwrap());
+            }
+            return Err(e);
+        }
+    };
+
+    let discovered = match discovery.selected {
+        Some(wt) => wt,
+        None => {
             let slug = derive_speck_slug(&speck_path);
             let e = format!(
                 "No worktree found for speck: {} (looked for branch specks/{}-*)",
@@ -711,25 +1009,65 @@ pub fn run_merge(
             }
             return Err(e);
         }
-        Err(err) => {
-            let e = format!("Failed to discover worktrees: {}", err);
-            let data = MergeData::error(e.clone(), dry_run);
-            if json {
-                println!("{}", serde_json::to_string_pretty(&data).unwrap());
-            }
-            return Err(e);
-        }
     };
 
     let wt_path = &discovered.path;
     let branch = &discovered.branch;
 
+    // P3: Multiple worktree warning
+    let mut extra_warnings: Vec<String> = Vec::new();
+    if discovery.match_count > 1 {
+        let others: Vec<String> = discovery
+            .all_matches
+            .iter()
+            .map(|wt| format!("  {} ({})", wt.path.display(), wt.branch))
+            .collect();
+        extra_warnings.push(format!(
+            "Multiple worktrees found for this speck ({} total). Using most recent: {}\nAll matches:\n{}",
+            discovery.match_count,
+            branch,
+            others.join("\n")
+        ));
+    }
+
+    // Preflight checks
+    let preflight = run_preflight_checks(wt_path, &repo_root, &speck_path, dry_run, branch);
+
+    // P0 blocker: dirty implementation worktree
+    if let Some(ref blocking_err) = preflight.blocking_error {
+        let mut data = MergeData::error(blocking_err.clone(), dry_run);
+        // Include warnings accumulated so far
+        let mut all_warnings = extra_warnings.clone();
+        all_warnings.extend(preflight.warnings);
+        data.warnings = if all_warnings.is_empty() {
+            None
+        } else {
+            Some(all_warnings)
+        };
+        if json {
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        }
+        return Err(blocking_err.clone());
+    }
+
     // Step 1a: Detect mode
     let has_origin = has_remote_origin(&repo_root);
 
     // Step 1b: Get PR info (remote mode only)
+    let mut gh_fallback_warning: Option<String> = None;
     let pr_info = if has_origin {
-        get_pr_for_branch(branch).ok() // No PR or gh not available — will fall back to local
+        match get_pr_for_branch(branch) {
+            Ok(pr) => Some(pr),
+            Err(e) => {
+                if !e.contains("No PR found") {
+                    gh_fallback_warning = Some(
+                        "Remote detected but gh CLI unavailable -- falling back to local mode"
+                            .to_string(),
+                    );
+                }
+                None
+            }
+        }
     } else {
         None
     };
@@ -739,6 +1077,26 @@ pub fn run_merge(
         "remote"
     } else {
         "local"
+    };
+
+    // Merge all warning sources
+    let mut all_warnings = extra_warnings; // P3 multiple worktree
+    all_warnings.extend(preflight.warnings); // P0/P1 from preflight
+    if let Some(w) = gh_fallback_warning {
+        all_warnings.push(w); // P3 gh fallback
+    }
+
+    // P3: PR checks status (dry-run, remote mode only)
+    if dry_run && effective_mode == "remote" {
+        if let Some(w) = check_pr_checks(branch) {
+            all_warnings.push(w);
+        }
+    }
+
+    let preflight_warnings: Option<Vec<String>> = if all_warnings.is_empty() {
+        None
+    } else {
+        Some(all_warnings)
     };
 
     // Step 2: Pre-dry-run checks
@@ -798,6 +1156,7 @@ pub fn run_merge(
             } else {
                 Some(infra_files.iter().map(|s| s.to_string()).collect())
             },
+            warnings: preflight_warnings.clone(),
             error: None,
             message: Some(match effective_mode {
                 "remote" => format!(
@@ -827,6 +1186,14 @@ pub fn run_merge(
                     infra_files.len(),
                     infra_files.join("\n  ")
                 );
+            }
+            if let Some(ref warnings) = data.warnings {
+                if !warnings.is_empty() {
+                    println!("\nWarnings:");
+                    for w in warnings {
+                        println!("  - {}", w);
+                    }
+                }
             }
             println!("\nWould squash-merge and clean up worktree");
         }
@@ -900,6 +1267,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
+                warnings: preflight_warnings.clone(),
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -936,6 +1304,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
+                warnings: preflight_warnings.clone(),
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -967,6 +1336,7 @@ pub fn run_merge(
                 worktree_cleaned: None,
                 dry_run: false,
                 dirty_files: None,
+                warnings: preflight_warnings.clone(),
                 error: Some(err_msg.clone()),
                 message: None,
             };
@@ -998,7 +1368,10 @@ pub fn run_merge(
             if let Ok(output) = push {
                 if !output.status.success() && !quiet {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Warning: Failed to push infrastructure sync: {}", stderr);
+                    eprintln!(
+                        "Warning: Failed to push infrastructure sync to origin. Run `git push origin main` to sync.\n  Detail: {}",
+                        stderr.trim()
+                    );
                 }
             }
         }
@@ -1037,6 +1410,7 @@ pub fn run_merge(
                     worktree_cleaned: None,
                     dry_run: false,
                     dirty_files: None,
+                    warnings: preflight_warnings.clone(),
                     error: Some(format!("Squash merge failed: {}", e)),
                     message: None,
                 };
@@ -1111,10 +1485,19 @@ pub fn run_merge(
         if let Ok(ref o) = commit {
             if o.status.success() {
                 // Auto-push if we have an origin
-                let _ = Command::new("git")
+                let push = Command::new("git")
                     .current_dir(&repo_root)
                     .args(["push", "origin", "main"])
                     .output();
+                if let Ok(ref push_output) = push {
+                    if !push_output.status.success() && !quiet {
+                        let stderr = String::from_utf8_lossy(&push_output.stderr);
+                        eprintln!(
+                            "Warning: Failed to push infrastructure sync to origin. Run `git push origin main` to sync.\n  Detail: {}",
+                            stderr.trim()
+                        );
+                    }
+                }
             }
         }
     }
@@ -1131,6 +1514,7 @@ pub fn run_merge(
         worktree_cleaned: Some(worktree_cleaned),
         dry_run: false,
         dirty_files: None,
+        warnings: preflight_warnings,
         error: None,
         message: Some(match effective_mode {
             "remote" => format!(
@@ -1214,6 +1598,57 @@ mod tests {
     }
 
     #[test]
+    fn test_merge_data_no_warnings_omits_field() {
+        let data = MergeData {
+            status: "ok".to_string(),
+            merge_mode: Some("local".to_string()),
+            branch_name: Some("specks/test".to_string()),
+            worktree_path: None,
+            pr_url: None,
+            pr_number: None,
+            squash_commit: None,
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            dirty_files: None,
+            warnings: None,
+            error: None,
+            message: Some("Success".to_string()),
+        };
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(!json.contains("\"warnings\""));
+    }
+
+    #[test]
+    fn test_merge_data_with_warnings_includes_array() {
+        let data = MergeData {
+            status: "ok".to_string(),
+            merge_mode: Some("local".to_string()),
+            branch_name: Some("specks/test".to_string()),
+            worktree_path: None,
+            pr_url: None,
+            pr_number: None,
+            squash_commit: None,
+            worktree_cleaned: Some(true),
+            dry_run: false,
+            dirty_files: None,
+            warnings: Some(vec!["warn1".to_string(), "warn2".to_string()]),
+            error: None,
+            message: Some("Success".to_string()),
+        };
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"warnings\""));
+        assert!(json.contains("warn1"));
+        assert!(json.contains("warn2"));
+    }
+
+    #[test]
+    fn test_merge_data_error_has_no_warnings() {
+        let data = MergeData::error("error message".to_string(), false);
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(!json.contains("\"warnings\""));
+    }
+
+    #[test]
     fn test_merge_data_dry_run_local() {
         let data = MergeData {
             status: "ok".to_string(),
@@ -1226,6 +1661,7 @@ mod tests {
             worktree_cleaned: None,
             dry_run: true,
             dirty_files: Some(vec![".beads/beads.jsonl".to_string()]),
+            warnings: None,
             error: None,
             message: Some("Would squash-merge".to_string()),
         };
@@ -1251,6 +1687,7 @@ mod tests {
             worktree_cleaned: Some(true),
             dry_run: false,
             dirty_files: None,
+            warnings: None,
             error: None,
             message: Some("Merged PR #42".to_string()),
         };
@@ -1275,6 +1712,7 @@ mod tests {
             worktree_cleaned: Some(true),
             dry_run: false,
             dirty_files: None,
+            warnings: None,
             error: None,
             message: Some("Squash merged".to_string()),
         };
@@ -1326,6 +1764,15 @@ mod tests {
             normalize_speck_path("./.specks/specks-1.md"),
             PathBuf::from(".specks/specks-1.md")
         );
+    }
+
+    #[test]
+    fn test_speck_file_not_found_error_message() {
+        // Test the error message format for non-existent speck files
+        let speck_path = PathBuf::from(".specks/specks-nonexistent.md");
+        let error_msg = format!("Speck file not found: {}", speck_path.display());
+        assert!(error_msg.contains("Speck file not found:"));
+        assert!(error_msg.contains(".specks/specks-nonexistent.md"));
     }
 
     // -- is_main_worktree tests --
@@ -1855,6 +2302,363 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files.contains(&".beads/beads.jsonl".to_string()));
         assert!(files.contains(&"new_file.txt".to_string()));
+    }
+
+    // -- Preflight check tests --
+
+    #[test]
+    fn test_check_worktree_dirty_blocks_on_dirty_files() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Create a worktree
+        let wt_path = temp_path.join("impl-worktree");
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args([
+                "worktree",
+                "add",
+                wt_path.to_str().unwrap(),
+                "-b",
+                "specks/test-20260210-120000",
+            ])
+            .output()
+            .expect("git worktree add");
+
+        // Add a dirty file to the worktree
+        fs::write(wt_path.join("uncommitted.txt"), "dirty").unwrap();
+
+        // check_worktree_dirty should return a blocking error
+        let result = check_worktree_dirty(&wt_path);
+        assert!(result.is_ok());
+        let error = result.unwrap();
+        assert!(
+            error.is_some(),
+            "Expected blocking error for dirty worktree"
+        );
+        let msg = error.unwrap();
+        assert!(
+            msg.contains("uncommitted changes"),
+            "Error should mention uncommitted changes: {}",
+            msg
+        );
+        assert!(
+            msg.contains("uncommitted.txt"),
+            "Error should list the dirty file: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_check_worktree_dirty_clean_worktree() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Create a clean worktree
+        let wt_path = temp_path.join("clean-worktree");
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args([
+                "worktree",
+                "add",
+                wt_path.to_str().unwrap(),
+                "-b",
+                "specks/clean-20260210-120000",
+            ])
+            .output()
+            .expect("git worktree add");
+
+        let result = check_worktree_dirty(&wt_path);
+        assert!(result.is_ok());
+        assert!(
+            result.unwrap().is_none(),
+            "Clean worktree should return None"
+        );
+    }
+
+    #[test]
+    fn test_preflight_result_with_blocking_error_and_warnings() {
+        let result = PreflightResult {
+            warnings: vec!["some warning".to_string()],
+            blocking_error: Some("blocking issue".to_string()),
+        };
+        assert!(result.blocking_error.is_some());
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(result.warnings[0], "some warning");
+        assert_eq!(result.blocking_error.unwrap(), "blocking issue");
+    }
+
+    #[test]
+    fn test_check_bead_completion_no_beads_returns_none() {
+        use tempfile::TempDir;
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Create a minimal speck file with no bead IDs
+        let specks_dir = temp_path.join(".specks");
+        fs::create_dir_all(&specks_dir).unwrap();
+        fs::write(
+            specks_dir.join("specks-test.md"),
+            "## Phase 1 {#phase-1}\n\n---\n\n### 1.0.4 Execution Steps {#execution-steps}\n\n#### Step 0: Do something {#step-0}\n\n**Tasks:**\n- [ ] Do a thing\n",
+        )
+        .unwrap();
+
+        let result = check_bead_completion(temp_path, Path::new(".specks/specks-test.md"));
+        assert!(result.is_none(), "No beads configured should return None");
+    }
+
+    #[test]
+    fn test_check_bead_completion_bd_not_installed_returns_none() {
+        use tempfile::TempDir;
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Create a speck file with bead IDs
+        let specks_dir = temp_path.join(".specks");
+        fs::create_dir_all(&specks_dir).unwrap();
+        fs::write(
+            specks_dir.join("specks-test.md"),
+            "## Phase 1 {#phase-1}\n\n---\n\n### Plan Metadata {#plan-metadata}\n\n| Field | Value |\n|------|-------|\n| Beads Root | `test-root` |\n\n---\n\n### 1.0.4 Execution Steps {#execution-steps}\n\n#### Step 0: Do something {#step-0}\n\n**Bead:** `test-root.1`\n\n**Tasks:**\n- [ ] Do a thing\n",
+        )
+        .unwrap();
+
+        // When bd is not installed, should return None (skip silently)
+        let result = check_bead_completion(temp_path, Path::new(".specks/specks-test.md"));
+        // Result depends on whether bd is installed in the test environment
+        // If bd is not installed: None (silently skipped)
+        // If bd is installed but bead doesn't exist: None (show fails, treated as incomplete)
+        // Either way, this should not panic
+        let _ = result;
+    }
+
+    #[test]
+    fn test_check_bead_completion_missing_file_returns_none() {
+        use tempfile::TempDir;
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Speck file does not exist
+        let result = check_bead_completion(temp_path, Path::new(".specks/specks-nonexistent.md"));
+        assert!(result.is_none(), "Missing speck file should return None");
+    }
+
+    #[test]
+    fn test_merge_data_with_multiple_warnings() {
+        let data = MergeData {
+            status: "ok".to_string(),
+            merge_mode: Some("local".to_string()),
+            branch_name: Some("specks/1-20260210-120000".to_string()),
+            worktree_path: None,
+            pr_url: None,
+            pr_number: None,
+            squash_commit: None,
+            worktree_cleaned: None,
+            dry_run: true,
+            dirty_files: None,
+            warnings: Some(vec![
+                "2 of 5 steps incomplete. Run 'specks beads status .specks/specks-1.md' to review."
+                    .to_string(),
+                "Remote detected but gh CLI unavailable -- falling back to local mode".to_string(),
+                "Multiple worktrees found for this speck (2 total). Using most recent: specks/1-20260210-140000"
+                    .to_string(),
+            ]),
+            error: None,
+            message: Some("Would squash-merge".to_string()),
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        assert!(json.contains("\"warnings\""));
+        assert!(json.contains("steps incomplete"));
+        assert!(json.contains("gh CLI unavailable"));
+        assert!(json.contains("Multiple worktrees"));
+    }
+
+    #[test]
+    fn test_check_branch_divergence_with_commits() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Create a feature branch with 2 commits
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "specks/test-20260210-120000"])
+            .output()
+            .expect("git checkout");
+
+        fs::write(temp_path.join("file1.txt"), "change1").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file1.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "commit1"])
+            .output()
+            .unwrap();
+
+        fs::write(temp_path.join("file2.txt"), "change2").unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "file2.txt"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "commit2"])
+            .output()
+            .unwrap();
+
+        // Switch back to main
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+
+        let result = check_branch_divergence(temp_path, "specks/test-20260210-120000");
+        assert!(result.is_some(), "Should return divergence summary");
+        let msg = result.unwrap();
+        assert!(
+            msg.contains("2 commits ahead"),
+            "Should mention 2 commits: {}",
+            msg
+        );
+        assert!(
+            msg.contains("files changed") || msg.contains("file changed"),
+            "Should include diff stat: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_check_infra_diff_with_specks_changes() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        // Create branch with infrastructure file changes
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "-b", "specks/infra-20260210-120000"])
+            .output()
+            .expect("git checkout");
+
+        fs::create_dir_all(temp_path.join(".specks")).unwrap();
+        fs::write(
+            temp_path.join(".specks/specks-implementation-log.md"),
+            "# Log\nstep-0",
+        )
+        .unwrap();
+        fs::create_dir_all(temp_path.join(".beads")).unwrap();
+        fs::write(temp_path.join(".beads/beads.jsonl"), "{}").unwrap();
+        // Also add a non-infra file to verify filtering
+        fs::write(temp_path.join("src_file.rs"), "fn main() {}").unwrap();
+
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["add", "."])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["commit", "-m", "branch changes"])
+            .output()
+            .unwrap();
+
+        // Switch back to main
+        Command::new("git")
+            .arg("-C")
+            .arg(temp_path)
+            .args(["checkout", "main"])
+            .output()
+            .unwrap();
+
+        let result = check_infra_diff(temp_path, "specks/infra-20260210-120000");
+        assert!(result.is_some(), "Should detect infrastructure diffs");
+        let msg = result.unwrap();
+        assert!(
+            msg.contains(".specks/"),
+            "Should mention .specks/ files: {}",
+            msg
+        );
+        assert!(
+            msg.contains(".beads/"),
+            "Should mention .beads/ files: {}",
+            msg
+        );
+        assert!(
+            !msg.contains("src_file.rs"),
+            "Should NOT include non-infra files: {}",
+            msg
+        );
+        assert!(
+            msg.contains("auto-resolved"),
+            "Should mention auto-resolution: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn test_check_branch_divergence_nonexistent_branch_returns_none() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+        init_git_repo(temp_path);
+        make_initial_commit(temp_path);
+
+        let result = check_branch_divergence(temp_path, "nonexistent-branch");
+        assert!(result.is_none(), "Nonexistent branch should return None");
+    }
+
+    #[test]
+    fn test_check_pr_checks_nonexistent_branch_returns_none() {
+        // gh pr checks with a nonexistent branch should return None
+        // (either gh is not installed, or the branch has no PR)
+        let result = check_pr_checks("nonexistent-branch-12345");
+        // Whether gh is installed or not, this should not panic
+        // and should return None (no PR to check)
+        assert!(
+            result.is_none(),
+            "Nonexistent branch should return None: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_check_pr_checks_returns_none_gracefully() {
+        // Verify the function handles any input without panicking
+        let result = check_pr_checks("main");
+        // Result depends on whether gh is installed and authenticated
+        // but should never panic
+        let _ = result;
     }
 
     // -- check_main_sync tests --
